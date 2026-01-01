@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ===== 隱藏 Next.js 16 開發工具按鈕 ===== */
+
+/* 隱藏左下角的 "N" 按鈕和整個開發面板 */
+nextjs-portal,
+nextjs-portal *,
+[data-nextjs-dialog-overlay],
+[data-nextjs-toast],
+[data-nextjs-dialog],
+[data-nextjs-dev-overlay],
+.__next-dev-tools,
+.__next-dev-tools *,
+button[aria-label*="Open"],
+button[aria-label*="Next"],
+.vercel-live-feedback-button,
+.__next-route-announcer__ {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: -9999 !important;
+}
+
+/* 針對性隱藏包含 Route、Turbopack 的開發面板 */
+body > div:not([id]):not([class]):not([data-nextjs-scroll-focus-boundary]) {
+  display: none !important;
+}
+
+/* 額外確保：隱藏所有固定在左下角的圓形按鈕 */
+body > * {
+  &:has(button[style*="border-radius"][style*="position"]) {
+    display: none !important;
+  }
+}

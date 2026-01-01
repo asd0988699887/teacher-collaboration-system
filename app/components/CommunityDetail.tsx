@@ -1,0 +1,2726 @@
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+  DragOverEvent,
+  useDroppable,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import Header from './Header'
+import ResourceCard from './ResourceCard'
+import AddActivityModal from './AddActivityModal'
+import ActivityCard from './ActivityCard'
+import PasswordModal from './PasswordModal'
+import CourseObjectives from './CourseObjectives'
+import AddTaskModal from './AddTaskModal'
+import AddIdeaModal from './AddIdeaModal'
+import EditIdeaModal from './EditIdeaModal'
+import IdeaCard from './IdeaCard'
+import DraggableIdeaCard from './DraggableIdeaCard'
+import DraggableTaskCard from './DraggableTaskCard'
+import DroppableList from './DroppableList'
+import ArrowsOverlay from './ArrowsOverlay'
+import ConvergenceModal from './ConvergenceModal'
+import VersionControlModal from './VersionControlModal'
+import IdeaContributionChart from './IdeaContributionChart'
+import IdeaTrendChart from './IdeaTrendChart'
+import NetworkGraph from './NetworkGraph'
+
+interface CommunityDetailProps {
+  communityName: string
+  communityId?: string // 可選的社群ID
+  onBack: () => void
+}
+
+type TabType = 'resources' | 'activities' | 'ideas' | 'teamwork' | 'history' | 'management'
+
+interface Resource {
+  id: string
+  fileName: string
+  uploadDate: string
+  uploadTime: string
+  uploaderName?: string
+  uploaderId?: string
+}
+
+interface Activity {
+  id: string
+  name: string
+  introduction: string
+  createdDate: string
+  createdTime: string
+  isPublic: boolean
+  password: string
+  creatorId?: string
+  creatorName?: string
+}
+
+interface KanbanTask {
+  id: string
+  title: string
+  content: string
+  startDate: string
+  endDate: string
+  assignees: string[]
+  createdAt?: string // ISO 日期字符串（可選，用於向後兼容）
+}
+
+interface KanbanList {
+  id: string
+  title: string
+  tasks: KanbanTask[]
+}
+
+interface Idea {
+  id: string
+  activityId?: string // 關聯的共備活動ID
+  stage: string
+  title: string
+  content: string
+  createdDate: string
+  createdTime: string
+  creatorName?: string
+  creatorAccount?: string // 建立者帳號（用於權限檢查）
+  creatorAvatar?: string
+  parentId?: string // 延伸關係：指向父節點的 ID
+  position?: { x: number; y: number } // 卡片位置
+  rotation?: number // 卡片旋轉角度
+  isConvergence?: boolean // 是否為收斂結果節點
+  convergedIdeaIds?: string[] // 被收斂的想法節點 IDs
+}
+
+/**
+ * 社群詳情頁面組件
+ * 對應 Figma 設計 (nodeId: 0:1) - 社群資源(空)
+ */
+export default function CommunityDetail({ communityName, communityId: propCommunityId, onBack }: CommunityDetailProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('resources')
+  const [resources, setResources] = useState<Resource[]>([])
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [ideas, setIdeas] = useState<Idea[]>([])
+  const [communityId, setCommunityId] = useState<string | null>(propCommunityId || null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false)
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
+  const [isVersionControlModalOpen, setIsVersionControlModalOpen] = useState(false)
+  const [versionControlActivityId, setVersionControlActivityId] = useState<string | null>(null)
+  const [passwordVerifyingActivity, setPasswordVerifyingActivity] = useState<Activity | null>(null)
+  const [passwordAction, setPasswordAction] = useState<'edit' | 'view' | 'menu'>('view')
+  const [viewingActivity, setViewingActivity] = useState<Activity | null>(null)
+  const [passwordVerifiedActivityIds, setPasswordVerifiedActivityIds] = useState<Set<string>>(new Set())
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // 使用者頭像下拉選單狀態
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const avatarRef = useRef<HTMLDivElement>(null)
+  const [userNickname, setUserNickname] = useState('使用者')
+  const [userAccount, setUserAccount] = useState('未登入')
+  
+  // 團隊分工 Kanban 列表狀態
+  const [kanbanLists, setKanbanLists] = useState<KanbanList[]>([])
+  const [isAddingList, setIsAddingList] = useState(false)
+  const [newListTitle, setNewListTitle] = useState('')
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false)
+  const [currentListId, setCurrentListId] = useState<string>('')
+  const [editingTask, setEditingTask] = useState<{ taskId: string; listId: string } | null>(null)
+  const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null)
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
+  
+  // 拖拽 sensors 配置
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 移動 8px 後才開始拖拽，避免誤觸
+      },
+    })
+  )
+  const [isAddIdeaModalOpen, setIsAddIdeaModalOpen] = useState(false)
+  const [editingIdea, setEditingIdea] = useState<Idea | null>(null)
+  const [isEditIdeaModalOpen, setIsEditIdeaModalOpen] = useState(false)
+  const [extendingFromIdeaId, setExtendingFromIdeaId] = useState<string | null>(null)
+  const [isConvergenceModalOpen, setIsConvergenceModalOpen] = useState(false)
+  const kanbanInitializedRef = useRef<Set<string>>(new Set()) // 追蹤每個社群是否已初始化
+  const [openMemberMenuId, setOpenMemberMenuId] = useState<string | null>(null) // 開啟的成員選單ID
+  const [activeHistoryChart, setActiveHistoryChart] = useState<'contribution' | 'network' | 'trend'>('contribution') // 活動歷程圖表類型
+  const positionUpdateTimeoutRef = useRef<Map<string, NodeJS.Timeout>>(new Map()) // 位置更新節流
+  const lastUpdatePositionRef = useRef<Map<string, { x: number; y: number }>>(new Map()) // 記錄最後更新位置
+
+  // 從 localStorage 載入使用者資料
+  useEffect(() => {
+    const loadUserData = () => {
+      if (typeof window !== 'undefined') {
+        const savedUser = localStorage.getItem('user')
+        if (savedUser) {
+          try {
+            const userData = JSON.parse(savedUser)
+            setUserNickname(userData.nickname || '使用者')
+            setUserAccount(userData.accountNumber || '未登入')
+            setUserId(userData.id || userData.userId || null)
+          } catch (e) {
+            // 忽略解析錯誤
+          }
+        }
+      }
+    }
+    
+    loadUserData()
+  }, [])
+
+  // 如果沒有 communityId，根據 communityName 查詢
+  useEffect(() => {
+    const fetchCommunityId = async () => {
+      if (!communityId && communityName) {
+        try {
+          // 從 localStorage 獲取使用者ID
+          const savedUser = localStorage.getItem('user')
+          if (savedUser) {
+            const userData = JSON.parse(savedUser)
+            const currentUserId = userData.id || userData.userId
+
+            if (currentUserId) {
+              // 查詢使用者的社群列表，找到對應名稱的社群
+              const response = await fetch(`/api/communities?userId=${currentUserId}`)
+              const communities = await response.json()
+
+              if (response.ok && Array.isArray(communities)) {
+                const foundCommunity = communities.find((c: any) => c.name === communityName)
+                if (foundCommunity) {
+                  setCommunityId(foundCommunity.id)
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('查詢社群ID失敗:', error)
+        }
+      }
+    }
+
+    fetchCommunityId()
+  }, [communityId, communityName])
+
+  // 載入活動列表
+  useEffect(() => {
+    if (communityId) {
+      loadActivities()
+      loadResources()
+      loadIdeas()
+      loadKanban()
+      loadCommunityMembers()
+    }
+  }, [communityId])
+
+  // 組件卸載時清理所有 timeout
+  useEffect(() => {
+    return () => {
+      // 清理所有位置更新的 timeout
+      positionUpdateTimeoutRef.current.forEach((timeout) => {
+        clearTimeout(timeout)
+      })
+      positionUpdateTimeoutRef.current.clear()
+      lastUpdatePositionRef.current.clear()
+    }
+  }, [])
+
+  // 載入社群成員列表
+  const loadCommunityMembers = async () => {
+    if (!communityId) return
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/members`)
+      const data = await response.json()
+
+      if (response.ok) {
+        // 轉換為 AddTaskModal 需要的格式
+        const members = data.map((member: any) => ({
+          id: member.userId, // 使用 userId 作為 id
+          name: member.nickname, // 使用 nickname 作為 name
+          avatar: member.avatar || '',
+        }))
+        setCommunityMembers(members)
+        
+        // 儲存完整的成員資料用於社群管理頁面
+        setFullCommunityMembers(data)
+      } else {
+        console.error('載入社群成員列表失敗:', data.error)
+      }
+    } catch (error) {
+      console.error('載入社群成員列表錯誤:', error)
+    }
+  }
+
+  // 設定成員為管理員或取消管理員
+  const handleToggleAdmin = async (targetUserId: string, isCurrentlyAdmin: boolean) => {
+    if (!communityId || !userId) {
+      alert('系統錯誤，請重新登入')
+      return
+    }
+
+    if (!confirm(`確定要${isCurrentlyAdmin ? '取消' : '設為'}管理員嗎？`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/members`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: targetUserId,
+          role: isCurrentlyAdmin ? 'member' : 'admin',
+          operatorId: userId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '操作失敗')
+      }
+
+      // 重新載入成員列表
+      await loadCommunityMembers()
+      alert(`已${isCurrentlyAdmin ? '取消' : '設為'}管理員`)
+    } catch (error: any) {
+      console.error('設定管理員錯誤:', error)
+      alert(error.message || '操作失敗')
+    }
+  }
+
+  // 移出社群成員
+  const handleRemoveMember = async (targetUserId: string, targetUserName: string) => {
+    if (!communityId || !userId) {
+      alert('系統錯誤，請重新登入')
+      return
+    }
+
+    if (!confirm(`確定要將「${targetUserName}」移出社群嗎？此操作無法復原。`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/communities/${communityId}/members?userId=${targetUserId}&operatorId=${userId}`,
+        {
+          method: 'DELETE',
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '移出成員失敗')
+      }
+
+      // 重新載入成員列表
+      await loadCommunityMembers()
+      alert('成員已移出社群')
+    } catch (error: any) {
+      console.error('移出成員錯誤:', error)
+      alert(error.message || '移出成員失敗')
+    }
+  }
+
+  const loadActivities = async () => {
+    if (!communityId) return
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/activities`)
+      const data = await response.json()
+
+      if (response.ok) {
+        setActivities(data)
+      } else {
+        console.error('載入活動列表失敗:', data.error)
+      }
+    } catch (error) {
+      console.error('載入活動列表錯誤:', error)
+    }
+  }
+
+  // 點擊外部關閉下拉選單
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        avatarRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        !avatarRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false)
+      }
+    }
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isDropdownOpen])
+
+  // 點擊外部關閉成員選單
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openMemberMenuId) {
+        const target = event.target as HTMLElement
+        // 如果點擊的不是成員選單相關的元素，則關閉選單
+        if (!target.closest('.member-menu-container')) {
+          setOpenMemberMenuId(null)
+        }
+      }
+    }
+
+    if (openMemberMenuId) {
+      // 延遲添加監聽器，避免立即觸發
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside)
+      }, 0)
+
+      return () => {
+        clearTimeout(timeoutId)
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [openMemberMenuId])
+
+  const handleAvatarClick = () => {
+    setIsDropdownOpen(!isDropdownOpen)
+  }
+
+  const handleLogout = () => {
+    // 清除 localStorage 中的使用者資料
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('user')
+      // 重新載入頁面以回到登入畫面
+      window.location.href = '/'
+    }
+    setIsDropdownOpen(false)
+  }
+
+  // 社群成員數據（從 API 載入）
+  const [communityMembers, setCommunityMembers] = useState<Array<{ id: string; name: string; avatar?: string }>>([]
+  )
+  
+  // 完整的社群成員資料（用於社群管理頁面）
+  const [fullCommunityMembers, setFullCommunityMembers] = useState<Array<{ 
+    id: string
+    userId: string
+    nickname: string
+    account: string
+    email: string
+    school: string
+    role: string
+  }>>([])
+
+  const tabs = [
+    { id: 'resources' as TabType, label: '資源', icon: '📁' },
+    { id: 'activities' as TabType, label: '共備活動', icon: '📝' },
+    { id: 'ideas' as TabType, label: '想法牆', icon: '💡' },
+    { id: 'teamwork' as TabType, label: '團隊分工', icon: '🎯' },
+    { id: 'history' as TabType, label: '活動歷程', icon: '📄' },
+    { id: 'management' as TabType, label: '社群管理', icon: '👥' },
+  ]
+
+  const handleAddFileClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const loadResources = async () => {
+    if (!communityId) return
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/resources`)
+      const data = await response.json()
+
+      if (response.ok) {
+        setResources(data)
+      } else {
+        console.error('載入資源列表失敗:', data.error)
+      }
+    } catch (error) {
+      console.error('載入資源列表錯誤:', error)
+    }
+  }
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    
+    // 詳細驗證
+    if (!file) {
+      alert('請選擇檔案')
+      return
+    }
+    
+    if (!communityId) {
+      console.error('communityId 為空:', { communityId, propCommunityId, communityName })
+      alert('社群ID不存在，請重新進入社群頁面')
+      return
+    }
+    
+    if (!userId) {
+      alert('請先登入')
+      return
+    }
+
+    try {
+      // 使用 FormData 上傳檔案
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('uploadedBy', userId)
+
+      const apiUrl = `/api/communities/${communityId}/resources`
+      console.log('上傳檔案到:', apiUrl, { communityId, userId, fileName: file.name })
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        const errorMessage = data.details 
+          ? `${data.error}: ${data.details}` 
+          : data.error || '上傳資源失敗'
+        throw new Error(errorMessage)
+      }
+
+      // 重新載入資源列表
+      await loadResources()
+      alert('檔案上傳成功！')
+    } catch (error: any) {
+      console.error('上傳檔案錯誤:', error)
+      alert(error.message || '上傳檔案失敗')
+    }
+
+    // 重置 input，這樣可以選擇同一個檔案
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDeleteResource = async (resourceId: string) => {
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    if (!confirm('確定要刪除此資源嗎？')) {
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/communities/${communityId}/resources?resourceId=${resourceId}`,
+        {
+          method: 'DELETE',
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '刪除資源失敗')
+      }
+
+      // 重新載入資源列表
+      await loadResources()
+      alert('資源已刪除')
+    } catch (error: any) {
+      console.error('刪除資源錯誤:', error)
+      alert(error.message || '刪除資源失敗')
+    }
+  }
+
+  const handleDownloadResource = async (resourceId: string) => {
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/resources/${resourceId}/download`)
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '下載資源失敗')
+      }
+
+      // 獲取檔案名稱
+      const contentDisposition = response.headers.get('Content-Disposition')
+      let fileName = 'download'
+      if (contentDisposition) {
+        const fileNameMatch = contentDisposition.match(/filename="?(.+?)"?$/i)
+        if (fileNameMatch) {
+          fileName = decodeURIComponent(fileNameMatch[1])
+        }
+      }
+
+      // 將回應轉換為 Blob
+      const blob = await response.blob()
+      
+      // 創建下載連結
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('下載資源錯誤:', error)
+      alert(error.message || '下載資源失敗')
+    }
+  }
+
+  const handleCloseAddActivityModal = () => {
+    setIsAddActivityModalOpen(false)
+    setEditingActivity(null) // 清除編輯狀態
+  }
+
+  const handleAddActivity = async (activityData: {
+    name: string
+    isPublic: boolean
+    password: string
+    introduction: string
+  }) => {
+    if (!communityId || !userId) {
+      alert('請先登入並確保社群資訊正確')
+      return
+    }
+
+    try {
+      if (editingActivity) {
+        // 編輯模式：更新現有活動
+        const response = await fetch(`/api/activities/${editingActivity.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: activityData.name,
+            introduction: activityData.introduction,
+            isPublic: activityData.isPublic,
+            password: activityData.password,
+            userId,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || '更新活動失敗')
+        }
+
+        // 重新載入活動列表
+        await loadActivities()
+        alert('修改活動成功！')
+      } else {
+        // 新增模式：創建新活動
+        const response = await fetch(`/api/communities/${communityId}/activities`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: activityData.name,
+            introduction: activityData.introduction,
+            isPublic: activityData.isPublic,
+            password: activityData.password,
+            creatorId: userId,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || '建立活動失敗')
+        }
+
+        // 重新載入活動列表
+        await loadActivities()
+        alert('建立活動成功！')
+      }
+
+      setIsAddActivityModalOpen(false)
+      setEditingActivity(null) // 清除編輯狀態
+    } catch (error: any) {
+      console.error('操作活動錯誤:', error)
+      alert(error.message || '操作失敗')
+    }
+  }
+
+  const handleEditActivity = (activityId: string) => {
+    const activity = activities.find((a) => a.id === activityId)
+    if (activity) {
+      setEditingActivity(activity) // 設置要編輯的活動
+      setIsAddActivityModalOpen(true) // 打開模態框
+    }
+  }
+
+  const handleRequestPassword = (activityId: string, action: 'edit' | 'view' | 'menu') => {
+    const activity = activities.find((a) => a.id === activityId)
+    if (activity) {
+      setPasswordVerifyingActivity(activity)
+      setPasswordAction(action)
+      setIsPasswordModalOpen(true)
+    }
+  }
+
+  const handlePasswordVerify = (password: string): boolean => {
+    if (!passwordVerifyingActivity) return false
+    const isValid = password === passwordVerifyingActivity.password
+    if (isValid) {
+      // 密碼正確，將活動 ID 加入已驗證集合（保持驗證狀態）
+      setPasswordVerifiedActivityIds((prev) => {
+        const newSet = new Set(prev)
+        newSet.add(passwordVerifyingActivity.id)
+        return newSet
+      })
+      
+      // 根據 action 執行相應操作
+      if (passwordAction === 'menu') {
+        // 如果是選單，標記為已驗證，選單會在 ActivityCard 中自動打開
+        // 驗證狀態已經在上面設置了
+      } else if (passwordAction === 'edit') {
+        // 如果是編輯，打開編輯模態框
+        setEditingActivity(passwordVerifyingActivity)
+        setIsAddActivityModalOpen(true)
+      } else {
+        // 如果是查看，進入活動畫面
+        setViewingActivity(passwordVerifyingActivity)
+      }
+      setIsPasswordModalOpen(false)
+      setPasswordVerifyingActivity(null)
+    }
+    return isValid
+  }
+
+  const handleClosePasswordModal = () => {
+    setIsPasswordModalOpen(false)
+    setPasswordVerifyingActivity(null)
+  }
+
+  const handleBackFromActivity = () => {
+    setViewingActivity(null)
+  }
+
+  const handleSidebarClickFromActivity = (tabId: string) => {
+    setViewingActivity(null)
+    setActiveTab(tabId as TabType)
+  }
+
+  const handleCardClick = (activityId: string) => {
+    const activity = activities.find((a) => a.id === activityId)
+    if (activity) {
+      // 如果沒有密碼，直接進入活動畫面
+      // 如果有密碼但已經驗證過，也進入活動畫面
+      const hasPassword = activity.password && activity.password.trim()
+      const isVerified = passwordVerifiedActivityIds.has(activityId)
+      
+      if (!hasPassword || isVerified) {
+        setViewingActivity(activity)
+      }
+      // 如果有密碼且未驗證，會由 ActivityCard 觸發密碼驗證
+    }
+  }
+
+  const handleManageVersion = (activityId: string) => {
+    setVersionControlActivityId(activityId)
+    setIsVersionControlModalOpen(true)
+  }
+
+  const handleCloseVersionControlModal = () => {
+    setIsVersionControlModalOpen(false)
+    setVersionControlActivityId(null)
+  }
+
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!versionControlActivityId || !userId) {
+      alert('請先登入並確保活動資訊正確')
+      return
+    }
+
+    if (!confirm('確定要回復到此版本嗎？這將覆蓋目前的教案內容。')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/activity-versions/${versionControlActivityId}/restore`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          versionId,
+          userId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '回覆版本失敗')
+      }
+
+      alert('版本已回覆！')
+      setIsVersionControlModalOpen(false)
+      // 重新載入活動列表以顯示更新後的資料
+      await loadActivities()
+    } catch (error: any) {
+      console.error('回覆版本錯誤:', error)
+      alert(error.message || '回覆版本失敗')
+    }
+  }
+
+  const handleDeleteActivity = async (activityId: string) => {
+    if (!userId) {
+      alert('請先登入')
+      return
+    }
+
+    if (!confirm('確定要刪除此活動嗎？此操作無法復原。')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/activities/${activityId}?userId=${userId}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '刪除活動失敗')
+      }
+
+      // 重新載入活動列表
+      await loadActivities()
+      alert('活動已刪除')
+    } catch (error: any) {
+      console.error('刪除活動錯誤:', error)
+      alert(error.message || '刪除活動失敗')
+    }
+  }
+
+  const loadKanban = async () => {
+    if (!communityId) return
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/kanban`)
+      const data = await response.json()
+
+      if (response.ok) {
+        // 如果沒有列表且該社群尚未初始化，建立預設的三個列表
+        if (Array.isArray(data) && data.length === 0 && !kanbanInitializedRef.current.has(communityId)) {
+          kanbanInitializedRef.current.add(communityId) // 標記為已初始化
+          
+          const defaultLists = [
+            { title: '待處理' },
+            { title: '進行中' },
+            { title: '已完成' },
+          ]
+
+          // 依序建立預設列表
+          for (const list of defaultLists) {
+            try {
+              const createResponse = await fetch(`/api/communities/${communityId}/kanban`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  type: 'list',
+                  title: list.title,
+                }),
+              })
+
+              if (!createResponse.ok) {
+                console.error('建立預設列表失敗:', list.title)
+              }
+            } catch (error) {
+              console.error('建立預設列表錯誤:', error)
+            }
+          }
+
+          // 重新載入列表
+          const reloadResponse = await fetch(`/api/communities/${communityId}/kanban`)
+          const reloadData = await reloadResponse.json()
+          if (reloadResponse.ok) {
+            setKanbanLists(reloadData)
+          }
+        } else {
+          // 如果已有列表，也標記為已初始化
+          if (Array.isArray(data) && data.length > 0) {
+            kanbanInitializedRef.current.add(communityId)
+          }
+          setKanbanLists(data)
+        }
+      } else {
+        console.error('載入 Kanban 資料失敗:', data.error)
+      }
+    } catch (error) {
+      console.error('載入 Kanban 資料錯誤:', error)
+    }
+  }
+
+  // 團隊分工相關處理函數
+  const handleAddList = async () => {
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    if (!newListTitle.trim()) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/kanban`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'list',
+          title: newListTitle.trim(),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '建立列表失敗')
+      }
+
+      // 重新載入 Kanban 資料
+      await loadKanban()
+      setNewListTitle('')
+      setIsAddingList(false)
+    } catch (error: any) {
+      console.error('建立列表錯誤:', error)
+      alert(error.message || '建立列表失敗')
+    }
+  }
+
+  const handleDeleteList = async (listId: string) => {
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    if (!confirm('確定要刪除此列表嗎？此操作會刪除列表中的所有任務。')) {
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/communities/${communityId}/kanban?type=list&id=${listId}`,
+        {
+          method: 'DELETE',
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '刪除列表失敗')
+      }
+
+      // 重新載入 Kanban 資料
+      await loadKanban()
+      alert('列表已刪除')
+    } catch (error: any) {
+      console.error('刪除列表錯誤:', error)
+      alert(error.message || '刪除列表失敗')
+    }
+  }
+
+  const handleAddTask = (listId: string) => {
+    // 驗證 listId 是否為有效的 UUID（不是硬編碼的 '1', '2', '3'）
+    if (!listId || listId === '1' || listId === '2' || listId === '3' || listId.length < 30) {
+      console.error('無效的列表ID:', listId)
+      alert('列表ID無效，請重新載入頁面')
+      return
+    }
+    
+    // 確認列表存在於當前載入的列表中
+    const listExists = kanbanLists.some(list => list.id === listId)
+    if (!listExists) {
+      console.error('列表不存在於當前載入的列表中:', listId, kanbanLists)
+      alert('列表不存在，請重新載入頁面')
+      return
+    }
+    
+    setCurrentListId(listId)
+    setIsAddTaskModalOpen(true)
+  }
+
+  const handleSubmitTask = async (task: {
+    category: string
+    content: string
+    startDate: string
+    endDate: string
+    assignees: string[] // 這裡是使用者ID陣列（從 AddTaskModal 傳入）
+  }) => {
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    try {
+      // assignees 已經是使用者ID陣列（從 AddTaskModal 傳入的 member.id）
+      // 不需要轉換，直接使用
+      const assigneeIds = task.assignees || []
+
+      if (editingTask) {
+        // 編輯任務
+        const response = await fetch(`/api/communities/${communityId}/kanban`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'task',
+            id: editingTask.taskId,
+            title: task.category,
+            content: task.content,
+            startDate: task.startDate,
+            endDate: task.endDate,
+            assignees: assigneeIds, // 使用者ID陣列
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || '更新任務失敗')
+        }
+
+        // 重新載入 Kanban 資料
+        await loadKanban()
+        setEditingTask(null)
+        alert('更新任務成功！')
+      } else {
+        // 新增任務
+        if (!currentListId) {
+          alert('請選擇要新增任務的列表')
+          return
+        }
+
+        // 再次驗證 currentListId 是否為有效的 UUID
+        if (currentListId === '1' || currentListId === '2' || currentListId === '3' || currentListId.length < 30) {
+          console.error('無效的列表ID:', currentListId)
+          alert('列表ID無效，請重新載入頁面後再試')
+          return
+        }
+
+        // 確認列表存在於當前載入的列表中
+        const listExists = kanbanLists.some(list => list.id === currentListId)
+        if (!listExists) {
+          console.error('列表不存在於當前載入的列表中:', currentListId, kanbanLists)
+          alert('列表不存在，請重新載入頁面後再試')
+          return
+        }
+
+        console.log('新增任務:', { communityId, currentListId, task, assigneeIds, kanbanLists })
+
+        const response = await fetch(`/api/communities/${communityId}/kanban`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'task',
+            listId: currentListId,
+            title: task.category || '',
+            content: task.content || '',
+            startDate: task.startDate || null,
+            endDate: task.endDate || null,
+            assignees: assigneeIds, // 使用者ID陣列
+            creatorId: userId, // 添加創建者ID
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          const errorMessage = data.details 
+            ? `${data.error}: ${data.details}` 
+            : data.error || '建立任務失敗'
+          console.error('建立任務失敗:', { response: data, status: response.status })
+          throw new Error(errorMessage)
+        }
+
+        // 重新載入 Kanban 資料
+        await loadKanban()
+        alert('建立任務成功！')
+      }
+
+      setIsAddTaskModalOpen(false)
+    } catch (error: any) {
+      console.error('操作任務錯誤:', error)
+      alert(error.message || '操作失敗')
+    }
+  }
+
+  const loadIdeas = async () => {
+    if (!communityId) return
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/ideas`)
+      const data = await response.json()
+
+      if (response.ok) {
+        setIdeas(data)
+      } else {
+        console.error('載入想法列表失敗:', data.error)
+      }
+    } catch (error) {
+      console.error('載入想法列表錯誤:', error)
+    }
+  }
+
+  const handleAddIdea = async (ideaData: {
+    activityId?: string
+    stage: string
+    title: string
+    content: string
+  }) => {
+    if (!communityId || !userId) {
+      alert('請先登入並確保社群資訊正確')
+      return
+    }
+
+    try {
+      // 計算初始位置
+      let initialPosition = { x: 50, y: 50 }
+      let initialRotation = 0
+
+      if (extendingFromIdeaId) {
+        // 如果是延伸想法，放在父節點的右側
+        const parentIdea = ideas.find((i) => i.id === extendingFromIdeaId)
+        if (parentIdea && parentIdea.position) {
+          initialPosition = {
+            x: parentIdea.position.x + 150, // 父節點右側 150px
+            y: parentIdea.position.y,
+          }
+          initialRotation = parentIdea.rotation || 0 // 繼承父節點的旋轉角度
+        }
+      } else {
+        // 如果是新想法，按順序排列
+        const existingIdeasCount = ideas.filter((i) => !i.parentId).length
+        const row = Math.floor(existingIdeasCount / 4)
+        const col = existingIdeasCount % 4
+        initialPosition = {
+          x: 50 + col * 200,
+          y: 50 + row * 150,
+        }
+      }
+
+      const response = await fetch(`/api/communities/${communityId}/ideas`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          activityId: ideaData.activityId || null,
+          stage: ideaData.stage,
+          title: ideaData.title,
+          content: ideaData.content,
+          parentId: extendingFromIdeaId || null,
+          position: initialPosition,
+          rotation: initialRotation,
+          isConvergence: false,
+          convergedIdeaIds: null,
+          creatorId: userId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '建立想法失敗')
+      }
+
+      // 重新載入想法列表
+      await loadIdeas()
+      setIsAddIdeaModalOpen(false)
+      setExtendingFromIdeaId(null) // 清除延伸來源
+      alert('建立想法成功！')
+    } catch (error: any) {
+      console.error('建立想法錯誤:', error)
+      alert(error.message || '建立想法失敗')
+    }
+  }
+
+  const handleEditIdea = (ideaId: string) => {
+    const idea = ideas.find((i) => i.id === ideaId)
+    if (idea) {
+      setEditingIdea(idea)
+      setIsEditIdeaModalOpen(true)
+    }
+  }
+
+  const handleSaveIdea = async (ideaData: {
+    stage: string
+    title: string
+    content: string
+  }) => {
+    if (!editingIdea || !userId) {
+      alert('請先登入')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/ideas/${editingIdea.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          activityId: ideaData.activityId || null,
+          stage: ideaData.stage,
+          title: ideaData.title,
+          content: ideaData.content,
+          position: editingIdea.position,
+          rotation: editingIdea.rotation,
+          userId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '更新想法失敗')
+      }
+
+      // 重新載入想法列表
+      await loadIdeas()
+      setEditingIdea(null)
+      setIsEditIdeaModalOpen(false)
+      alert('更新想法成功！')
+    } catch (error: any) {
+      console.error('更新想法錯誤:', error)
+      alert(error.message || '更新想法失敗')
+    }
+  }
+
+  const handleDeleteIdea = async () => {
+    if (!editingIdea || !userId) {
+      alert('請先登入')
+      return
+    }
+
+    // 使用瀏覽器原生確認對話框
+    if (window.confirm('確定要刪除此想法嗎？此操作無法復原。')) {
+      try {
+        const response = await fetch(`/api/ideas/${editingIdea.id}?userId=${userId}`, {
+          method: 'DELETE',
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || '刪除想法失敗')
+        }
+
+        // 重新載入想法列表
+        await loadIdeas()
+        setEditingIdea(null)
+        setIsEditIdeaModalOpen(false)
+        alert('想法已刪除')
+      } catch (error: any) {
+        console.error('刪除想法錯誤:', error)
+        alert(error.message || '刪除想法失敗')
+      }
+    }
+  }
+
+  const handleExtendIdea = () => {
+    if (editingIdea) {
+      console.log('延伸想法:', editingIdea.id)
+      // TODO: 實作延伸想法的 API 邏輯
+      
+      // 設置延伸來源 ID，然後打開新增想法模態框
+      setExtendingFromIdeaId(editingIdea.id)
+      setIsEditIdeaModalOpen(false)
+      setEditingIdea(null)
+      setIsAddIdeaModalOpen(true)
+    }
+  }
+
+  const handleCloseEditIdeaModal = () => {
+    setIsEditIdeaModalOpen(false)
+    setEditingIdea(null)
+  }
+
+  const handleConvergenceSubmit = async (data: {
+    activityId?: string
+    stage: string
+    selectedIdeaIds: string[]
+    convergenceContent: string
+    comments: { content: string; author: string; createdAt: string }[]
+  }) => {
+    if (!communityId || !userId) {
+      alert('請先登入並確保社群資訊正確')
+      return
+    }
+
+    try {
+      // 計算收斂節點的位置（放在被收斂節點的右側）
+      const convergedIdeas = ideas.filter(idea => data.selectedIdeaIds.includes(idea.id))
+      let convergencePosition = { x: 0, y: 0 }
+
+      if (convergedIdeas.length > 0) {
+        // 找出所有被收斂節點中最右邊的位置
+        const maxX = Math.max(...convergedIdeas.map(idea => idea.position?.x || 0))
+        convergencePosition = { x: maxX + 250, y: 100 }
+      }
+
+      const response = await fetch(`/api/communities/${communityId}/ideas`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          activityId: data.activityId || null,
+          stage: data.stage,
+          title: '收斂結果',
+          content: data.convergenceContent || '(尚未填寫收斂內容)',
+          parentId: null,
+          position: convergencePosition,
+          rotation: 0,
+          isConvergence: true,
+          convergedIdeaIds: data.selectedIdeaIds,
+          creatorId: userId,
+        }),
+      })
+
+      const apiData = await response.json()
+
+      if (!response.ok) {
+        throw new Error(apiData.error || '建立收斂結果失敗')
+      }
+
+      // 重新載入想法列表
+      await loadIdeas()
+      setIsConvergenceModalOpen(false)
+      alert(`已收斂 ${data.selectedIdeaIds.length} 個想法節點`)
+    } catch (error: any) {
+      console.error('收斂想法錯誤:', error)
+      alert(error.message || '收斂想法失敗')
+    }
+  }
+
+  const handleIdeaPositionChange = async (ideaId: string, position: { x: number; y: number }) => {
+    if (!userId || !userAccount) return
+
+    // 檢查使用者是否為想法的建立者
+    const idea = ideas.find((i) => i.id === ideaId)
+    if (!idea) return
+
+    // 比較建立者帳號和當前使用者帳號
+    if (idea.creatorAccount && idea.creatorAccount !== userAccount) {
+      // 不是建立者，不允許移動，恢復到原始位置
+      const originalIdea = ideas.find((i) => i.id === ideaId)
+      if (originalIdea && originalIdea.position) {
+        setIdeas((prev) =>
+          prev.map((idea) =>
+            idea.id === ideaId ? { ...idea, position: originalIdea.position } : idea
+          )
+        )
+      }
+      return // 靜默返回，不顯示錯誤訊息
+    }
+
+    // 限制卡片不能移動到邊界線上方（y 不能小於 0）
+    const constrainedPosition = {
+      x: position.x,
+      y: Math.max(0, position.y)
+    }
+
+    // 先更新本地狀態（即時反饋）
+    setIdeas((prev) =>
+      prev.map((idea) =>
+        idea.id === ideaId ? { ...idea, position: constrainedPosition } : idea
+      )
+    )
+
+    // 清除之前的節流計時器
+    const existingTimeout = positionUpdateTimeoutRef.current.get(ideaId)
+    if (existingTimeout) {
+      clearTimeout(existingTimeout)
+    }
+
+    // 記錄當前位置
+    lastUpdatePositionRef.current.set(ideaId, constrainedPosition)
+
+    // 設置節流：300ms 後才發送 API 請求
+    const timeoutId = setTimeout(async () => {
+      try {
+        const lastPosition = lastUpdatePositionRef.current.get(ideaId)
+        if (!lastPosition) return
+
+        const response = await fetch(`/api/ideas/${ideaId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            position: lastPosition,
+            rotation: idea.rotation || 0,
+            userId,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          // 403 權限錯誤時靜默處理（不顯示錯誤）
+          if (response.status === 403) {
+            // 靜默處理，不記錄錯誤
+            // 恢復到最後已知的有效位置
+            await loadIdeas()
+            return
+          }
+          
+          // 其他錯誤：只有當不是常見的網絡錯誤時才記錄
+          // 避免在正常操作中顯示過多錯誤訊息
+          if (response.status !== 404 && response.status !== 500) {
+            console.warn('更新想法位置失敗:', data.error || '未知錯誤')
+          }
+          // 恢復到最後已知的有效位置
+          await loadIdeas()
+          return
+        }
+
+        // 清除記錄
+        lastUpdatePositionRef.current.delete(ideaId)
+      } catch (error) {
+        console.error('更新想法位置錯誤:', error)
+        // 如果失敗，重新載入想法列表以恢復正確位置
+        await loadIdeas()
+      } finally {
+        positionUpdateTimeoutRef.current.delete(ideaId)
+      }
+    }, 300) // 300ms 節流
+
+    positionUpdateTimeoutRef.current.set(ideaId, timeoutId)
+  }
+
+  const handleIdeaRotationChange = async (ideaId: string, rotation: number) => {
+    if (!userId) return
+
+    // 先更新本地狀態（即時反饋）
+    setIdeas((prev) =>
+      prev.map((idea) =>
+        idea.id === ideaId ? { ...idea, rotation } : idea
+      )
+    )
+
+    // 同步到資料庫
+    try {
+      const idea = ideas.find((i) => i.id === ideaId)
+      if (idea) {
+        await fetch(`/api/ideas/${ideaId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            position: idea.position || { x: 50, y: 50 },
+            rotation,
+            userId,
+          }),
+        })
+      }
+    } catch (error) {
+      console.error('更新想法旋轉錯誤:', error)
+      // 如果失敗，重新載入想法列表
+      await loadIdeas()
+    }
+  }
+
+  const handleEditTask = (taskId: string, listId: string) => {
+    const list = kanbanLists.find((l) => l.id === listId)
+    const task = list?.tasks.find((t) => t.id === taskId)
+    
+    if (task) {
+      // 將 assignees（暱稱陣列）轉換為使用者ID陣列
+      const assigneeIds = task.assignees.map((nickname: string) => {
+        // 根據暱稱找到對應的使用者ID
+        const member = communityMembers.find((m) => m.name === nickname)
+        return member ? member.id : null
+      }).filter((id: string | null) => id !== null) as string[]
+
+      setEditingTask({ taskId, listId })
+      setCurrentListId(listId)
+      setIsAddTaskModalOpen(true)
+      setOpenTaskMenuId(null)
+      
+      // 注意：這裡需要等待模態框打開後再設置 initialData
+      // 但由於 AddTaskModal 已經有 useEffect 處理 initialData，我們需要在這裡設置
+      // 實際上，我們需要修改 AddTaskModal 的 props 來傳遞完整的任務資料
+    }
+  }
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event
+    setActiveTaskId(active.id as string)
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveTaskId(null)
+
+    if (!over) return
+
+    const activeTaskId = active.id as string
+    
+    // 從 over.data 獲取列表ID，或者直接使用 over.id（當拖到空列表時）
+    let overListId = over.data.current?.listId as string
+    
+    // 如果沒有 listId，檢查 over.id 是否是列表ID（用於空列表情況）
+    if (!overListId) {
+      // 檢查 over.id 是否匹配任何列表ID
+      const matchingList = kanbanLists.find(list => list.id === over.id)
+      if (matchingList) {
+        overListId = matchingList.id
+      }
+    }
+
+    // 找到被拖拽的任務所在的列表
+    let sourceListId = ''
+    for (const list of kanbanLists) {
+      if (list.tasks.some(t => t.id === activeTaskId)) {
+        sourceListId = list.id
+        break
+      }
+    }
+
+    if (!sourceListId || !overListId) {
+      console.log('無法確定來源或目標列表', { sourceListId, overListId, over })
+      return
+    }
+
+    // 如果沒有移動到不同的列表，則不做任何操作
+    if (sourceListId === overListId && !over.data.current?.sortable) return
+
+    try {
+      // 調用 API 移動任務
+      const response = await fetch(
+        `/api/communities/${communityId}/kanban/tasks/${activeTaskId}/move`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            targetListId: overListId,
+          }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '移動任務失敗')
+      }
+
+      // 重新載入 Kanban 資料以更新 UI
+      await loadKanban()
+    } catch (error: any) {
+      console.error('移動任務錯誤:', error)
+      alert(error.message || '移動任務失敗')
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string, listId: string) => {
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    setOpenTaskMenuId(null)
+
+    // 使用瀏覽器原生確認對話框
+    if (window.confirm('確定要刪除此任務嗎？此操作無法復原。')) {
+      try {
+        const response = await fetch(
+          `/api/communities/${communityId}/kanban?type=task&id=${taskId}`,
+          {
+            method: 'DELETE',
+          }
+        )
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || '刪除任務失敗')
+        }
+
+        // 重新載入 Kanban 資料
+        await loadKanban()
+        alert('任務已刪除')
+      } catch (error: any) {
+        console.error('刪除任務錯誤:', error)
+        alert(error.message || '刪除任務失敗')
+      }
+    }
+  }
+
+  const handleCloseAddTaskModal = () => {
+    setIsAddTaskModalOpen(false)
+    setEditingTask(null)
+  }
+
+  // 點擊外部關閉任務選單
+  useEffect(() => {
+    if (!openTaskMenuId) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      // 檢查點擊是否在選單內或三個點按鈕上
+      const isClickInsideMenu = target.closest('.task-menu-container')
+      const isClickOnMenuButton = target.closest('.task-menu-button')
+      
+      if (!isClickInsideMenu && !isClickOnMenuButton) {
+        setOpenTaskMenuId(null)
+      }
+    }
+
+    // 使用 setTimeout 確保在當前事件處理完成後再添加監聽器
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openTaskMenuId])
+
+  // 計算多久前創立的任務
+  const getTimeAgo = (createdAt: string): string => {
+    const now = new Date()
+    const created = new Date(createdAt)
+    const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000)
+
+    if (diffInSeconds < 60) {
+      return '剛剛'
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60)
+      return `${minutes}分鐘前`
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600)
+      return `${hours}小時前`
+    } else if (diffInSeconds < 604800) {
+      const days = Math.floor(diffInSeconds / 86400)
+      return `${days}天前`
+    } else if (diffInSeconds < 2592000) {
+      const weeks = Math.floor(diffInSeconds / 604800)
+      return `${weeks}週前`
+    } else if (diffInSeconds < 31536000) {
+      const months = Math.floor(diffInSeconds / 2592000)
+      return `${months}個月前`
+    } else {
+      const years = Math.floor(diffInSeconds / 31536000)
+      return `${years}年前`
+    }
+  }
+
+  // 格式化日期範圍
+  const formatDateRange = (startDate: string, endDate: string): string => {
+    // 處理日期格式：可能是 ISO 格式或 YYYY-MM-DD 格式
+    const formatDate = (dateStr: string): string => {
+      if (!dateStr) return ''
+      // 如果是 ISO 格式，提取日期部分
+      const date = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
+      // 轉換為 YYYY/MM/DD 格式
+      return date.replace(/-/g, '/')
+    }
+    
+    if (!startDate && !endDate) return ''
+    if (!startDate) return formatDate(endDate)
+    if (!endDate) return formatDate(startDate)
+    return `${formatDate(startDate)}~${formatDate(endDate)}`
+  }
+
+  // 獲取成員信息（根據使用者ID）
+  const getMemberInfo = (userId: string) => {
+    const member = communityMembers.find((m) => m.id === userId)
+    if (member) {
+      return member
+    }
+    // 如果找不到，返回預設值
+    return { id: userId, name: '未知', avatar: '' }
+  }
+
+  // 定義一組色調差異明顯的顏色（用於區分不同使用者）
+  const USER_COLORS = [
+    'rgba(138,99,210,0.9)',  // 紫色（原本的顏色）
+    'rgba(59,130,246,0.9)',  // 藍色
+    'rgba(16,185,129,0.9)',  // 綠色
+    'rgba(245,158,11,0.9)',  // 橙色
+    'rgba(239,68,68,0.9)',   // 紅色
+    'rgba(14,165,233,0.9)',  // 青色
+    'rgba(168,85,247,0.9)',  // 淺紫色
+    'rgba(236,72,153,0.9)',  // 粉色
+    'rgba(34,197,94,0.9)',   // 淺綠色
+    'rgba(249,115,22,0.9)',  // 橘色
+  ]
+
+  // 根據使用者ID生成固定顏色（確保同一個使用者總是得到相同顏色）
+  const getUserColor = (userId: string): string => {
+    if (!userId) return USER_COLORS[0]
+    
+    // 簡單的 hash 函數：將 userId 轉換為數字
+    let hash = 0
+    for (let i = 0; i < userId.length; i++) {
+      const char = userId.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // 轉換為 32 位整數
+    }
+    
+    // 使用絕對值取模，確保索引在範圍內
+    const index = Math.abs(hash) % USER_COLORS.length
+    return USER_COLORS[index]
+  }
+
+  // 如果正在查看活動，顯示課程目標頁面
+  if (viewingActivity) {
+    // 過濾出該活動的收斂結果節點並轉換格式
+    const convergenceResults = ideas
+      .filter(idea => idea.isConvergence && idea.activityId === viewingActivity.id)
+      .map(idea => ({
+        id: idea.id,
+        stage: idea.stage,
+        title: idea.title,
+        content: idea.content,
+        createdDate: idea.createdDate,
+        createdTime: idea.createdTime,
+      }))
+
+    return (
+      <CourseObjectives
+        activityName={viewingActivity.name}
+        activityId={viewingActivity.id}
+        onBack={handleBackFromActivity}
+        onSidebarClick={handleSidebarClickFromActivity}
+        convergenceResults={convergenceResults}
+        onVersionCreated={(activityId, versionData) => {
+          // 版本已創建，可以觸發重新載入版本列表
+          console.log('版本已創建:', activityId, versionData)
+        }}
+      />
+    )
+  }
+
+  return (
+    <div className="w-screen h-screen min-w-[1280px] min-h-[800px] bg-[#F5F3FA] flex">
+      {/* 左側導航欄 */}
+      <div className="w-[80px] bg-[#FAFAFA] flex flex-col items-center py-8 gap-6">
+        {/* 導航選項 */}
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
+              activeTab === tab.id
+                ? 'bg-purple-100 text-purple-600'
+                : 'text-gray-600 hover:bg-gray-200'
+            }`}
+            title={tab.label}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              {tab.id === 'resources' && (
+                // 資源圖標
+                <>
+                  <path
+                    d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'activities' && (
+                // 共備活動圖標 - 書本
+                <>
+                  <path
+                    d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M6.5 2H20V22H6.5C5.83696 22 5.20107 21.7366 4.73223 21.2678C4.26339 20.7989 4 20.163 4 19.5V4.5C4 3.83696 4.26339 3.20107 4.73223 2.73223C5.20107 2.26339 5.83696 2 6.5 2Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'ideas' && (
+                // 想法牆圖標 - 發光的燈泡
+                <>
+                  <circle
+                    cx="12"
+                    cy="9"
+                    r="5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M9 14.5C9 14.5 9 16 9 17C9 17.5 9.5 18 10 18H14C14.5 18 15 17.5 15 17C15 16 15 14.5 15 14.5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M10 21H14"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  {/* 發光效果 */}
+                  <path
+                    d="M12 2V3"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M19 9H20"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M4 9H5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M17.5 4.5L16.8 5.2"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M6.5 4.5L7.2 5.2"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </>
+              )}
+              {tab.id === 'teamwork' && (
+                // 團隊分工圖標 - 剪貼板任務清單
+                <>
+                  {/* 剪貼板主體 */}
+                  <path
+                    d="M9 5H7C5.89543 5 5 5.89543 5 7V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V7C19 5.89543 18.1046 5 17 5H15"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  {/* 剪貼板頂部夾子 */}
+                  <path
+                    d="M9 3C9 2.44772 9.44772 2 10 2H14C14.5523 2 15 2.44772 15 3V5H9V3Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  {/* 清單項目線條 */}
+                  <path
+                    d="M9 9H15"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M9 12H15"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M9 15H13"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  {/* 勾選標記 */}
+                  <path
+                    d="M9 17L11 19L15 15"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'history' && (
+                // 活動歷程圖標
+                <>
+                  <path
+                    d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 2V8H20"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M16 13H8"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M16 17H8"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M10 9H9H8"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'management' && (
+                // 社群管理圖標
+                <>
+                  <path
+                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle
+                    cx="9"
+                    cy="7"
+                    r="4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+            </svg>
+          </button>
+        ))}
+      </div>
+
+      {/* 主要內容區 */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="bg-[#FAFAFA] px-8 py-3 flex items-center justify-between">
+          {/* 左側：社群圖標和名稱（可點擊返回） */}
+          <button
+            onClick={onBack}
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+            title="返回社群總覽"
+          >
+            <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="text-white"
+              >
+                <path
+                  d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle
+                  cx="9"
+                  cy="7"
+                  r="4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-gray-800">{communityName}</h2>
+          </button>
+
+          {/* 右側：通知和用戶頭像 */}
+          <div className="flex items-center gap-6">
+            {/* 通知圖標 */}
+            <button className="text-gray-600 hover:text-gray-800">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M15 6.66667C15 5.34058 14.4732 4.06881 13.5355 3.13113C12.5979 2.19345 11.3261 1.66667 10 1.66667C8.67392 1.66667 7.40215 2.19345 6.46447 3.13113C5.52678 4.06881 5 5.34058 5 6.66667C5 12.5 2.5 14.1667 2.5 14.1667H17.5C17.5 14.1667 15 12.5 15 6.66667Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M11.4417 17.5C11.2952 17.7526 11.0849 17.9622 10.8319 18.1079C10.5789 18.2537 10.292 18.3304 10 18.3304C9.70802 18.3304 9.42115 18.2537 9.16814 18.1079C8.91513 17.9622 8.70484 17.7526 8.55835 17.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+
+            {/* 用戶頭像與下拉選單 */}
+            <div className="relative">
+              {/* 使用者頭像 */}
+              <div
+                ref={avatarRef}
+                onClick={handleAvatarClick}
+                className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: userId ? getUserColor(userId) : 'rgba(138,99,210,0.9)' }}
+              >
+                <span className="text-white font-semibold text-sm">
+                  {userNickname.charAt(0).toUpperCase()}
+                </span>
+              </div>
+
+              {/* 下拉選單 */}
+              {isDropdownOpen && (
+                <div
+                  ref={dropdownRef}
+                  className="absolute right-0 top-12 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
+                >
+                  {/* 使用者資訊 */}
+                  <div className="px-4 py-3">
+                    <div className="text-gray-900 text-base mb-1">
+                      {userNickname}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {userAccount}
+                    </div>
+                  </div>
+
+                  {/* 分隔線 */}
+                  <div className="border-t border-gray-200 my-1"></div>
+
+                  {/* 登出 */}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    登出
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 內容區 */}
+        <div className="flex-1 bg-[#FEFBFF] px-12 py-8">
+          {/* 標題欄 */}
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-2xl font-bold text-[#6D28D9]">
+              {activeTab === 'resources' && '社群資源'}
+              {activeTab === 'activities' && '共備活動'}
+              {activeTab === 'ideas' && '想法牆'}
+              {activeTab === 'teamwork' && '團隊分工'}
+              {activeTab === 'history' && '活動歷程'}
+              {activeTab === 'management' && '社群管理'}
+            </h1>
+            {activeTab === 'resources' && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  accept="*/*"
+                />
+                <button
+                  onClick={handleAddFileClick}
+                  className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                >
+                  + 新增檔案
+                </button>
+              </>
+            )}
+            {activeTab === 'activities' && (
+              <button
+                onClick={() => {
+                  setEditingActivity(null) // 清除編輯狀態
+                  setIsAddActivityModalOpen(true)
+                }}
+                className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+              >
+                新增活動
+              </button>
+            )}
+          </div>
+
+          {/* 內容區域 */}
+          {activeTab !== 'ideas' && (
+          <div className="bg-white rounded-lg shadow-sm min-h-[400px] p-8">
+            {activeTab === 'resources' && (
+              <>
+                {resources.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-gray-400">
+                    <p className="text-lg">目前沒有資源</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {resources.map((resource) => (
+                      <ResourceCard
+                        key={resource.id}
+                        fileName={resource.fileName}
+                        uploadDate={resource.uploadDate}
+                        uploadTime={resource.uploadTime}
+                        uploaderName={resource.uploaderName}
+                        uploaderId={resource.uploaderId}
+                        onDelete={() => handleDeleteResource(resource.id)}
+                        onDownload={() => handleDownloadResource(resource.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {activeTab === 'activities' && (
+                <>
+                  {activities.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p className="text-lg">目前沒有活動</p>
+              </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {activities.map((activity) => (
+                        <ActivityCard
+                          key={activity.id}
+                          activityName={activity.name}
+                          introduction={activity.introduction}
+                          createdDate={activity.createdDate}
+                          createdTime={activity.createdTime}
+                          password={activity.password}
+                          isPasswordVerified={passwordVerifiedActivityIds.has(activity.id)}
+                          creatorId={activity.creatorId}
+                          creatorName={activity.creatorName}
+                          onEdit={() => handleEditActivity(activity.id)}
+                          onManageVersion={() => handleManageVersion(activity.id)}
+                          onDelete={() => handleDeleteActivity(activity.id)}
+                          onCardClick={() => handleCardClick(activity.id)}
+                          onRequestPassword={(action) => handleRequestPassword(activity.id, action)}
+                          onPasswordVerified={() => {
+                            // 密碼驗證成功後，如果是從選單觸發的，選單會自動打開
+                          }}
+                        />
+                      ))}
+              </div>
+                  )}
+                </>
+            )}
+            {activeTab === 'teamwork' && (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                <div className="w-full overflow-x-auto">
+                  <div className="flex gap-4 min-w-max p-4">
+                    {/* 新增列表按鈕 */}
+                  {!isAddingList ? (
+                    <button
+                      onClick={() => setIsAddingList(true)}
+                      className="h-fit px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors whitespace-nowrap"
+                    >
+                      + 新增列表
+                    </button>
+                  ) : (
+                    <div className="w-48 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                      <input
+                        type="text"
+                        value={newListTitle}
+                        onChange={(e) => setNewListTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleAddList()
+                          } else if (e.key === 'Escape') {
+                            setIsAddingList(false)
+                            setNewListTitle('')
+                          }
+                        }}
+                        placeholder="輸入列表名稱"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 mb-2"
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleAddList}
+                          className="flex-1 px-3 py-1.5 bg-[rgba(138,99,210,0.9)] text-white rounded-lg text-sm font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                        >
+                          新增
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsAddingList(false)
+                            setNewListTitle('')
+                          }}
+                          className="flex-1 px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Kanban 列表 */}
+                  {kanbanLists.map((list) => (
+                    <div
+                      key={list.id}
+                      className="w-48 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col"
+                    >
+                      {/* 列表標題和刪除按鈕 */}
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                        <h3 className="font-semibold text-gray-800">{list.title}</h3>
+                        <button
+                          onClick={() => handleDeleteList(list.id)}
+                          className="text-gray-400 hover:text-gray-600 transition-colors"
+                          title="刪除列表"
+                        >
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M18 6L6 18M6 6L18 18"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* 新增任務按鈕 - 緊貼在標題下方 */}
+                      <div className="px-4 py-3">
+                        <button
+                          onClick={() => handleAddTask(list.id)}
+                          className="w-full px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                        >
+                          新增任務
+                        </button>
+                      </div>
+
+                      {/* 任務列表區域 */}
+                      <SortableContext
+                        items={list.tasks.map(t => t.id)}
+                        strategy={verticalListSortingStrategy}
+                        id={list.id}
+                      >
+                        <DroppableList 
+                          id={list.id} 
+                          isEmpty={list.tasks.length === 0}
+                        >
+                          {list.tasks.map((task) => (
+                            <DraggableTaskCard
+                              key={task.id}
+                              id={task.id}
+                              task={task}
+                              listId={list.id}
+                              onEdit={() => handleEditTask(task.id, list.id)}
+                              onDelete={() => handleDeleteTask(task.id, list.id)}
+                              getUserColor={getUserColor}
+                              getMemberInfo={getMemberInfo}
+                              formatDateRange={formatDateRange}
+                              openMenuId={openTaskMenuId}
+                              setOpenMenuId={setOpenTaskMenuId}
+                            />
+                          ))}
+                        </DroppableList>
+                      </SortableContext>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              </DndContext>
+            )}
+            {activeTab === 'history' && (
+              <div className="flex-1 px-8 py-6">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  {/* 圖表切換按鈕 */}
+                  <div className="flex gap-3 mb-6">
+                    <button
+                      onClick={() => setActiveHistoryChart('contribution')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        activeHistoryChart === 'contribution'
+                          ? 'bg-[rgba(138,99,210,0.9)] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      社群想法貢獻數量圖
+                    </button>
+                    <button
+                      onClick={() => setActiveHistoryChart('network')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        activeHistoryChart === 'network'
+                          ? 'bg-[rgba(138,99,210,0.9)] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      社群網絡圖
+                    </button>
+                    <button
+                      onClick={() => setActiveHistoryChart('trend')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        activeHistoryChart === 'trend'
+                          ? 'bg-[rgba(138,99,210,0.9)] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      社群想法貢獻數量變化圖表
+                    </button>
+                  </div>
+
+                  {/* 根據選中的圖表類型顯示對應內容 */}
+                  {communityId && (
+                    <div>
+                      {activeHistoryChart === 'contribution' && (
+                        <IdeaContributionChart communityId={communityId} />
+                      )}
+                      {activeHistoryChart === 'network' && (
+                        communityId ? (
+                          <NetworkGraph communityId={communityId} />
+                        ) : (
+                          <div className="flex items-center justify-center h-96 text-gray-400">
+                            <p className="text-lg">載入中...</p>
+                          </div>
+                        )
+                      )}
+                      {activeHistoryChart === 'trend' && (
+                        <IdeaTrendChart communityId={communityId} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {activeTab === 'management' && (
+              <div className="flex-1 px-8 py-6">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  {/* 標題 */}
+                  <h2 className="text-xl font-semibold text-gray-800 mb-6">
+                    所有成員({fullCommunityMembers.length})
+                  </h2>
+
+                  {/* 成員列表 */}
+                  <div className="space-y-4">
+                    {fullCommunityMembers.map((member) => {
+                      // 判斷當前用戶是否為管理員
+                      const currentUser = fullCommunityMembers.find(m => m.userId === userId)
+                      const isCurrentUserAdmin = currentUser?.role === 'admin'
+                      const isCurrentUser = member.userId === userId
+                      const canManage = isCurrentUserAdmin && !isCurrentUser
+
+                      return (
+                        <div 
+                          key={member.id}
+                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors relative"
+                        >
+                          <div className="flex items-center gap-4 flex-1">
+                            {/* 頭像 */}
+                            <div 
+                              className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-semibold"
+                              style={{ backgroundColor: getUserColor(member.userId) }}
+                            >
+                              {member.nickname ? member.nickname.charAt(0).toUpperCase() : 'U'}
+                            </div>
+
+                            {/* 成員資訊 */}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="text-base font-semibold text-gray-800">
+                                  {member.nickname || member.account}
+                                </h3>
+                                {member.role === 'admin' && (
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                                    管理員
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-500">
+                                {member.school || '未提供學校資訊'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* 管理員編輯按鈕（只對非自己的成員顯示） */}
+                          {canManage && (
+                            <div className="relative member-menu-container">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setOpenMemberMenuId(openMemberMenuId === member.userId ? null : member.userId)
+                                }}
+                                className="text-gray-400 hover:text-gray-600 p-2 rounded hover:bg-gray-100 transition-colors"
+                              >
+                                <svg
+                                  width="20"
+                                  height="20"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                >
+                                  <circle cx="10" cy="4" r="1.5" />
+                                  <circle cx="10" cy="10" r="1.5" />
+                                  <circle cx="10" cy="16" r="1.5" />
+                                </svg>
+                              </button>
+
+                              {/* 下拉選單 */}
+                              {openMemberMenuId === member.userId && (
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 member-menu-container">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setOpenMemberMenuId(null)
+                                      handleToggleAdmin(member.userId, member.role === 'admin')
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                  >
+                                    {member.role === 'admin' ? (
+                                      <>
+                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                          <path d="M8 1L10.09 6.26L16 7.27L12 11.14L12.91 16.02L8 13.77L3.09 16.02L4 11.14L0 7.27L5.91 6.26L8 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                        </svg>
+                                        取消管理員
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                          <path d="M8 1L10.09 6.26L16 7.27L12 11.14L12.91 16.02L8 13.77L3.09 16.02L4 11.14L0 7.27L5.91 6.26L8 1Z" fill="currentColor"/>
+                                        </svg>
+                                        設為管理員
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setOpenMemberMenuId(null)
+                                      handleRemoveMember(member.userId, member.nickname || member.account)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                      <path d="M2 4H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                                      <path d="M12.6667 4V13.3333C12.6667 14 12 14.6667 11.3333 14.6667H4.66667C4 14.6667 3.33333 14 3.33333 13.3333V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                                      <path d="M5.33333 4V2.66667C5.33333 2 6 1.33334 6.66667 1.33334H9.33333C10 1.33334 10.6667 2 10.6667 2.66667V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                                    </svg>
+                                    移出社群
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    
+                    {/* 如果沒有成員資料 */}
+                    {fullCommunityMembers.length === 0 && (
+                      <div className="text-center py-8 text-gray-400">
+                        <p>載入中...</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* 想法牆（獨立容器，無白色背景） */}
+          {activeTab === 'ideas' && (
+            <div className="flex-1 relative overflow-y-auto -mt-6">
+              {/* 想法收斂按鈕 */}
+              <button 
+                onClick={() => setIsConvergenceModalOpen(true)}
+                className="px-6 py-2.5 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] text-white rounded-lg font-medium transition-colors mb-2"
+              >
+                想法收斂
+              </button>
+              
+              {/* 邊界線 */}
+              <div className="border-t-2 border-gray-300 mb-4"></div>
+
+              {/* 想法內容區域 */}
+              <div className="px-12 relative" id="ideas-container" style={{ minHeight: '600px' }}>
+                {ideas.length === 0 ? (
+                  <div className="text-gray-400 text-center py-12">
+                    <p>目前還沒有想法</p>
+        </div>
+                ) : (
+                  <>
+                    {/* 想法卡片 - 自由拖拉布局 */}
+                    <div className="relative" style={{ minHeight: '600px' }}>
+                      {ideas.map((idea, index) => {
+                        // 根據 creatorName（nickname）從 communityMembers 中找到對應的 userId
+                        const creatorMember = communityMembers.find(
+                          (m) => m.name === idea.creatorName
+                        )
+                        const creatorId = creatorMember?.id || undefined
+                        
+                        return (
+                          <DraggableIdeaCard
+                            key={idea.id}
+                            id={idea.id}
+                            index={index}
+                            stage={idea.stage}
+                            title={idea.title}
+                            createdDate={idea.createdDate}
+                            createdTime={idea.createdTime}
+                            creatorName={idea.creatorName}
+                            creatorAvatar={idea.creatorAvatar}
+                            creatorId={creatorId}
+                            position={idea.position || { x: 50 + index * 200, y: 50 }}
+                            rotation={idea.rotation || 0}
+                            onClick={() => handleEditIdea(idea.id)}
+                            onPositionChange={handleIdeaPositionChange}
+                            onRotationChange={handleIdeaRotationChange}
+                            isConvergence={idea.isConvergence}
+                          />
+                        )
+                      })}
+                    </div>
+                    
+                    {/* 箭頭連接線層 - 使用單一 SVG 覆蓋層 */}
+                    <ArrowsOverlay ideas={ideas} />
+                  </>
+                )}
+              </div>
+
+              {/* 右下角浮動新增按鈕 */}
+              <button
+                onClick={() => setIsAddIdeaModalOpen(true)}
+                className="fixed bottom-8 right-8 w-14 h-14 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] rounded-full shadow-lg flex items-center justify-center text-white text-2xl font-light transition-colors z-10"
+              >
+                +
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 新增/編輯活動模態框 */}
+      <AddActivityModal
+        isOpen={isAddActivityModalOpen}
+        onClose={handleCloseAddActivityModal}
+        onAdd={handleAddActivity}
+        editMode={!!editingActivity}
+        initialData={
+          editingActivity
+            ? {
+                name: editingActivity.name,
+                isPublic: editingActivity.isPublic,
+                password: editingActivity.password,
+                introduction: editingActivity.introduction,
+              }
+            : undefined
+        }
+        onManageVersion={
+          editingActivity
+            ? () => {
+                setIsAddActivityModalOpen(false)
+                handleManageVersion(editingActivity.id)
+              }
+            : undefined
+        }
+      />
+
+      {/* 密碼驗證模態框 */}
+      {passwordVerifyingActivity && (
+        <PasswordModal
+          isOpen={isPasswordModalOpen}
+          onClose={handleClosePasswordModal}
+          onVerify={handlePasswordVerify}
+          activityName={passwordVerifyingActivity.name}
+        />
+      )}
+
+      {/* 新增/編輯任務模態框 */}
+      <AddTaskModal
+        isOpen={isAddTaskModalOpen}
+        onClose={handleCloseAddTaskModal}
+        onSubmit={handleSubmitTask}
+        communityMembers={communityMembers}
+        editMode={!!editingTask}
+        initialData={
+          editingTask
+            ? (() => {
+                const list = kanbanLists.find((l) => l.id === editingTask.listId)
+                const task = list?.tasks.find((t) => t.id === editingTask.taskId)
+                if (task) {
+                  // 將 assignees（暱稱陣列）轉換為使用者ID陣列
+                  const assigneeIds = task.assignees.map((nickname: string) => {
+                    const member = communityMembers.find((m) => m.name === nickname)
+                    return member ? member.id : null
+                  }).filter((id: string | null) => id !== null) as string[]
+
+                  return {
+                    category: task.title,
+                    content: task.content,
+                    startDate: task.startDate,
+                    endDate: task.endDate,
+                    assignees: assigneeIds, // 轉換為使用者ID陣列
+                  }
+                }
+                return undefined
+              })()
+            : undefined
+        }
+      />
+
+      {/* 新增想法模態框 */}
+      <AddIdeaModal
+        isOpen={isAddIdeaModalOpen}
+        onClose={() => {
+          setIsAddIdeaModalOpen(false)
+          setExtendingFromIdeaId(null) // 清除延伸來源
+        }}
+        onSubmit={handleAddIdea}
+        communityId={communityId || undefined}
+      />
+
+      {/* 編輯想法模態框 */}
+      {editingIdea && (
+        <EditIdeaModal
+          isOpen={isEditIdeaModalOpen}
+          onClose={handleCloseEditIdeaModal}
+          onSave={handleSaveIdea}
+          onDelete={handleDeleteIdea}
+          onExtend={handleExtendIdea}
+          initialData={{
+            activityId: editingIdea.activityId,
+            stage: editingIdea.stage,
+            title: editingIdea.title,
+            content: editingIdea.content,
+          }}
+          isConvergence={editingIdea.isConvergence}
+          communityId={communityId || undefined}
+        />
+      )}
+
+      {/* 想法收斂模態框 */}
+      {isConvergenceModalOpen && (
+        <ConvergenceModal
+          ideas={ideas}
+          onClose={() => setIsConvergenceModalOpen(false)}
+          onSubmit={handleConvergenceSubmit}
+          communityId={communityId || undefined}
+          userId={userId}
+          userAccount={userAccount}
+        />
+      )}
+
+      {/* 版本管控視窗 */}
+      <VersionControlModal
+        isOpen={isVersionControlModalOpen}
+        onClose={handleCloseVersionControlModal}
+        activityId={versionControlActivityId || ''}
+        activityName={
+          versionControlActivityId
+            ? activities.find((a) => a.id === versionControlActivityId)?.name || ''
+            : ''
+        }
+        onRestore={handleRestoreVersion}
+      />
+    </div>
+  )
+}
+
+
+
