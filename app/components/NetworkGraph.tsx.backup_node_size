@@ -207,8 +207,8 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
     const rank = node.rank || 1
     const totalNodes = graphData?.nodes?.length || 1
     
-    // 每高一個名次，半徑增加 1.5（直徑增加 3）- 增強排名差異視覺效果
-    const radiusIncrement = 1.5
+    // 每高一個名次，半徑增加 1（直徑增加 2）
+    const radiusIncrement = 1
     const rankBonus = (totalNodes - rank) * radiusIncrement
     
     // 最終半徑 = 基礎半徑（文字需要的） + 排名獎勵
@@ -251,7 +251,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
     // 節點半徑 - 根據排名增加
     const rank = node.rank || 1
     const totalNodes = graphData?.nodes?.length || 1
-    const radiusIncrement = 1.5 // 每高一名次，半徑 +1.5（直徑 +3）- 增強排名差異視覺效果
+    const radiusIncrement = 1 // 每高一名次，半徑 +1（直徑 +2）
     const rankBonus = (totalNodes - rank) * radiusIncrement
     const radius = baseRadius + rankBonus
     

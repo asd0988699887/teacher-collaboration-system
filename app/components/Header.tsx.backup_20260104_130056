@@ -37,11 +37,7 @@ const getUserColor = (userId: string | null): string => {
  * Header 組件
  * 包含 Logo 和使用者頭像
  */
-interface HeaderProps {
-  communityId?: string // 可選的社群ID，用於過濾通知
-}
-
-export default function Header({ communityId }: HeaderProps = {}) {
+export default function Header() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const avatarRef = useRef<HTMLDivElement>(null)
@@ -149,7 +145,7 @@ export default function Header({ communityId }: HeaderProps = {}) {
       {/* 右側使用者區域 */}
       <div className="flex items-center gap-4">
         {/* 通知鈴鐺 */}
-        {userId && <NotificationBell userId={userId} communityId={communityId} />}
+        {userId && <NotificationBell userId={userId} />}
 
         {/* 使用者頭像與下拉選單 */}
         <div className="relative">

@@ -29,22 +29,17 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
   // 載入通知
   const loadNotifications = async () => {
     try {
-      // 第一步：載入所有通知（用於顯示總未讀數）
-      const allUrl = `/api/notifications?userId=${userId}`
-      const allResponse = await fetch(allUrl)
-      const allData = await allResponse.json()
+      let url = `/api/notifications?userId=${userId}`
+      if (communityId) {
+        url += `&communityId=${communityId}`
+      }
 
-      if (allResponse.ok) {
-        // 總是使用全部通知的未讀數量
-        const totalUnreadCount = allData.unreadCount
+      const response = await fetch(url)
+      const data = await response.json()
 
-        // 第二步：如果指定了 communityId，過濾顯示的通知列表
-        const displayNotifications = communityId
-          ? allData.notifications.filter((n: Notification) => n.communityId === communityId)
-          : allData.notifications
-
-        setNotifications(displayNotifications)
-        setUnreadCount(totalUnreadCount)
+      if (response.ok) {
+        setNotifications(data.notifications)
+        setUnreadCount(data.unreadCount)
       }
     } catch (error) {
       console.error('載入通知失敗:', error)

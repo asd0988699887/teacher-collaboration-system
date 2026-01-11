@@ -9,6 +9,7 @@ import { createNotificationsForCommunity } from '@/lib/notifications'
 import { writeFile, mkdir, unlink } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { storageConfig, isFileTypeAllowed, formatFileSize } from '@/lib/storage-config'
 
 // GET: 讀取社群資源列表
 export async function GET(
@@ -98,6 +99,51 @@ export async function POST(
     const fileSize = file.size ?? null
     const fileType = file.type || null
 
+    // ============================================
+    // 檔案大小驗證
+    // ============================================
+    if (!fileSize || fileSize === 0) {
+      return NextResponse.json(
+        { error: '檔案大小無效' },
+        { status: 400 }
+      )
+    }
+
+    if (fileSize > storageConfig.maxFileSize) {
+      return NextResponse.json(
+        { 
+          error: `檔案過大，最大允許 ${formatFileSize(storageConfig.maxFileSize)}`,
+          maxSize: storageConfig.maxFileSize,
+          actualSize: fileSize,
+          maxSizeFormatted: formatFileSize(storageConfig.maxFileSize),
+          actualSizeFormatted: formatFileSize(fileSize)
+        },
+        { status: 400 }
+      )
+    }
+
+    // ============================================
+    // 檔案類型驗證
+    // ============================================
+    if (!fileName) {
+      return NextResponse.json(
+        { error: '檔案名稱無效' },
+        { status: 400 }
+      )
+    }
+
+    if (!fileType || !isFileTypeAllowed(fileType, fileName)) {
+      return NextResponse.json(
+        { 
+          error: '不支援的檔案類型，僅允許圖片（jpg, png, gif, webp, svg）和文件（pdf, doc, docx, xls, xlsx, ppt, pptx, txt）',
+          fileType: fileType || '未知',
+          fileName: fileName,
+          allowedTypes: '圖片和文件（詳見錯誤訊息）'
+        },
+        { status: 400 }
+      )
+    }
+
     // 檢查社群是否存在
     const communities = await query(
       'SELECT id FROM communities WHERE id = ?',
@@ -126,6 +172,20 @@ export async function POST(
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
     await writeFile(filePath, buffer)
+
+    // ============================================
+    // 設定檔案權限（僅限 Linux/Unix）
+    // ============================================
+    if (process.platform !== 'win32') {
+      try {
+        const { chmod } = await import('fs/promises')
+        await chmod(filePath, 0o644) // rw-r--r-- (擁有者可讀寫，其他人唯讀)
+        console.log('檔案權限已設定:', filePath)
+      } catch (chmodError) {
+        // 權限設定失敗不影響上傳，只記錄警告
+        console.warn('設定檔案權限失敗（非致命錯誤）:', chmodError)
+      }
+    }
 
     // 儲存相對路徑到資料庫（相對於 public 目錄）
     const relativePath = `/uploads/${communityId}/${uniqueFileName}`
@@ -217,13 +277,37 @@ export async function POST(
   } catch (error: any) {
     console.error('上傳資源錯誤:', error)
     console.error('錯誤堆疊:', error.stack)
+    
+    // ============================================
+    // 判斷錯誤類型，提供友善訊息
+    // ============================================
+    let errorMessage = '上傳資源失敗'
+    let statusCode = 500
+    
+    // 磁碟空間不足
+    if (error.code === 'ENOSPC') {
+      errorMessage = '伺服器儲存空間不足，請聯絡管理員'
+      statusCode = 507
+    }
+    // 權限問題
+    else if (error.code === 'EACCES' || error.code === 'EPERM') {
+      errorMessage = '伺服器檔案權限錯誤，請聯絡管理員'
+      statusCode = 500
+    }
+    // 其他檔案系統錯誤
+    else if (error.code && error.code.startsWith('E')) {
+      errorMessage = `檔案系統錯誤：${error.message}`
+      statusCode = 500
+    }
+    
     return NextResponse.json(
       { 
-        error: '上傳資源失敗', 
-        details: error.message || '未知錯誤',
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        code: error.code,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
-      { status: 500 }
+      { status: statusCode }
     )
   }
 }
