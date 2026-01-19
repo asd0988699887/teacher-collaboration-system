@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, ShadingType, PageOrientation } from 'docx'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, ShadingType, PageOrientation, VerticalAlign } from 'docx'
 
 interface ConvergenceResult {
   id: string
@@ -1978,35 +1978,39 @@ export default function CourseObjectives({
               new TableCell({
                 children: [new Paragraph({ 
                   children: [new TextRun({ text: row.teachingContent || '', ...textStyle })],
-                  spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
                 })],
                 columnSpan: 2,
                 width: { size: 47, type: WidthType.PERCENTAGE },
                 borders: outerLeftBorderStyle, // 左側，使用外框
+                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
               }),
               new TableCell({
                 children: [new Paragraph({ 
                   children: [new TextRun({ text: row.teachingTime || '', ...textStyle })],
-                  spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
                 })],
                 width: { size: 12, type: WidthType.PERCENTAGE },
                 ...contentCellStyle,
+                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
               }),
               new TableCell({
                 children: [new Paragraph({ 
                   children: [new TextRun({ text: row.teachingResources || '', ...textStyle })],
-                  spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
                 })],
                 width: { size: 12, type: WidthType.PERCENTAGE },
                 ...contentCellStyle,
+                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
               }),
               new TableCell({
                 children: [new Paragraph({ 
                   children: [new TextRun({ text: row.assessmentMethods || '', ...textStyle })],
-                  spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
                 })],
                 width: { size: 29, type: WidthType.PERCENTAGE },
                 borders: outerRightBorderStyle, // 右側，使用外框
+                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
               }),
             ],
           })
