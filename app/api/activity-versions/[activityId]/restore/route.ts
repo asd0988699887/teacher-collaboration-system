@@ -156,29 +156,39 @@ export async function POST(
             }
 
             // 複製學習表現（從快照，建立 ID 映射）
+            // 注意：addedLearningPerformances 是巢狀結構 [{ content: [{ code, description }] }]
             const learningPerformances = lessonPlanSnapshot.addedLearningPerformances || []
-            for (let i = 0; i < learningPerformances.length; i++) {
-              const lp = learningPerformances[i]
-              const newId = uuidv4()
-              const oldId = lp.id || `temp-${i}`
-              performanceIdMap.set(oldId, newId)
-              await connection.execute(
-                'INSERT INTO lesson_plan_learning_performances (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
-                [newId, existingId, lp.code || '', lp.description || lp.content || '', i]
-              )
+            let performanceSortOrder = 0
+            for (const group of learningPerformances) {
+              // 展開巢狀結構
+              const items = group.content || [group] // 支援舊格式和新格式
+              for (const lp of items) {
+                const newId = uuidv4()
+                const oldId = lp.id || `temp-${performanceSortOrder}`
+                performanceIdMap.set(oldId, newId)
+                await connection.execute(
+                  'INSERT INTO lesson_plan_learning_performances (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+                  [newId, existingId, lp.code || '', lp.description || '', performanceSortOrder++]
+                )
+              }
             }
 
             // 複製學習內容（從快照，建立 ID 映射）
+            // 注意：addedLearningContents 是巢狀結構 [{ content: [{ code, description }] }]
             const learningContents = lessonPlanSnapshot.addedLearningContents || []
-            for (let i = 0; i < learningContents.length; i++) {
-              const lc = learningContents[i]
-              const newId = uuidv4()
-              const oldId = lc.id || `temp-${i}`
-              contentIdMap.set(oldId, newId)
-              await connection.execute(
-                'INSERT INTO lesson_plan_learning_contents (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
-                [newId, existingId, lc.code || '', lc.description || lc.content || '', i]
-              )
+            let contentSortOrder = 0
+            for (const group of learningContents) {
+              // 展開巢狀結構
+              const items = group.content || [group] // 支援舊格式和新格式
+              for (const lc of items) {
+                const newId = uuidv4()
+                const oldId = lc.id || `temp-${contentSortOrder}`
+                contentIdMap.set(oldId, newId)
+                await connection.execute(
+                  'INSERT INTO lesson_plan_learning_contents (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+                  [newId, existingId, lc.code || '', lc.description || '', contentSortOrder++]
+                )
+              }
             }
 
             // 複製活動流程（從快照，建立 ID 映射）
