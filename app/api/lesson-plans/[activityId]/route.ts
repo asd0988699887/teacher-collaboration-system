@@ -249,6 +249,7 @@ export async function POST(
             course_domain = ?,
             designer = ?,
             unit_name = ?,
+            school_level = ?,
             implementation_grade = ?,
             teaching_time_lessons = ?,
             teaching_time_minutes = ?,
@@ -264,6 +265,7 @@ export async function POST(
             body.courseDomain || null,
             body.designer || null,
             body.unitName || null,
+            body.schoolLevel || null,
             body.implementationGrade || null,
             body.teachingTimeLessons ? parseInt(body.teachingTimeLessons) : null,
             body.teachingTimeMinutes ? parseInt(body.teachingTimeMinutes) : null,
@@ -287,6 +289,7 @@ export async function POST(
           body.courseDomain || null,
           body.designer || null,
           body.unitName || null,
+          body.schoolLevel || null,
           body.implementationGrade || null,
           body.teachingTimeLessons ? parseInt(body.teachingTimeLessons) : null,
           body.teachingTimeMinutes ? parseInt(body.teachingTimeMinutes) : null,
@@ -302,10 +305,10 @@ export async function POST(
         await connection.execute(
           `INSERT INTO lesson_plans (
             id, activity_id, lesson_plan_title, course_domain, designer,
-            unit_name, implementation_grade, teaching_time_lessons, teaching_time_minutes,
+            unit_name, school_level, implementation_grade, teaching_time_lessons, teaching_time_minutes,
             material_source, teaching_equipment, learning_objectives,
             assessment_tools, \`references\`
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           insertParams
         )
         

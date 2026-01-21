@@ -45,6 +45,7 @@ export default function CourseObjectives({
   const [courseDomain, setCourseDomain] = useState('')
   const [designer, setDesigner] = useState('')
   const [unitName, setUnitName] = useState('')
+  const [schoolLevel, setSchoolLevel] = useState('') // 學段：國小、國中、高中
   const [implementationGrade, setImplementationGrade] = useState('')
   const [teachingTimeLessons, setTeachingTimeLessons] = useState('')
   const [teachingTimeMinutes, setTeachingTimeMinutes] = useState('')
@@ -210,6 +211,27 @@ export default function CourseObjectives({
   
   // 標籤頁狀態
   const [activeTab, setActiveTab] = useState('objectives')
+  
+  // 根據學段生成年級選項
+  const getGradeOptions = () => {
+    if (schoolLevel === '國小') {
+      return [
+        { value: '1', label: '一年級' },
+        { value: '2', label: '二年級' },
+        { value: '3', label: '三年級' },
+        { value: '4', label: '四年級' },
+        { value: '5', label: '五年級' },
+        { value: '6', label: '六年級' },
+      ]
+    } else if (schoolLevel === '國中' || schoolLevel === '高中（高職）') {
+      return [
+        { value: '1', label: '一年級' },
+        { value: '2', label: '二年級' },
+        { value: '3', label: '三年級' },
+      ]
+    }
+    return []
+  }
   
   // 下載功能（僅支援 Word）
   
@@ -908,6 +930,11 @@ export default function CourseObjectives({
     loadSocialContents()
   }, [courseDomain])
   
+  // 當學段變更時，重置年級
+  useEffect(() => {
+    setImplementationGrade('')
+  }, [schoolLevel])
+  
   // 當數學學習內容類別變更時，重置年級和選擇
   useEffect(() => {
     if (mathContentCategory) {
@@ -1000,6 +1027,7 @@ export default function CourseObjectives({
           setCourseDomain(data.lessonPlan.courseDomain || '')
           setDesigner(data.lessonPlan.designer || '')
           setUnitName(data.lessonPlan.unitName || '')
+          setSchoolLevel(data.lessonPlan.schoolLevel || data.lessonPlan.school_level || '')
           setImplementationGrade(data.lessonPlan.implementationGrade || '')
           setTeachingTimeLessons(data.lessonPlan.teachingTimeLessons?.toString() || '')
           setTeachingTimeMinutes(data.lessonPlan.teachingTimeMinutes?.toString() || '')
@@ -1303,8 +1331,11 @@ export default function CourseObjectives({
     })
     startY = (pdf as any).lastAutoTable.finalY + 5
 
-    // 第四行：實施年級
-    const row4Data = [['實施年級', implementationGrade ? `${implementationGrade}年級` : '']]
+    // 第四行：實施年級（學段 + 年級）
+    const gradeDisplay = schoolLevel && implementationGrade 
+      ? `${schoolLevel} ${implementationGrade}年級` 
+      : (schoolLevel || (implementationGrade ? `${implementationGrade}年級` : ''))
+    const row4Data = [['實施年級', gradeDisplay]]
     autoTable(pdf, {
       startY,
       head: [['', '']],
@@ -1732,7 +1763,7 @@ export default function CourseObjectives({
           }),
         ],
       }),
-      // Row 3: 實施年級（第1欄標籤，第2-4欄合併）
+      // Row 3: 實施年級（第1欄標籤，第2-4欄合併，顯示學段 + 年級）
       new TableRow({
         children: [
           new TableCell({
@@ -1741,7 +1772,14 @@ export default function CourseObjectives({
             borders: outerLeftBorderStyle, // 左側，使用外框
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: implementationGrade ? `${implementationGrade}年級` : '', ...textStyle })] })],
+            children: [new Paragraph({ 
+              children: [new TextRun({ 
+                text: schoolLevel && implementationGrade 
+                  ? `${schoolLevel} ${implementationGrade}年級` 
+                  : (schoolLevel || (implementationGrade ? `${implementationGrade}年級` : '')), 
+                ...textStyle 
+              })] 
+            })],
             columnSpan: 3,
             width: { size: 82, type: WidthType.PERCENTAGE },
             borders: outerRightBorderStyle, // 右側，使用外框
@@ -2017,42 +2055,46 @@ export default function CourseObjectives({
         )
       })
     } else {
-      // 如果沒有活動資料，顯示一行空白
+      // 如果沒有活動資料，顯示一行空白（最小高度）
       table2Rows.push(
         new TableRow({
           children: [
             new TableCell({
               children: [new Paragraph({ 
                 text: '',
-                spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
               })],
               columnSpan: 2,
               width: { size: 47, type: WidthType.PERCENTAGE },
               borders: outerLeftBorderStyle, // 左側，使用外框
+              verticalAlign: VerticalAlign.TOP,
             }),
             new TableCell({
               children: [new Paragraph({ 
                 text: '',
-                spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
               })],
               width: { size: 12, type: WidthType.PERCENTAGE },
               ...contentCellStyle,
+              verticalAlign: VerticalAlign.TOP,
             }),
             new TableCell({
               children: [new Paragraph({ 
                 text: '',
-                spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
               })],
               width: { size: 12, type: WidthType.PERCENTAGE },
               ...contentCellStyle,
+              verticalAlign: VerticalAlign.TOP,
             }),
             new TableCell({
               children: [new Paragraph({ 
                 text: '',
-                spacing: { after: 2200, before: 2200 }, // 充分利用剩餘空間，填滿整頁
+                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
               })],
               width: { size: 29, type: WidthType.PERCENTAGE },
               borders: outerRightBorderStyle, // 右側，使用外框
+              verticalAlign: VerticalAlign.TOP,
             }),
           ],
         })
@@ -2188,6 +2230,7 @@ export default function CourseObjectives({
       courseDomain,
       designer,
       unitName,
+      schoolLevel,
       implementationGrade,
       teachingTimeLessons,
       teachingTimeMinutes,
@@ -2659,8 +2702,23 @@ export default function CourseObjectives({
             />
           </div>
 
-          {/* 實施年級和授課時間 */}
+          {/* 學段和實施年級 */}
           <div className="flex gap-6">
+            <div className="flex-1">
+              <label className="block text-gray-700 font-medium mb-2">
+                學段
+              </label>
+              <select
+                value={schoolLevel}
+                onChange={(e) => setSchoolLevel(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+              >
+                <option value="">請選擇學段</option>
+                <option value="國小">國小</option>
+                <option value="國中">國中</option>
+                <option value="高中（高職）">高中（高職）</option>
+              </select>
+            </div>
             <div className="flex-1">
               <label className="block text-gray-700 font-medium mb-2">
                 實施年級
@@ -2668,17 +2726,21 @@ export default function CourseObjectives({
               <select
                 value={implementationGrade}
                 onChange={(e) => setImplementationGrade(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                disabled={!schoolLevel}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
                 <option value="">請選擇年級</option>
-                <option value="1">一年級</option>
-                <option value="2">二年級</option>
-                <option value="3">三年級</option>
-                <option value="4">四年級</option>
-                <option value="5">五年級</option>
-                <option value="6">六年級</option>
+                {getGradeOptions().map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
+          </div>
+
+          {/* 授課時間 */}
+          <div className="flex gap-6">
             <div className="flex-1">
               <label className="block text-gray-700 font-medium mb-2">
                 授課時間
@@ -4748,13 +4810,15 @@ export default function CourseObjectives({
                       </div>
                     </div>
 
-                    {/* 第四行：實施年級 */}
+                    {/* 第四行：實施年級（學段 + 年級） */}
                     <div className="flex" style={{ borderBottom: '1px solid #9ca3af' }}>
                       <div className="w-24 px-2 py-1.5 bg-gray-100 font-medium text-gray-700 flex items-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
                         實施年級
                       </div>
                       <div className="flex-1 px-2 py-1.5 text-gray-800 text-xs">
-                        {implementationGrade ? `${implementationGrade}年級` : ''}
+                        {schoolLevel && implementationGrade 
+                          ? `${schoolLevel} ${implementationGrade}年級` 
+                          : (schoolLevel || (implementationGrade ? `${implementationGrade}年級` : ''))}
                       </div>
                     </div>
 
