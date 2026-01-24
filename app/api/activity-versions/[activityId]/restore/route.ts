@@ -163,13 +163,13 @@ export async function POST(
               // 展開巢狀結構
               const items = group.content || [group] // 支援舊格式和新格式
               for (const lp of items) {
-                const newId = uuidv4()
+              const newId = uuidv4()
                 const oldId = lp.id || `temp-${performanceSortOrder}`
-                performanceIdMap.set(oldId, newId)
-                await connection.execute(
-                  'INSERT INTO lesson_plan_learning_performances (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+              performanceIdMap.set(oldId, newId)
+              await connection.execute(
+                'INSERT INTO lesson_plan_learning_performances (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
                   [newId, existingId, lp.code || '', lp.description || '', performanceSortOrder++]
-                )
+              )
               }
             }
 
@@ -181,13 +181,13 @@ export async function POST(
               // 展開巢狀結構
               const items = group.content || [group] // 支援舊格式和新格式
               for (const lc of items) {
-                const newId = uuidv4()
+              const newId = uuidv4()
                 const oldId = lc.id || `temp-${contentSortOrder}`
-                contentIdMap.set(oldId, newId)
-                await connection.execute(
-                  'INSERT INTO lesson_plan_learning_contents (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+              contentIdMap.set(oldId, newId)
+              await connection.execute(
+                'INSERT INTO lesson_plan_learning_contents (id, lesson_plan_id, code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
                   [newId, existingId, lc.code || '', lc.description || '', contentSortOrder++]
-                )
+              )
               }
             }
 

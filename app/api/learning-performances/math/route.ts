@@ -7,14 +7,67 @@ import { query } from '@/lib/db'
  * 
  * 查詢參數：
  * - category: 類別 (n/s/g/r/a/f/d)
- * - stage: 階段 (I/II/III/IV/V)
+ * - stage: 階段 (I/II/III/IV/V) - 用於國小查詢
+ * - schoolLevel: 學段 (國小/國中/高中) - 用於國中/高中查詢
  */
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const category = searchParams.get('category')
     const stage = searchParams.get('stage')
+    const schoolLevel = searchParams.get('schoolLevel')
 
+    // === 國中/高中查詢 ===
+    if (schoolLevel === '國中' || schoolLevel === '高中') {
+      let sql = `
+        SELECT 
+          id,
+          school_level AS schoolLevel,
+          category,
+          category_name AS categoryName,
+          code,
+          description
+        FROM math_middle_high_performances
+        WHERE school_level = ?
+      `
+      const params: string[] = [schoolLevel]
+
+      // 篩選項目
+      if (category) {
+        sql += ' AND category = ?'
+        params.push(category)
+      }
+
+      // 按項目、代碼排序
+      sql += ' ORDER BY category, code'
+
+      const results = await query(sql, params)
+
+      // 如果沒有指定 category，按項目分組返回
+      if (!category) {
+        const grouped: Record<string, any> = {}
+        for (const row of results as any[]) {
+          const cat = row.category
+          if (!grouped[cat]) {
+            grouped[cat] = {
+              category: cat,
+              categoryName: row.categoryName,
+              performances: []
+            }
+          }
+          grouped[cat].performances.push({
+            id: row.id,
+            code: row.code,
+            description: row.description
+          })
+        }
+        return NextResponse.json(Object.values(grouped))
+      }
+
+      return NextResponse.json(results)
+    }
+
+    // === 國小查詢（原有邏輯） ===
     let sql = `
       SELECT 
         id,

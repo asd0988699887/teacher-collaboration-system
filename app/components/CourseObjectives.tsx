@@ -110,7 +110,22 @@ export default function CourseObjectives({
   const [englishPerformanceStage, setEnglishPerformanceStage] = useState('')
   const [selectedEnglishCodes, setSelectedEnglishCodes] = useState<string[]>([])
   
-  // 社會學習表現相關狀態
+  // 英文學習表現相關狀態（國中/高中）
+  const [englishMiddleHighPerformances, setEnglishMiddleHighPerformances] = useState<{
+    categories: Array<{
+      mainCategory: number
+      mainCategoryName: string
+      performances: Array<{
+        id: number
+        code: string
+        description: string
+      }>
+    }>
+  }>({ categories: [] })
+  const [englishMHMainCategory, setEnglishMHMainCategory] = useState('') // 大分類（1-9）
+  const [selectedEnglishMHCodes, setSelectedEnglishMHCodes] = useState<string[]>([])
+  
+  // 社會學習表現相關狀態（國小）
   const [socialPerformances, setSocialPerformances] = useState<Array<{
     id: string
     code: string
@@ -125,6 +140,96 @@ export default function CourseObjectives({
   const [socialPerformanceStage, setSocialPerformanceStage] = useState('')
   const [selectedSocialCodes, setSelectedSocialCodes] = useState<string[]>([])
   
+  // 社會學習表現相關狀態（國中高中）
+  const [socialMiddleHighPerformances, setSocialMiddleHighPerformances] = useState<{
+    dimensions: Array<{
+      dimension: string
+      dimensionName: string
+      categories: Array<{
+        category: string
+        categoryName: string
+        performances: Array<{
+          id: string
+          code: string
+          subject: string
+          description: string
+        }>
+      }>
+    }>
+  }>({ dimensions: [] })
+  const [socialMHDimension, setSocialMHDimension] = useState('') // 構面（1, 2, 3）
+  const [socialMHCategory, setSocialMHCategory] = useState('') // 項目（a, b, c, d）
+  const [selectedSocialMHCodes, setSelectedSocialMHCodes] = useState<string[]>([])
+  
+  // 自然科學習表現相關狀態（國中/高中）
+  const [naturalMiddleHighPerformances, setNaturalMiddleHighPerformances] = useState<Array<{
+    subCategoryCode: string
+    subCategoryName: string
+    items: Array<{
+      itemCode: string
+      itemName: string
+      performances: Array<{
+        id: number
+        code: string
+        description: string
+      }>
+    }>
+  }>>([])
+  const [naturalMHSubCategory, setNaturalMHSubCategory] = useState('') // 第一層：子項（t, p, a）- 探究能力-思考智能（t）、探究能力-問題解決（p）、科學的態度與本質（a）
+  const [naturalMHItem, setNaturalMHItem] = useState('') // 第二層：子項項目（i, r, c, m, o, e, a, c, h, n）- 想像創造（i）、推理論證（r）等
+  const [selectedNaturalMHCodes, setSelectedNaturalMHCodes] = useState<string[]>([])
+  
+  // 自然科學習內容（國中/高中）
+  const [naturalMiddleHighContents, setNaturalMiddleHighContents] = useState<Array<{
+    subjectCode?: string
+    subjectName?: string
+    themeCode: string
+    themeName: string
+    subThemes: Array<{
+      subThemeCode: string
+      subThemeName: string
+      contents: Array<{
+        id: number
+        code: string
+        description: string
+      }>
+    }>
+  }>>([])
+  const [naturalMHContentSubject, setNaturalMHContentSubject] = useState('') // 第一層（僅高中）：科目（B, P, C, E）
+  const [naturalMHContentTheme, setNaturalMHContentTheme] = useState('') // 第一層（國中）或第二層（高中）：主題（A-N）
+  const [naturalMHContentSubTheme, setNaturalMHContentSubTheme] = useState('') // 第二層（國中）或第三層（高中）：次主題（Aa, Ab等）
+  const [selectedNaturalMHContentCodes, setSelectedNaturalMHContentCodes] = useState<string[]>([])
+  
+  // 數學學習表現相關狀態（國中高中）
+  const [mathMiddleHighPerformances, setMathMiddleHighPerformances] = useState<{
+    categories: Array<{
+      category: string
+      categoryName: string
+      performances: Array<{
+        id: string
+        code: string
+        description: string
+      }>
+    }>
+  }>({ categories: [] })
+  const [mathMHCategory, setMathMHCategory] = useState('') // 項目（n, s, g, a, f, d）
+  const [selectedMathMHCodes, setSelectedMathMHCodes] = useState<string[]>([])
+  
+  // 國文學習表現相關狀態（國中高中）
+  const [chineseMiddleHighPerformances, setChineseMiddleHighPerformances] = useState<{
+    categories: Array<{
+      mainCategory: number
+      mainCategoryName: string
+      performances: Array<{
+        id: string
+        code: string
+        description: string
+      }>
+    }>
+  }>({ categories: [] })
+  const [chineseMHMainCategory, setChineseMHMainCategory] = useState('') // 大分類（1, 2, 4, 5, 6）
+  const [selectedChineseMHCodes, setSelectedChineseMHCodes] = useState<string[]>([])
+  
   // 「其他」選項的狀態變數 - 學習表現
   const [mathPerformanceOther, setMathPerformanceOther] = useState('')
   const [chinesePerformanceOther, setChinesePerformanceOther] = useState('')
@@ -134,17 +239,31 @@ export default function CourseObjectives({
   
   // 數學學習內容相關狀態
   const [mathContents, setMathContents] = useState<Array<{
-    id: string
-    code: string
-    category: string
-    categoryName: string
     grade: number
-    serial: number
-    description: string
+    contents: Array<{
+      id: string
+      code: string
+      category: string
+      categoryName: string
+      description: string
+    }>
   }>>([])
-  const [mathContentCategory, setMathContentCategory] = useState('')
   const [mathContentGrade, setMathContentGrade] = useState('')
   const [selectedMathContentCodes, setSelectedMathContentCodes] = useState<string[]>([])
+  
+  // 數學學習內容相關狀態（國中高中）
+  const [mathMiddleHighContents, setMathMiddleHighContents] = useState<{
+    grades: Array<{
+      grade: string
+      contents: Array<{
+        id: string
+        code: string
+        description: string
+      }>
+    }>
+  }>({ grades: [] })
+  const [mathMHContentGrade, setMathMHContentGrade] = useState('') // 年級
+  const [selectedMathMHContentCodes, setSelectedMathMHContentCodes] = useState<string[]>([])
   
   // 國文學習內容相關狀態
   const [chineseContents, setChineseContents] = useState<Array<{
@@ -161,22 +280,72 @@ export default function CourseObjectives({
   const [chineseContentStage, setChineseContentStage] = useState('')
   const [selectedChineseContentCodes, setSelectedChineseContentCodes] = useState<string[]>([])
   
-  // 英文學習內容相關狀態
+  // 國文學習內容相關狀態（國中/高中）
+  const [chineseMiddleHighContents, setChineseMiddleHighContents] = useState<{
+    categories: Array<{
+      mainCategoryCode: string
+      mainCategoryName: string
+      contents: Array<{
+        id: number
+        code: string
+        description: string
+      }>
+    }>
+  }>({ categories: [] })
+  const [chineseMHMainCategoryCode, setChineseMHMainCategoryCode] = useState('') // 主分類代碼（Ab, Ac...）
+  const [selectedChineseMHContentCodes, setSelectedChineseMHContentCodes] = useState<string[]>([])
+  
+  // 英文學習內容相關狀態（國小）
   const [englishContents, setEnglishContents] = useState<Array<{
-    id: string
-    code: string
-    topic: string
-    topicName: string
-    stage: string
-    stageName: string
-    serial: number
-    description: string
+    mainCategoryCode: string
+    mainCategoryName: string
+    subCategories?: Array<{
+      subCategoryCode: string
+      subCategoryName: string
+      contents: Array<{
+        id: string
+        code: string
+        stage: string
+        stageName: string
+        description: string
+      }>
+    }>
+    contents?: Array<{
+      id: string
+      code: string
+      stage: string
+      stageName: string
+      description: string
+    }>
   }>>([])
-  const [englishContentTopic, setEnglishContentTopic] = useState('')
-  const [englishContentStage, setEnglishContentStage] = useState('')
+  const [englishContentMainCategory, setEnglishContentMainCategory] = useState('') // 主分類（A, B, C, D）
+  const [englishContentSubCategory, setEnglishContentSubCategory] = useState('') // 子分類（Aa, Ab, Ac, Ad, Ae，僅 A 主題用）
   const [selectedEnglishContentCodes, setSelectedEnglishContentCodes] = useState<string[]>([])
   
-  // 社會學習內容相關狀態
+  // 英文學習內容相關狀態（國中/高中）
+  const [englishMiddleHighContents, setEnglishMiddleHighContents] = useState<Array<{
+    mainCategoryCode: string
+    mainCategoryName: string
+    subCategories?: Array<{
+      subCategoryCode: string
+      subCategoryName: string
+      contents: Array<{
+        id: number
+        code: string
+        description: string
+      }>
+    }>
+    contents?: Array<{
+      id: number
+      code: string
+      description: string
+    }>
+  }>>([])
+  const [englishMHContentMainCategory, setEnglishMHContentMainCategory] = useState('') // 主分類（A, B, C, D）
+  const [englishMHContentSubCategory, setEnglishMHContentSubCategory] = useState('') // 子分類（a, b, c, d, e，僅 A 主題用）
+  const [selectedEnglishMHContentCodes, setSelectedEnglishMHContentCodes] = useState<string[]>([])
+  
+  // 社會學習內容相關狀態（國小 - 舊版）
   const [socialContents, setSocialContents] = useState<Array<{
     id: string
     code: string
@@ -190,9 +359,26 @@ export default function CourseObjectives({
   const [socialContentTopicItem, setSocialContentTopicItem] = useState('')
   const [socialContentStage, setSocialContentStage] = useState('')
   const [selectedSocialContentCodes, setSelectedSocialContentCodes] = useState<string[]>([])
+
+  // 社會學習內容相關狀態（國中/高中 - 新版三層結構）
+  const [socialContentMHThemes, setSocialContentMHThemes] = useState<Array<{
+    theme: string
+    theme_name: string
+  }>>([]) // 主題列表
+  const [socialContentMHCategories, setSocialContentMHCategories] = useState<Array<{
+    category: string
+    category_name: string
+  }>>([]) // 項目列表（可能為空）
+  const [socialContentMHContents, setSocialContentMHContents] = useState<Array<{
+    id: string
+    code: string
+    description: string
+  }>>([]) // 條目列表
+  const [socialContentMHTheme, setSocialContentMHTheme] = useState('') // 選擇的主題
+  const [socialContentMHCategory, setSocialContentMHCategory] = useState('') // 選擇的項目
+  const [selectedSocialContentMHCodes, setSelectedSocialContentMHCodes] = useState<string[]>([])
   
   // 「其他」選項的狀態變數 - 學習內容
-  const [mathContentOther, setMathContentOther] = useState('')
   const [chineseContentOther, setChineseContentOther] = useState('')
   const [englishContentOther, setEnglishContentOther] = useState('')
   const [socialContentOther, setSocialContentOther] = useState('')
@@ -690,6 +876,36 @@ export default function CourseObjectives({
     loadChinesePerformances()
   }, [courseDomain])
 
+  // 當課程領域為國文且學段為國中/高中時，載入對應的學習表現
+  useEffect(() => {
+    const loadChineseMiddleHighPerformances = async () => {
+      if (courseDomain === '國文' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-performances/chinese?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setChineseMiddleHighPerformances({ categories: data })
+            // 重置選擇
+            setChineseMHMainCategory('')
+            setSelectedChineseMHCodes([])
+          } else {
+            console.error(`載入${schoolLevel}國文學習表現失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}國文學習表現錯誤:`, error)
+        }
+      } else {
+        // 如果不是國文科或不是國中高中，清空資料
+        setChineseMiddleHighPerformances({ categories: [] })
+        setChineseMHMainCategory('')
+        setSelectedChineseMHCodes([])
+      }
+    }
+    loadChineseMiddleHighPerformances()
+  }, [courseDomain, schoolLevel])
+
   // 當課程領域為英文時，載入英文學習表現
   useEffect(() => {
     const loadEnglishPerformances = async () => {
@@ -710,10 +926,40 @@ export default function CourseObjectives({
     loadEnglishPerformances()
   }, [courseDomain])
 
-  // 當課程領域為社會時，載入社會學習表現
+  // 當課程領域為英文且學段為國中/高中時，載入對應的學習表現
+  useEffect(() => {
+    const loadEnglishMiddleHighPerformances = async () => {
+      if (courseDomain === '英文' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-performances/english?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setEnglishMiddleHighPerformances({ categories: data })
+            // 重置選擇
+            setEnglishMHMainCategory('')
+            setSelectedEnglishMHCodes([])
+          } else {
+            console.error(`載入${schoolLevel}英文學習表現失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}英文學習表現錯誤:`, error)
+        }
+      } else {
+        // 如果不是英文科或不是國中高中，清空資料
+        setEnglishMiddleHighPerformances({ categories: [] })
+        setEnglishMHMainCategory('')
+        setSelectedEnglishMHCodes([])
+      }
+    }
+    loadEnglishMiddleHighPerformances()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為社會時，載入社會學習表現（國小）
   useEffect(() => {
     const loadSocialPerformances = async () => {
-      if (courseDomain === '社會') {
+      if (courseDomain === '社會' && schoolLevel === '國小') {
         try {
           const response = await fetch('/api/learning-performances/social')
           if (response.ok) {
@@ -728,7 +974,137 @@ export default function CourseObjectives({
       }
     }
     loadSocialPerformances()
-  }, [courseDomain])
+  }, [courseDomain, schoolLevel])
+  
+  // 當課程領域為社會且學段為國中/高中時，載入對應的學習表現
+  useEffect(() => {
+    const loadSocialMiddleHighPerformances = async () => {
+      if (courseDomain === '社會' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiUrl = schoolLevel === '國中' 
+            ? '/api/learning-performances/social-middle'
+            : '/api/learning-performances/social-high'
+          
+          const response = await fetch(apiUrl)
+          if (response.ok) {
+            const data = await response.json()
+            setSocialMiddleHighPerformances(data)
+            // 重置選擇
+            setSocialMHDimension('')
+            setSocialMHCategory('')
+            setSelectedSocialMHCodes([])
+          } else {
+            console.error(`載入${schoolLevel}社會學習表現失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}社會學習表現錯誤:`, error)
+        }
+      } else {
+        // 如果不是社會科或不是國中高中，清空資料
+        setSocialMiddleHighPerformances({ dimensions: [] })
+        setSocialMHDimension('')
+        setSocialMHCategory('')
+        setSelectedSocialMHCodes([])
+      }
+    }
+    loadSocialMiddleHighPerformances()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為自然且學段為國中/高中時，載入對應的學習表現
+  useEffect(() => {
+    const loadNaturalMiddleHighPerformances = async () => {
+      if (courseDomain === '自然' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-performances/natural?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setNaturalMiddleHighPerformances(data)
+            // 重置選擇
+            setNaturalMHSubCategory('')
+            setNaturalMHItem('')
+            setSelectedNaturalMHCodes([])
+          } else {
+            console.error(`載入${schoolLevel}自然科學習表現失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}自然科學習表現錯誤:`, error)
+        }
+      } else {
+        // 如果不是自然科或不是國中高中，清空資料
+        setNaturalMiddleHighPerformances([])
+        setNaturalMHSubCategory('')
+        setNaturalMHItem('')
+        setSelectedNaturalMHCodes([])
+      }
+    }
+    loadNaturalMiddleHighPerformances()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為自然且學段為國中/高中時，載入對應的學習內容
+  useEffect(() => {
+    const loadNaturalMiddleHighContents = async () => {
+      if (courseDomain === '自然' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-contents/natural?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setNaturalMiddleHighContents(data)
+            // 重置選擇
+            setNaturalMHContentSubject('')
+            setNaturalMHContentTheme('')
+            setNaturalMHContentSubTheme('')
+            setSelectedNaturalMHContentCodes([])
+          } else {
+            console.error(`載入${schoolLevel}自然科學習內容失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}自然科學習內容錯誤:`, error)
+        }
+      } else {
+        // 如果不是自然科或不是國中高中，清空資料
+        setNaturalMiddleHighContents([])
+        setNaturalMHContentSubject('')
+        setNaturalMHContentTheme('')
+        setNaturalMHContentSubTheme('')
+        setSelectedNaturalMHContentCodes([])
+      }
+    }
+    loadNaturalMiddleHighContents()
+  }, [courseDomain, schoolLevel])
+  
+  // 當課程領域為數學且學段為國中/高中時，載入對應的學習表現
+  useEffect(() => {
+    const loadMathMiddleHighPerformances = async () => {
+      if (courseDomain === '數學' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-performances/math?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setMathMiddleHighPerformances({ categories: data })
+            // 重置選擇
+            setMathMHCategory('')
+            setSelectedMathMHCodes([])
+          } else {
+            console.error(`載入${schoolLevel}數學學習表現失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}數學學習表現錯誤:`, error)
+        }
+      } else {
+        // 如果不是數學科或不是國中高中，清空資料
+        setMathMiddleHighPerformances({ categories: [] })
+        setMathMHCategory('')
+        setSelectedMathMHCodes([])
+      }
+    }
+    loadMathMiddleHighPerformances()
+  }, [courseDomain, schoolLevel])
   
   // 當數學類別變更時，重置階段和選擇
   useEffect(() => {
@@ -820,20 +1196,20 @@ export default function CourseObjectives({
     }
   }, [chineseContentStage])
 
-  // 當英文學習內容主題變更時，重置階段和選擇
+  // 當英文學習內容主分類變更時，重置子分類和選擇
   useEffect(() => {
-    if (englishContentTopic) {
-      setEnglishContentStage('')
+    if (englishContentMainCategory) {
+      setEnglishContentSubCategory('')
       setSelectedEnglishContentCodes([])
     }
-  }, [englishContentTopic])
+  }, [englishContentMainCategory])
   
-  // 當英文學習內容階段變更時，重置選擇
+  // 當英文學習內容子分類變更時，重置選擇
   useEffect(() => {
-    if (englishContentStage) {
+    if (englishContentSubCategory) {
       setSelectedEnglishContentCodes([])
     }
-  }, [englishContentStage])
+  }, [englishContentSubCategory])
 
   // 當社會學習內容主題項目變更時，重置階段和選擇
   useEffect(() => {
@@ -853,22 +1229,60 @@ export default function CourseObjectives({
   // 當課程領域為數學時，載入數學學習內容
   useEffect(() => {
     const loadMathContents = async () => {
-      if (courseDomain === '數學') {
+      if (courseDomain === '數學' && schoolLevel === '國小') {
         try {
           const response = await fetch('/api/learning-contents/math')
           if (response.ok) {
             const data = await response.json()
             setMathContents(data)
+            // 重置選擇
+            setMathContentGrade('')
+            setSelectedMathContentCodes([])
           } else {
             console.error('載入數學學習內容失敗')
           }
         } catch (error) {
           console.error('載入數學學習內容錯誤:', error)
         }
+      } else if (courseDomain !== '數學' || schoolLevel !== '國小') {
+        // 如果不是數學或不是國小，清空資料
+        setMathContents([])
+        setMathContentGrade('')
+        setSelectedMathContentCodes([])
       }
     }
     loadMathContents()
-  }, [courseDomain])
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為數學且學段為國中/高中時，載入對應的學習內容
+  useEffect(() => {
+    const loadMathMiddleHighContents = async () => {
+      if (courseDomain === '數學' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-contents/math?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setMathMiddleHighContents({ grades: data })
+            // 重置選擇
+            setMathMHContentGrade('')
+            setSelectedMathMHContentCodes([])
+          } else {
+            console.error(`載入${schoolLevel}數學學習內容失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}數學學習內容錯誤:`, error)
+        }
+      } else {
+        // 如果不是數學科或不是國中高中，清空資料
+        setMathMiddleHighContents({ grades: [] })
+        setMathMHContentGrade('')
+        setSelectedMathMHContentCodes([])
+      }
+    }
+    loadMathMiddleHighContents()
+  }, [courseDomain, schoolLevel])
 
   // 當課程領域為國文時，載入國文學習內容
   useEffect(() => {
@@ -890,30 +1304,102 @@ export default function CourseObjectives({
     loadChineseContents()
   }, [courseDomain])
 
-  // 當課程領域為英文時，載入英文學習內容
+  // 當課程領域為國文且學段為國中/高中時，載入對應的學習內容
+  useEffect(() => {
+    const loadChineseMiddleHighContents = async () => {
+      if (courseDomain === '國文' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-contents/chinese?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setChineseMiddleHighContents({ categories: data })
+            // 重置選擇
+            setChineseMHMainCategoryCode('')
+            setSelectedChineseMHContentCodes([])
+          } else {
+            console.error(`載入${schoolLevel}國文學習內容失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}國文學習內容錯誤:`, error)
+        }
+      } else {
+        // 如果不是國文科或不是國中高中，清空資料
+        setChineseMiddleHighContents({ categories: [] })
+        setChineseMHMainCategoryCode('')
+        setSelectedChineseMHContentCodes([])
+      }
+    }
+    loadChineseMiddleHighContents()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為英文且學段為國小時，載入英文學習內容
   useEffect(() => {
     const loadEnglishContents = async () => {
-      if (courseDomain === '英文') {
+      if (courseDomain === '英文' && schoolLevel === '國小') {
         try {
           const response = await fetch('/api/learning-contents/english')
           if (response.ok) {
             const data = await response.json()
             setEnglishContents(data)
+            // 重置選擇
+            setEnglishContentMainCategory('')
+            setEnglishContentSubCategory('')
+            setSelectedEnglishContentCodes([])
           } else {
             console.error('載入英文學習內容失敗')
           }
         } catch (error) {
           console.error('載入英文學習內容錯誤:', error)
         }
+      } else if (courseDomain !== '英文' || schoolLevel !== '國小') {
+        // 如果不是英文或不是國小，清空資料
+        setEnglishContents([])
+        setEnglishContentMainCategory('')
+        setEnglishContentSubCategory('')
+        setSelectedEnglishContentCodes([])
       }
     }
     loadEnglishContents()
-  }, [courseDomain])
+  }, [courseDomain, schoolLevel])
 
-  // 當課程領域為社會時，載入社會學習內容
+  // 當課程領域為英文且學段為國中/高中時，載入對應的學習內容
+  useEffect(() => {
+    const loadEnglishMiddleHighContents = async () => {
+      if (courseDomain === '英文' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const apiSchoolLevel = schoolLevel === '國中' ? '國中' : '高中'
+          const response = await fetch(`/api/learning-contents/english?schoolLevel=${apiSchoolLevel}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setEnglishMiddleHighContents(data)
+            // 重置選擇
+            setEnglishMHContentMainCategory('')
+            setEnglishMHContentSubCategory('')
+            setSelectedEnglishMHContentCodes([])
+          } else {
+            console.error(`載入${schoolLevel}英文學習內容失敗`)
+          }
+        } catch (error) {
+          console.error(`載入${schoolLevel}英文學習內容錯誤:`, error)
+        }
+      } else {
+        // 如果不是英文科或不是國中高中，清空資料
+        setEnglishMiddleHighContents([])
+        setEnglishMHContentMainCategory('')
+        setEnglishMHContentSubCategory('')
+        setSelectedEnglishMHContentCodes([])
+      }
+    }
+    loadEnglishMiddleHighContents()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為社會時，載入社會學習內容（國小 - 舊版）
   useEffect(() => {
     const loadSocialContents = async () => {
-      if (courseDomain === '社會') {
+      if (courseDomain === '社會' && schoolLevel === '國小') {
         try {
           const response = await fetch('/api/learning-contents/social')
           if (response.ok) {
@@ -928,20 +1414,91 @@ export default function CourseObjectives({
       }
     }
     loadSocialContents()
-  }, [courseDomain])
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為社會且學段為國中/高中時，載入主題列表（新版）
+  useEffect(() => {
+    const loadSocialMHThemes = async () => {
+      if (courseDomain === '社會' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const stage = schoolLevel === '國中' ? 'IV' : 'V'
+          const response = await fetch(`/api/learning-contents/social?stage=${stage}&subject=歷`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.type === 'themes') {
+              setSocialContentMHThemes(data.data)
+            }
+          } else {
+            console.error('載入社會學習內容主題失敗')
+          }
+        } catch (error) {
+          console.error('載入社會學習內容主題錯誤:', error)
+        }
+      } else {
+        // 重置狀態
+        setSocialContentMHThemes([])
+        setSocialContentMHCategories([])
+        setSocialContentMHContents([])
+        setSocialContentMHTheme('')
+        setSocialContentMHCategory('')
+        setSelectedSocialContentMHCodes([])
+      }
+    }
+    loadSocialMHThemes()
+  }, [courseDomain, schoolLevel])
+
+  // 當選擇主題後，載入該主題的項目和條目
+  useEffect(() => {
+    const loadSocialMHThemeDetails = async () => {
+      if (socialContentMHTheme && courseDomain === '社會' && (schoolLevel === '國中' || schoolLevel === '高中（高職）')) {
+        try {
+          const stage = schoolLevel === '國中' ? 'IV' : 'V'
+          const response = await fetch(`/api/learning-contents/social?stage=${stage}&subject=歷&theme=${socialContentMHTheme}`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.type === 'theme_details') {
+              setSocialContentMHCategories(data.data.categories)
+              setSocialContentMHContents(data.data.contents)
+            }
+          }
+        } catch (error) {
+          console.error('載入主題詳情錯誤:', error)
+        }
+      } else {
+        setSocialContentMHCategories([])
+        setSocialContentMHContents([])
+        setSocialContentMHCategory('')
+        setSelectedSocialContentMHCodes([])
+      }
+    }
+    loadSocialMHThemeDetails()
+  }, [socialContentMHTheme, courseDomain, schoolLevel])
+
+  // 當主題或項目變更時，重置選擇（學習內容）
+  useEffect(() => {
+    setSocialContentMHCategory('')
+    setSelectedSocialContentMHCodes([])
+  }, [socialContentMHTheme])
+
+  useEffect(() => {
+    setSelectedSocialContentMHCodes([])
+  }, [socialContentMHCategory])
   
   // 當學段變更時，重置年級
   useEffect(() => {
     setImplementationGrade('')
   }, [schoolLevel])
   
-  // 當數學學習內容類別變更時，重置年級和選擇
+  // 當社會科國中高中構面變更時，重置項目和選擇
   useEffect(() => {
-    if (mathContentCategory) {
-      setMathContentGrade('')
-      setSelectedMathContentCodes([])
-    }
-  }, [mathContentCategory])
+    setSocialMHCategory('')
+    setSelectedSocialMHCodes([])
+  }, [socialMHDimension])
+  
+  // 當社會科國中高中項目變更時，重置選擇
+  useEffect(() => {
+    setSelectedSocialMHCodes([])
+  }, [socialMHCategory])
   
   // 當數學學習內容年級變更時，重置選擇
   useEffect(() => {
@@ -2897,7 +3454,98 @@ export default function CourseObjectives({
             
             {/* 根據課程領域顯示不同內容 */}
             {courseDomain === '數學' ? (
-              // === 數學領域的學習表現 ===
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 數學領域的學習表現（國中/高中）- 兩層下拉選單 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇項目 */}
+                  <div className="flex gap-2">
+                    <select
+                      value={mathMHCategory}
+                      onChange={(e) => {
+                        setMathMHCategory(e.target.value)
+                        setSelectedMathMHCodes([])
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇項目</option>
+                      {mathMiddleHighPerformances.categories.map((cat) => (
+                        <option key={cat.category} value={cat.category}>
+                          {cat.categoryName}（{cat.category}）
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇學習表現 */}
+                  {mathMHCategory && (() => {
+                    const selectedCategory = mathMiddleHighPerformances.categories.find(
+                      c => c.category === mathMHCategory
+                    )
+                    const performances = selectedCategory?.performances || []
+
+                    return performances.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習表現：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(performances.length, 8)}
+                          value={selectedMathMHCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedMathMHCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {performances.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此項目無學習表現</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedMathMHCodes.length > 0 && mathMHCategory && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedCategory = mathMiddleHighPerformances.categories.find(
+                            c => c.category === mathMHCategory
+                          )
+                          const performances = selectedCategory?.performances || []
+                          const selectedPerformances = performances.filter(p => 
+                            selectedMathMHCodes.includes(p.code)
+                          )
+                          
+                          if (selectedPerformances.length > 0) {
+                            setAddedLearningPerformances([
+                              ...addedLearningPerformances,
+                              {
+                                content: selectedPerformances.map(p => ({
+                                  code: p.code,
+                                  description: p.description
+                                }))
+                              }
+                            ])
+                            setMathMHCategory('')
+                            setSelectedMathMHCodes([])
+                          }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 數學領域的學習表現（國小）===
               <div className="space-y-3">
                 {/* 第一個欄位：選擇類別 */}
                 <div className="flex gap-2">
@@ -3030,8 +3678,100 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : courseDomain === '國文' ? (
-              // === 國文領域的學習表現 ===
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 國文領域的學習表現（國中/高中）- 兩層下拉選單 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇大分類 */}
+                  <div className="flex gap-2">
+                    <select
+                      value={chineseMHMainCategory}
+                      onChange={(e) => {
+                        setChineseMHMainCategory(e.target.value)
+                        setSelectedChineseMHCodes([])
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇類別</option>
+                      {chineseMiddleHighPerformances.categories.map((cat) => (
+                        <option key={cat.mainCategory} value={cat.mainCategory}>
+                          {cat.mainCategoryName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇學習表現 */}
+                  {chineseMHMainCategory && (() => {
+                    const selectedCategory = chineseMiddleHighPerformances.categories.find(
+                      c => c.mainCategory === parseInt(chineseMHMainCategory)
+                    )
+                    const performances = selectedCategory?.performances || []
+
+                    return performances.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習表現：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(performances.length, 8)}
+                          value={selectedChineseMHCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedChineseMHCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {performances.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此類別無學習表現</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedChineseMHCodes.length > 0 && chineseMHMainCategory && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedCategory = chineseMiddleHighPerformances.categories.find(
+                            c => c.mainCategory === parseInt(chineseMHMainCategory)
+                          )
+                          const performances = selectedCategory?.performances || []
+                          const selectedPerformances = performances.filter(p => 
+                            selectedChineseMHCodes.includes(p.code)
+                          )
+                          
+                          if (selectedPerformances.length > 0) {
+                            setAddedLearningPerformances([
+                              ...addedLearningPerformances,
+                              {
+                                content: selectedPerformances.map(p => ({
+                                  code: p.code,
+                                  description: p.description
+                                }))
+                              }
+                            ])
+                            setChineseMHMainCategory('')
+                            setSelectedChineseMHCodes([])
+                          }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 國文領域的學習表現（國小）===
               <div className="space-y-3">
                 {/* 第一個欄位：選擇類別 */}
                 <div className="flex gap-2">
@@ -3160,8 +3900,100 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : courseDomain === '英文' ? (
-              // === 英文領域的學習表現 ===
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 英文領域的學習表現（國中/高中）- 兩層下拉選單 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇大分類 */}
+                  <div className="flex gap-2">
+                    <select
+                      value={englishMHMainCategory}
+                      onChange={(e) => {
+                        setEnglishMHMainCategory(e.target.value)
+                        setSelectedEnglishMHCodes([])
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇類別</option>
+                      {englishMiddleHighPerformances.categories.map((cat) => (
+                        <option key={cat.mainCategory} value={cat.mainCategory}>
+                          {cat.mainCategoryName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇學習表現 */}
+                  {englishMHMainCategory && (() => {
+                    const selectedCategory = englishMiddleHighPerformances.categories.find(
+                      c => c.mainCategory === parseInt(englishMHMainCategory)
+                    )
+                    const performances = selectedCategory?.performances || []
+
+                    return performances.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習表現：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(performances.length, 8)}
+                          value={selectedEnglishMHCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedEnglishMHCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {performances.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此類別無學習表現</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedEnglishMHCodes.length > 0 && englishMHMainCategory && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedCategory = englishMiddleHighPerformances.categories.find(
+                            c => c.mainCategory === parseInt(englishMHMainCategory)
+                          )
+                          const performances = selectedCategory?.performances || []
+                          const selectedPerformances = performances.filter(p => 
+                            selectedEnglishMHCodes.includes(p.code)
+                          )
+                          
+                          if (selectedPerformances.length > 0) {
+                            setAddedLearningPerformances([
+                              ...addedLearningPerformances,
+                              {
+                                content: selectedPerformances.map(p => ({
+                                  code: p.code,
+                                  description: p.description
+                                }))
+                              }
+                            ])
+                            setEnglishMHMainCategory('')
+                            setSelectedEnglishMHCodes([])
+                          }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 英文領域的學習表現（國小）===
               <div className="space-y-3">
                 {/* 第一個欄位：選擇類別 */}
                 <div className="flex gap-2">
@@ -3176,15 +4008,15 @@ export default function CourseObjectives({
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
                   >
                     <option value="">請選擇類別</option>
-                    <option value="1">語言能力（聽）（1）</option>
-                    <option value="2">語言能力（說）（2）</option>
-                    <option value="3">語言能力（讀）（3）</option>
-                    <option value="4">語言能力（寫）（4）</option>
-                    <option value="5">語言能力（聽說讀寫綜合應用能力）（5）</option>
-                    <option value="6">學習興趣與態度（6）</option>
-                    <option value="7">學習方法與策略（7）</option>
-                    <option value="8">文化理解（8）</option>
-                    <option value="9">邏輯思考、判斷與創造力（9）</option>
+                    <option value="1">（一）語言能力（聽）</option>
+                    <option value="2">（二）語言能力（說）</option>
+                    <option value="3">（三）語言能力（讀）</option>
+                    <option value="4">（四）語言能力（寫）</option>
+                    <option value="5">（五）語言能力（聽說讀寫綜合應用能力）</option>
+                    <option value="6">（六）學習興趣與態度</option>
+                    <option value="7">（七）學習方法與策略</option>
+                    <option value="8">（八）文化理解</option>
+                    <option value="9">（九）邏輯思考、判斷與創造力</option>
                     <option value="其他">其他</option>
                   </select>
                 </div>
@@ -3292,8 +4124,127 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : courseDomain === '社會' ? (
-              // === 社會領域的學習表現 ===
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 社會領域的學習表現（國中/高中）- 三層下拉選單 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇構面 */}
+                  <div className="flex gap-2">
+                    <select
+                      value={socialMHDimension}
+                      onChange={(e) => setSocialMHDimension(e.target.value)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇構面</option>
+                      {socialMiddleHighPerformances.dimensions.map((dim) => (
+                        <option key={dim.dimension} value={dim.dimension}>
+                          {dim.dimension}. {dim.dimensionName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇項目 */}
+                  {socialMHDimension && (() => {
+                    const selectedDimension = socialMiddleHighPerformances.dimensions.find(
+                      d => d.dimension === socialMHDimension
+                    )
+                    return selectedDimension ? (
+                      <div className="flex gap-2">
+                        <select
+                          value={socialMHCategory}
+                          onChange={(e) => setSocialMHCategory(e.target.value)}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          <option value="">請選擇項目</option>
+                          {selectedDimension.categories.map((cat) => (
+                            <option key={cat.category} value={cat.category}>
+                              {cat.category}. {cat.categoryName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null
+                  })()}
+
+                  {/* 第三層：選擇學習表現 */}
+                  {socialMHDimension && socialMHCategory && (() => {
+                    const selectedDimension = socialMiddleHighPerformances.dimensions.find(
+                      d => d.dimension === socialMHDimension
+                    )
+                    const selectedCategory = selectedDimension?.categories.find(
+                      c => c.category === socialMHCategory
+                    )
+                    const performances = selectedCategory?.performances || []
+
+                    return performances.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習表現：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(performances.length, 8)}
+                          value={selectedSocialMHCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedSocialMHCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {performances.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此構面項目無學習表現</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedSocialMHCodes.length > 0 && socialMHDimension && socialMHCategory && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedDimension = socialMiddleHighPerformances.dimensions.find(
+                            d => d.dimension === socialMHDimension
+                          )
+                          const selectedCategory = selectedDimension?.categories.find(
+                            c => c.category === socialMHCategory
+                          )
+                          const performances = selectedCategory?.performances || []
+                          const selectedPerformances = performances.filter(p => 
+                            selectedSocialMHCodes.includes(p.code)
+                          )
+                          
+                          if (selectedPerformances.length > 0) {
+                            setAddedLearningPerformances([
+                              ...addedLearningPerformances,
+                              {
+                                content: selectedPerformances.map(p => ({
+                                  code: p.code,
+                                  description: p.description
+                                }))
+                              }
+                            ])
+                            setSocialMHDimension('')
+                            setSocialMHCategory('')
+                            setSelectedSocialMHCodes([])
+                          }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 社會領域的學習表現（國小）===
               <div className="space-y-3">
                 {/* 第一個欄位：選擇構面項目 */}
                 <div className="flex gap-2">
@@ -3425,8 +4376,134 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : courseDomain === '自然' ? (
-              // === 自然科的學習表現（原有邏輯） ===
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 自然科的學習表現（國中/高中）- 三層下拉選單 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇項目（t, p, a）- 探究能力-思考智能（t）、探究能力-問題解決（p）、科學的態度與本質（a） */}
+                  <div className="flex gap-2">
+                    <select
+                      value={naturalMHSubCategory}
+                      onChange={(e) => {
+                        setNaturalMHSubCategory(e.target.value)
+                        setNaturalMHItem('')
+                        setSelectedNaturalMHCodes([])
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇項目</option>
+                      {naturalMiddleHighPerformances.map((cat) => (
+                        <option key={cat.subCategoryCode} value={cat.subCategoryCode}>
+                          {cat.subCategoryName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇子項（i, r, c, m, o, e, a, c, h, n）- 想像創造（i）、推理論證（r）等 */}
+                  {naturalMHSubCategory && (() => {
+                    const selectedCategory = naturalMiddleHighPerformances.find(
+                      c => c.subCategoryCode === naturalMHSubCategory
+                    )
+                    return selectedCategory && selectedCategory.items.length > 0 ? (
+                      <div className="flex gap-2">
+                        <select
+                          value={naturalMHItem}
+                          onChange={(e) => {
+                            setNaturalMHItem(e.target.value)
+                            setSelectedNaturalMHCodes([])
+                          }}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          <option value="">請選擇子項</option>
+                          {selectedCategory.items.map((item) => (
+                            <option key={item.itemCode} value={item.itemCode}>
+                              {item.itemCode}. {item.itemName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null
+                  })()}
+
+                  {/* 第三層：選擇學習表現（ti-IV-1 等） */}
+                  {naturalMHSubCategory && naturalMHItem && (() => {
+                    const selectedCategory = naturalMiddleHighPerformances.find(
+                      c => c.subCategoryCode === naturalMHSubCategory
+                    )
+                    const selectedItem = selectedCategory?.items.find(
+                      it => it.itemCode === naturalMHItem
+                    )
+                    const performances = selectedItem?.performances || []
+
+                    return performances.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習表現：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(performances.length, 8)}
+                          value={selectedNaturalMHCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedNaturalMHCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {performances.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此子項無學習表現</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedNaturalMHCodes.length > 0 && naturalMHSubCategory && naturalMHItem && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedCategory = naturalMiddleHighPerformances.find(
+                            c => c.subCategoryCode === naturalMHSubCategory
+                          )
+                          const selectedItem = selectedCategory?.items.find(
+                            it => it.itemCode === naturalMHItem
+                          )
+                          const performances = selectedItem?.performances || []
+                          const selectedPerformances = performances.filter(p => 
+                            selectedNaturalMHCodes.includes(p.code)
+                          )
+                          
+                          if (selectedPerformances.length > 0) {
+                            setAddedLearningPerformances([
+                              ...addedLearningPerformances,
+                              {
+                                content: selectedPerformances.map(p => ({
+                                  code: p.code,
+                                  description: p.description
+                                }))
+                              }
+                            ])
+                            setNaturalMHSubCategory('')
+                            setNaturalMHItem('')
+                            setSelectedNaturalMHCodes([])
+                          }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 自然科的學習表現（國小）===
               <div className="space-y-3">
                 {/* 第一個欄位：選擇項目 */}
                 <div className="flex gap-2">
@@ -3561,6 +4638,7 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : (
               // === 未選擇課程領域或其他領域 ===
               <div className="text-gray-500 text-sm py-4">
@@ -3607,116 +4685,75 @@ export default function CourseObjectives({
             
             {/* 根據課程領域顯示不同內容 */}
             {courseDomain === '數學' ? (
-              // === 數學領域的學習內容 ===
-              <div className="space-y-3">
-                {/* 第一個欄位：選擇主題類別 */}
-                <div className="flex gap-2">
-                  <select
-                    value={mathContentCategory}
-                    onChange={(e) => {
-                      setMathContentCategory(e.target.value)
-                      setMathContentGrade('')
-                      setSelectedMathContentCodes([])
-                      setMathContentOther('')
-                    }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
-                  >
-                    <option value="">請選擇主題類別</option>
-                    <option value="N">數與量（N）</option>
-                    <option value="S">空間與形狀（S）</option>
-                    <option value="G">坐標幾何（G）</option>
-                    <option value="R">關係（R）</option>
-                    <option value="A">代數（A）</option>
-                    <option value="F">函數（F）</option>
-                    <option value="D">資料與不確定性（D）</option>
-                    <option value="其他">其他</option>
-                  </select>
-                </div>
-
-                {/* 第二個欄位：條件渲染（下拉選單或文字輸入框） */}
-                {mathContentCategory && (
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 數學領域的學習內容（國中/高中）- 兩層下拉選單 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇年級 */}
                   <div className="flex gap-2">
-                    {mathContentCategory === '其他' ? (
-                      <textarea
-                        value={mathContentOther}
-                        onChange={(e) => setMathContentOther(e.target.value)}
-                        placeholder="請輸入自定義學習內容"
-                        rows={3}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                      />
-                    ) : (
-                      <select
-                        value={mathContentGrade}
-                        onChange={(e) => setMathContentGrade(e.target.value)}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
-                      >
-                        <option value="">請選擇年級階段</option>
-                        <option value="1">1年級</option>
-                        <option value="2">2年級</option>
-                        <option value="3">3年級</option>
-                        <option value="4">4年級</option>
-                        <option value="5">5年級</option>
-                        <option value="6">6年級</option>
-                      </select>
-                    )}
+                    <select
+                      value={mathMHContentGrade}
+                      onChange={(e) => {
+                        setMathMHContentGrade(e.target.value)
+                        setSelectedMathMHContentCodes([])
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇年級</option>
+                      {mathMiddleHighContents.grades.map((g) => (
+                        <option key={g.grade} value={g.grade}>
+                          {g.grade}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
 
-                {/* 第三個欄位：選擇學習內容（選擇「其他」時不顯示） */}
-                {mathContentCategory && mathContentCategory !== '其他' && mathContentGrade && (() => {
-                  const filteredContents = mathContents.filter(c => 
-                    c.category === mathContentCategory && c.grade === parseInt(mathContentGrade)
-                  )
-                  
-                  return filteredContents.length > 0 ? (
-                    <div className="space-y-2">
-                      <label className="block text-gray-700 font-medium text-sm">
-                        選擇學習內容：
-                      </label>
-                      <select
-                        multiple
-                        size={Math.min(filteredContents.length, 8)}
-                        value={selectedMathContentCodes}
-                        onChange={(e) => {
-                          const selected = Array.from(e.target.selectedOptions, option => option.value)
-                          setSelectedMathContentCodes(selected)
-                        }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
-                      >
-                        {filteredContents.map((item) => (
-                          <option key={item.code} value={item.code}>
-                            {item.code}: {item.description}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="text-gray-500 text-sm">此類別與年級無學習內容</div>
-                  )
-                })()}
+                  {/* 第二層：選擇學習內容 */}
+                  {mathMHContentGrade && (() => {
+                    const selectedGrade = mathMiddleHighContents.grades.find(
+                      g => g.grade === mathMHContentGrade
+                    )
+                    const contents = selectedGrade?.contents || []
 
-                {/* 加入按鈕：支持自定義內容 */}
-                {((mathContentCategory === '其他' && mathContentOther.trim()) || 
-                  (selectedMathContentCodes.length > 0 && mathContentCategory && mathContentGrade)) && (
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => {
-                        if (mathContentCategory === '其他') {
-                          setAddedLearningContents([
-                            ...addedLearningContents,
-                            {
-                              content: [{
-                                code: '自訂',
-                                description: mathContentOther
-                              }]
-                            }
-                          ])
-                          setMathContentCategory('')
-                          setMathContentOther('')
-                        } else {
-                          const selectedContents = mathContents.filter(c => 
-                            selectedMathContentCodes.includes(c.code)
+                    return contents.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習內容：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(contents.length, 8)}
+                          value={selectedMathMHContentCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedMathMHContentCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {contents.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此年級無學習內容</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedMathMHContentCodes.length > 0 && mathMHContentGrade && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedGrade = mathMiddleHighContents.grades.find(
+                            g => g.grade === mathMHContentGrade
                           )
+                          const contents = selectedGrade?.contents || []
+                          const selectedContents = contents.filter(c => 
+                            selectedMathMHContentCodes.includes(c.code)
+                          )
+                          
                           if (selectedContents.length > 0) {
                             setAddedLearningContents([
                               ...addedLearningContents,
@@ -3727,10 +4764,94 @@ export default function CourseObjectives({
                                 }))
                               }
                             ])
-                            setMathContentCategory('')
-                            setMathContentGrade('')
-                            setSelectedMathContentCodes([])
+                            setMathMHContentGrade('')
+                            setSelectedMathMHContentCodes([])
                           }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 數學領域的學習內容（國小）===
+              <div className="space-y-3">
+                {/* 第一層：選擇年級 */}
+                <div className="flex gap-2">
+                  <select
+                    value={mathContentGrade}
+                    onChange={(e) => {
+                      setMathContentGrade(e.target.value)
+                      setSelectedMathContentCodes([])
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                  >
+                    <option value="">請選擇年級</option>
+                    <option value="1">一年級</option>
+                    <option value="2">二年級</option>
+                    <option value="3">三年級</option>
+                    <option value="4">四年級</option>
+                    <option value="5">五年級</option>
+                    <option value="6">六年級</option>
+                  </select>
+                </div>
+
+                {/* 第二層：選擇學習內容 */}
+                {mathContentGrade && (() => {
+                  const selectedGrade = mathContents.find(g => g.grade === parseInt(mathContentGrade))
+                  const contents = selectedGrade?.contents || []
+                  
+                  return contents.length > 0 ? (
+                    <div className="space-y-2">
+                      <label className="block text-gray-700 font-medium text-sm">
+                        選擇學習內容：
+                      </label>
+                      <select
+                        multiple
+                        size={Math.min(contents.length, 8)}
+                        value={selectedMathContentCodes}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.selectedOptions, option => option.value)
+                          setSelectedMathContentCodes(selected)
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                      >
+                        {contents.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.code}: {item.description}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 text-sm">此年級無學習內容</div>
+                  )
+                })()}
+
+                {/* 加入按鈕 */}
+                {selectedMathContentCodes.length > 0 && mathContentGrade && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        const selectedGrade = mathContents.find(g => g.grade === parseInt(mathContentGrade))
+                        const contents = selectedGrade?.contents || []
+                        const selectedContents = contents.filter(c => 
+                          selectedMathContentCodes.includes(c.code)
+                        )
+                        if (selectedContents.length > 0) {
+                          setAddedLearningContents([
+                            ...addedLearningContents,
+                            {
+                              content: selectedContents.map(c => ({
+                                code: c.code,
+                                description: c.description
+                              }))
+                            }
+                          ])
+                          setMathContentGrade('')
+                          setSelectedMathContentCodes([])
                         }
                       }}
                       className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
@@ -3740,8 +4861,100 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : courseDomain === '國文' ? (
-              // === 國文領域的學習內容 ===
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 國文領域的學習內容（國中/高中）- 兩層下拉選單 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇主分類 */}
+                  <div className="flex gap-2">
+                    <select
+                      value={chineseMHMainCategoryCode}
+                      onChange={(e) => {
+                        setChineseMHMainCategoryCode(e.target.value)
+                        setSelectedChineseMHContentCodes([])
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇主題</option>
+                      {chineseMiddleHighContents.categories.map((cat) => (
+                        <option key={cat.mainCategoryCode} value={cat.mainCategoryCode}>
+                          {cat.mainCategoryCode} - {cat.mainCategoryName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇學習內容 */}
+                  {chineseMHMainCategoryCode && (() => {
+                    const selectedCategory = chineseMiddleHighContents.categories.find(
+                      c => c.mainCategoryCode === chineseMHMainCategoryCode
+                    )
+                    const contents = selectedCategory?.contents || []
+
+                    return contents.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習內容：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(contents.length, 8)}
+                          value={selectedChineseMHContentCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedChineseMHContentCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {contents.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此主題無學習內容</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedChineseMHContentCodes.length > 0 && chineseMHMainCategoryCode && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedCategory = chineseMiddleHighContents.categories.find(
+                            c => c.mainCategoryCode === chineseMHMainCategoryCode
+                          )
+                          const contents = selectedCategory?.contents || []
+                          const selectedContents = contents.filter(c => 
+                            selectedChineseMHContentCodes.includes(c.code)
+                          )
+                          
+                          if (selectedContents.length > 0) {
+                            setAddedLearningContents([
+                              ...addedLearningContents,
+                              {
+                                content: selectedContents.map(c => ({
+                                  code: c.code,
+                                  description: c.description
+                                }))
+                              }
+                            ])
+                            setChineseMHMainCategoryCode('')
+                            setSelectedChineseMHContentCodes([])
+                          }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 國文領域的學習內容（國小）===
               <div className="space-y-3">
                 {/* 第一個欄位：選擇主題 */}
                 <div className="flex gap-2">
@@ -3876,114 +5089,127 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : courseDomain === '英文' ? (
-              // === 英文領域的學習內容 ===
-              <div className="space-y-3">
-                {/* 第一個欄位：選擇主題項目 */}
-                <div className="flex gap-2">
-                  <select
-                    value={englishContentTopic}
-                    onChange={(e) => {
-                      setEnglishContentTopic(e.target.value)
-                      setEnglishContentStage('')
-                      setSelectedEnglishContentCodes([])
-                      setEnglishContentOther('')
-                    }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
-                  >
-                    <option value="">請選擇主題項目</option>
-                    <option value="Aa">Aa - 字母</option>
-                    <option value="Ab">Ab - 語音</option>
-                    <option value="Ac">Ac - 字詞</option>
-                    <option value="Ad">Ad - 句構</option>
-                    <option value="Ae">Ae - 篇章</option>
-                    <option value="B">B - 溝通功能</option>
-                    <option value="C">C - 文化與習俗</option>
-                    <option value="D">D - 思考能力</option>
-                    <option value="其他">其他</option>
-                  </select>
-                </div>
-
-                {/* 第二個欄位：條件渲染（下拉選單或文字輸入框） */}
-                {englishContentTopic && (
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 英文領域的學習內容（國中/高中）===
+                <div className="space-y-3">
+                  {/* 第一層：選擇主分類 */}
                   <div className="flex gap-2">
-                    {englishContentTopic === '其他' ? (
-                      <textarea
-                        value={englishContentOther}
-                        onChange={(e) => setEnglishContentOther(e.target.value)}
-                        placeholder="請輸入自定義學習內容"
-                        rows={3}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                      />
-                    ) : (
+                    <select
+                      value={englishMHContentMainCategory}
+                      onChange={(e) => {
+                        setEnglishMHContentMainCategory(e.target.value)
+                        setEnglishMHContentSubCategory('')
+                        setSelectedEnglishMHContentCodes([])
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇主題</option>
+                      {englishMiddleHighContents.map((cat) => (
+                        <option key={cat.mainCategoryCode} value={cat.mainCategoryCode}>
+                          {cat.mainCategoryCode}. {cat.mainCategoryName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇子分類（僅 A 主題有） */}
+                  {englishMHContentMainCategory === 'A' && englishMiddleHighContents.find(c => c.mainCategoryCode === 'A')?.subCategories && (
+                    <div className="flex gap-2">
                       <select
-                        value={englishContentStage}
-                        onChange={(e) => setEnglishContentStage(e.target.value)}
+                        value={englishMHContentSubCategory}
+                        onChange={(e) => {
+                          setEnglishMHContentSubCategory(e.target.value)
+                          setSelectedEnglishMHContentCodes([])
+                        }}
                         className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
                       >
-                        <option value="">請選擇學習階段</option>
-                        <option value="II">第二學習階段（II）- 國民小學3-4年級</option>
-                        <option value="III">第三學習階段（III）- 國民小學5-6年級</option>
-                      </select>
-                    )}
-                  </div>
-                )}
-
-                {/* 第三個欄位：選擇學習內容（選擇「其他」時不顯示） */}
-                {englishContentTopic && englishContentTopic !== '其他' && englishContentStage && (() => {
-                  const filteredContents = englishContents.filter(c => 
-                    c.topic === englishContentTopic && c.stage === englishContentStage
-                  )
-                  
-                  return filteredContents.length > 0 ? (
-                    <div className="space-y-2">
-                      <label className="block text-gray-700 font-medium text-sm">
-                        選擇學習內容：
-                      </label>
-                      <select
-                        multiple
-                        size={Math.min(filteredContents.length, 8)}
-                        value={selectedEnglishContentCodes}
-                        onChange={(e) => {
-                          const selected = Array.from(e.target.selectedOptions, option => option.value)
-                          setSelectedEnglishContentCodes(selected)
-                        }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
-                      >
-                        {filteredContents.map((item) => (
-                          <option key={item.code} value={item.code}>
-                            {item.code}: {item.description}
+                        <option value="">請選擇項目</option>
+                        {englishMiddleHighContents.find(c => c.mainCategoryCode === 'A')?.subCategories?.map((sub) => (
+                          <option key={sub.subCategoryCode} value={sub.subCategoryCode}>
+                            {sub.subCategoryCode}. {sub.subCategoryName}
                           </option>
                         ))}
                       </select>
                     </div>
-                  ) : (
-                    <div className="text-gray-500 text-sm">此主題項目與階段無學習內容</div>
-                  )
-                })()}
+                  )}
 
-                {/* 加入按鈕：支持自定義內容 */}
-                {((englishContentTopic === '其他' && englishContentOther.trim()) || 
-                  (selectedEnglishContentCodes.length > 0 && englishContentTopic && englishContentStage)) && (
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => {
-                        if (englishContentTopic === '其他') {
-                          setAddedLearningContents([
-                            ...addedLearningContents,
-                            {
-                              content: [{
-                                code: '自訂',
-                                description: englishContentOther
-                              }]
-                            }
-                          ])
-                          setEnglishContentTopic('')
-                          setEnglishContentOther('')
-                        } else {
-                          const selectedContents = englishContents.filter(c => 
-                            selectedEnglishContentCodes.includes(c.code)
+                  {/* 第三層：選擇學習內容 */}
+                  {englishMHContentMainCategory && (() => {
+                    const selectedCategory = englishMiddleHighContents.find(
+                      c => c.mainCategoryCode === englishMHContentMainCategory
+                    )
+                    
+                    let contents: Array<{ id: number; code: string; description: string }> = []
+                    
+                    if (englishMHContentMainCategory === 'A' && englishMHContentSubCategory) {
+                      // A 主題：從子分類中取得學習內容
+                      const selectedSubCategory = selectedCategory?.subCategories?.find(
+                        sc => sc.subCategoryCode === englishMHContentSubCategory
+                      )
+                      contents = selectedSubCategory?.contents || []
+                    } else if (englishMHContentMainCategory !== 'A') {
+                      // B/C/D 主題：直接從主分類取得學習內容
+                      contents = selectedCategory?.contents || []
+                    }
+
+                    return contents.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習內容：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(contents.length, 8)}
+                          value={selectedEnglishMHContentCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedEnglishMHContentCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {contents.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">
+                        {englishMHContentMainCategory === 'A' && !englishMHContentSubCategory 
+                          ? '請先選擇項目' 
+                          : '此主題無學習內容'}
+                      </div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedEnglishMHContentCodes.length > 0 && englishMHContentMainCategory && 
+                   (englishMHContentMainCategory !== 'A' || englishMHContentSubCategory) && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedCategory = englishMiddleHighContents.find(
+                            c => c.mainCategoryCode === englishMHContentMainCategory
                           )
+                          
+                          let contents: Array<{ id: number; code: string; description: string }> = []
+                          
+                          if (englishMHContentMainCategory === 'A' && englishMHContentSubCategory) {
+                            const selectedSubCategory = selectedCategory?.subCategories?.find(
+                              sc => sc.subCategoryCode === englishMHContentSubCategory
+                            )
+                            contents = selectedSubCategory?.contents || []
+                          } else if (englishMHContentMainCategory !== 'A') {
+                            contents = selectedCategory?.contents || []
+                          }
+                          
+                          const selectedContents = contents.filter(c => 
+                            selectedEnglishMHContentCodes.includes(c.code)
+                          )
+                          
                           if (selectedContents.length > 0) {
                             setAddedLearningContents([
                               ...addedLearningContents,
@@ -3994,21 +5220,305 @@ export default function CourseObjectives({
                                 }))
                               }
                             ])
-                            setEnglishContentTopic('')
-                            setEnglishContentStage('')
-                            setSelectedEnglishContentCodes([])
+                            setEnglishMHContentMainCategory('')
+                            setEnglishMHContentSubCategory('')
+                            setSelectedEnglishMHContentCodes([])
                           }
-                        }
-                      }}
-                      className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
-                    >
-                      加入
-                    </button>
-                  </div>
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 英文領域的學習內容（國小）===
+              <div className="space-y-3">
+                {/* 第一層：選擇主分類 */}
+                <div className="flex gap-2">
+                  <select
+                    value={englishContentMainCategory}
+                    onChange={(e) => {
+                      setEnglishContentMainCategory(e.target.value)
+                      setEnglishContentSubCategory('')
+                      setSelectedEnglishContentCodes([])
+                      setEnglishContentOther('')
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                  >
+                    <option value="">請選擇主題項目</option>
+                    <option value="A">A. 語言知識</option>
+                    <option value="B">B. 溝通功能</option>
+                    <option value="C">C. 文化與習俗</option>
+                    <option value="D">D. 思考能力</option>
+                    <option value="其他">其他</option>
+                  </select>
+                </div>
+
+                {/* 第二層：條件渲染 */}
+                {englishContentMainCategory && (
+                  <>
+                    {/* 如果選「A.語言知識」，顯示子項目選擇 */}
+                    {englishContentMainCategory === 'A' && (
+                      <div className="flex gap-2">
+                        <select
+                          value={englishContentSubCategory}
+                          onChange={(e) => {
+                            setEnglishContentSubCategory(e.target.value)
+                            setSelectedEnglishContentCodes([])
+                          }}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          <option value="">請選擇項目</option>
+                          <option value="Aa">a. 字母</option>
+                          <option value="Ab">b. 語音</option>
+                          <option value="Ac">c. 字詞</option>
+                          <option value="Ad">d. 句構</option>
+                          <option value="Ae">e. 篇章</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* 如果選「其他」，顯示文字輸入框 */}
+                    {englishContentMainCategory === '其他' && (
+                      <div className="flex gap-2">
+                        <textarea
+                          value={englishContentOther}
+                          onChange={(e) => setEnglishContentOther(e.target.value)}
+                          placeholder="請輸入自定義學習內容"
+                          rows={3}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
+                        />
+                      </div>
+                    )}
+
+                    {/* 第三層：選擇學習內容 */}
+                    {englishContentMainCategory !== '其他' && (() => {
+                      const selectedCategory = englishContents.find(
+                        c => c.mainCategoryCode === englishContentMainCategory
+                      )
+                      
+                      let contents: Array<{ id: string; code: string; stage: string; stageName: string; description: string }> = []
+                      
+                      if (englishContentMainCategory === 'A' && englishContentSubCategory) {
+                        // A 主題：從子分類中取得學習內容
+                        const selectedSubCategory = selectedCategory?.subCategories?.find(
+                          sc => sc.subCategoryCode === englishContentSubCategory
+                        )
+                        contents = selectedSubCategory?.contents || []
+                      } else if (englishContentMainCategory !== 'A') {
+                        // B/C/D 主題：直接從主分類取得學習內容
+                        contents = selectedCategory?.contents || []
+                      }
+                      
+                      return contents.length > 0 ? (
+                        <div className="space-y-2">
+                          <label className="block text-gray-700 font-medium text-sm">
+                            選擇學習內容：
+                          </label>
+                          <select
+                            multiple
+                            size={Math.min(contents.length, 8)}
+                            value={selectedEnglishContentCodes}
+                            onChange={(e) => {
+                              const selected = Array.from(e.target.selectedOptions, option => option.value)
+                              setSelectedEnglishContentCodes(selected)
+                            }}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                          >
+                            {contents.map((item) => (
+                              <option key={item.code} value={item.code}>
+                                {item.code}: {item.description}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="text-gray-500 text-sm">
+                          {englishContentMainCategory === 'A' && !englishContentSubCategory 
+                            ? '請先選擇項目' 
+                            : '此主題無學習內容'}
+                        </div>
+                      )
+                    })()}
+
+                    {/* 加入按鈕 */}
+                    {((englishContentMainCategory === '其他' && englishContentOther.trim()) || 
+                      (selectedEnglishContentCodes.length > 0 && englishContentMainCategory && 
+                       (englishContentMainCategory !== 'A' || englishContentSubCategory))) && (
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => {
+                            if (englishContentMainCategory === '其他') {
+                              setAddedLearningContents([
+                                ...addedLearningContents,
+                                {
+                                  content: [{
+                                    code: '自訂',
+                                    description: englishContentOther
+                                  }]
+                                }
+                              ])
+                              setEnglishContentMainCategory('')
+                              setEnglishContentOther('')
+                            } else {
+                              const selectedCategory = englishContents.find(
+                                c => c.mainCategoryCode === englishContentMainCategory
+                              )
+                              
+                              let contents: Array<{ id: string; code: string; stage: string; stageName: string; description: string }> = []
+                              
+                              if (englishContentMainCategory === 'A' && englishContentSubCategory) {
+                                const selectedSubCategory = selectedCategory?.subCategories?.find(
+                                  sc => sc.subCategoryCode === englishContentSubCategory
+                                )
+                                contents = selectedSubCategory?.contents || []
+                              } else if (englishContentMainCategory !== 'A') {
+                                contents = selectedCategory?.contents || []
+                              }
+                              
+                              const selectedContents = contents.filter(c => 
+                                selectedEnglishContentCodes.includes(c.code)
+                              )
+                              
+                              if (selectedContents.length > 0) {
+                                setAddedLearningContents([
+                                  ...addedLearningContents,
+                                  {
+                                    content: selectedContents.map(c => ({
+                                      code: c.code,
+                                      description: c.description
+                                    }))
+                                  }
+                                ])
+                                setEnglishContentMainCategory('')
+                                setEnglishContentSubCategory('')
+                                setSelectedEnglishContentCodes([])
+                              }
+                            }
+                          }}
+                          className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                        >
+                          加入
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
+              )
             ) : courseDomain === '社會' ? (
-              // === 社會領域的學習內容 ===
+              (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
+                // === 社會領域的學習內容（國中/高中）- 三層結構 ===
+                <div className="space-y-3">
+                  {/* 第一層：選擇主題 */}
+                  <div className="flex gap-2">
+                    <select
+                      value={socialContentMHTheme}
+                      onChange={(e) => setSocialContentMHTheme(e.target.value)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                    >
+                      <option value="">請選擇主題</option>
+                      {socialContentMHThemes.map((theme) => (
+                        <option key={theme.theme} value={theme.theme}>
+                          {theme.theme}. {theme.theme_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 第二層：選擇項目（如果該主題有項目） */}
+                  {socialContentMHTheme && socialContentMHCategories.length > 0 && (
+                    <div className="flex gap-2">
+                      <select
+                        value={socialContentMHCategory}
+                        onChange={(e) => setSocialContentMHCategory(e.target.value)}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                      >
+                        <option value="">請選擇項目</option>
+                        {socialContentMHCategories.map((cat) => (
+                          <option key={cat.category} value={cat.category}>
+                            {cat.category}. {cat.category_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* 第三層：選擇條目 */}
+                  {socialContentMHTheme && (() => {
+                    // 如果有項目，需要選擇了項目才顯示條目
+                    // 如果沒有項目，直接顯示條目
+                    const hasCategories = socialContentMHCategories.length > 0
+                    const shouldShowContents = hasCategories ? socialContentMHCategory : true
+
+                    if (!shouldShowContents) return null
+
+                    const filteredContents = hasCategories && socialContentMHCategory
+                      ? socialContentMHContents.filter(c => c.code.includes(`${socialContentMHTheme}${socialContentMHCategory}`))
+                      : socialContentMHContents
+
+                    return filteredContents.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-gray-700 font-medium text-sm">
+                          選擇學習內容：
+                        </label>
+                        <select
+                          multiple
+                          size={Math.min(filteredContents.length, 8)}
+                          value={selectedSocialContentMHCodes}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value)
+                            setSelectedSocialContentMHCodes(selected)
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          {filteredContents.map((item) => (
+                            <option key={item.id} value={item.code}>
+                              {item.code}: {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">此主題項目無學習內容</div>
+                    )
+                  })()}
+
+                  {/* 加入按鈕 */}
+                  {selectedSocialContentMHCodes.length > 0 && socialContentMHTheme && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const selectedContents = socialContentMHContents.filter(c => 
+                            selectedSocialContentMHCodes.includes(c.code)
+                          )
+                          
+                          if (selectedContents.length > 0) {
+                            setAddedLearningContents([
+                              ...addedLearningContents,
+                              {
+                                content: selectedContents.map(c => ({
+                                  code: c.code,
+                                  description: c.description
+                                }))
+                              }
+                            ])
+                            setSocialContentMHTheme('')
+                            setSocialContentMHCategory('')
+                            setSelectedSocialContentMHCodes([])
+                          }
+                        }}
+                        className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // === 社會領域的學習內容（國小）- 舊版 ===
               <div className="space-y-3">
                 {/* 第一個欄位：選擇主題軸項目 */}
                 <div className="flex gap-2">
@@ -4147,8 +5657,304 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : courseDomain === '自然' ? (
-              // === 自然科的學習內容（原有邏輯） ===
+              schoolLevel === '國中' || schoolLevel === '高中（高職）' ? (
+                // === 自然科的學習內容（國中/高中） ===
+                <div className="space-y-3">
+                  {schoolLevel === '高中（高職）' ? (
+                    // === 高中：四層結構（科目 → 主題 → 次主題 → 學習內容） ===
+                    <>
+                      {/* 第一層：選擇科目 */}
+                      <div className="flex gap-2">
+                        <select
+                          value={naturalMHContentSubject}
+                          onChange={(e) => {
+                            setNaturalMHContentSubject(e.target.value)
+                            setNaturalMHContentTheme('')
+                            setNaturalMHContentSubTheme('')
+                            setSelectedNaturalMHContentCodes([])
+                          }}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          <option value="">請選擇科目</option>
+                          {Array.from(new Set(naturalMiddleHighContents.map(c => c.subjectCode).filter(Boolean))).map((subjectCode) => {
+                            const subject = naturalMiddleHighContents.find(c => c.subjectCode === subjectCode)
+                            return (
+                              <option key={subjectCode} value={subjectCode}>
+                                {subject?.subjectName}
+                              </option>
+                            )
+                          })}
+                        </select>
+                      </div>
+
+                      {/* 第二層：選擇主題 */}
+                      {naturalMHContentSubject && (() => {
+                        const selectedSubject = naturalMiddleHighContents.find(
+                          c => c.subjectCode === naturalMHContentSubject
+                        )
+                        return selectedSubject && selectedSubject.themes.length > 0 ? (
+                          <div className="flex gap-2">
+                            <select
+                              value={naturalMHContentTheme}
+                              onChange={(e) => {
+                                setNaturalMHContentTheme(e.target.value)
+                                setNaturalMHContentSubTheme('')
+                                setSelectedNaturalMHContentCodes([])
+                              }}
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                            >
+                              <option value="">請選擇主題</option>
+                              {selectedSubject.themes.map((theme) => (
+                                <option key={theme.themeCode} value={theme.themeCode}>
+                                  {theme.themeName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null
+                      })()}
+
+                      {/* 第三層：選擇次主題 */}
+                      {naturalMHContentSubject && naturalMHContentTheme && (() => {
+                        const selectedSubject = naturalMiddleHighContents.find(
+                          c => c.subjectCode === naturalMHContentSubject
+                        )
+                        const selectedTheme = selectedSubject?.themes.find(
+                          t => t.themeCode === naturalMHContentTheme
+                        )
+                        return selectedTheme && selectedTheme.subThemes.length > 0 ? (
+                          <div className="flex gap-2">
+                            <select
+                              value={naturalMHContentSubTheme}
+                              onChange={(e) => {
+                                setNaturalMHContentSubTheme(e.target.value)
+                                setSelectedNaturalMHContentCodes([])
+                              }}
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                            >
+                              <option value="">請選擇次主題</option>
+                              {selectedTheme.subThemes.map((subTheme) => (
+                                <option key={subTheme.subThemeCode} value={subTheme.subThemeCode}>
+                                  {subTheme.subThemeCode}. {subTheme.subThemeName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null
+                      })()}
+
+                      {/* 第四層：選擇學習內容 */}
+                      {naturalMHContentSubject && naturalMHContentTheme && naturalMHContentSubTheme && (() => {
+                        const selectedSubject = naturalMiddleHighContents.find(
+                          c => c.subjectCode === naturalMHContentSubject
+                        )
+                        const selectedTheme = selectedSubject?.themes.find(
+                          t => t.themeCode === naturalMHContentTheme
+                        )
+                        const selectedSubTheme = selectedTheme?.subThemes.find(
+                          st => st.subThemeCode === naturalMHContentSubTheme
+                        )
+                        const contents = selectedSubTheme?.contents || []
+
+                        return contents.length > 0 ? (
+                          <div className="space-y-2">
+                            <label className="block text-gray-700 font-medium text-sm">
+                              選擇學習內容：
+                            </label>
+                            <select
+                              multiple
+                              size={Math.min(contents.length, 8)}
+                              value={selectedNaturalMHContentCodes}
+                              onChange={(e) => {
+                                const selected = Array.from(e.target.selectedOptions, option => option.value)
+                                setSelectedNaturalMHContentCodes(selected)
+                              }}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                            >
+                              {contents.map((item) => (
+                                <option key={item.id} value={item.code}>
+                                  {item.code}: {item.description}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500 text-sm">此次主題無學習內容</div>
+                        )
+                      })()}
+
+                      {/* 加入按鈕 */}
+                      {selectedNaturalMHContentCodes.length > 0 && naturalMHContentSubject && naturalMHContentTheme && naturalMHContentSubTheme && (
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => {
+                              const selectedSubject = naturalMiddleHighContents.find(
+                                c => c.subjectCode === naturalMHContentSubject
+                              )
+                              const selectedTheme = selectedSubject?.themes.find(
+                                t => t.themeCode === naturalMHContentTheme
+                              )
+                              const selectedSubTheme = selectedTheme?.subThemes.find(
+                                st => st.subThemeCode === naturalMHContentSubTheme
+                              )
+                              const contents = selectedSubTheme?.contents || []
+                              const selectedContents = contents.filter(c => 
+                                selectedNaturalMHContentCodes.includes(c.code)
+                              )
+                              
+                              if (selectedContents.length > 0) {
+                                setAddedLearningContents([
+                                  ...addedLearningContents,
+                                  {
+                                    content: selectedContents.map(c => ({
+                                      code: c.code,
+                                      description: c.description
+                                    }))
+                                  }
+                                ])
+                                setNaturalMHContentSubject('')
+                                setNaturalMHContentTheme('')
+                                setNaturalMHContentSubTheme('')
+                                setSelectedNaturalMHContentCodes([])
+                              }
+                            }}
+                            className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                          >
+                            加入
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    // === 國中：三層結構（主題 → 次主題 → 學習內容） ===
+                    <>
+                      {/* 第一層：選擇主題 */}
+                      <div className="flex gap-2">
+                        <select
+                          value={naturalMHContentTheme}
+                          onChange={(e) => {
+                            setNaturalMHContentTheme(e.target.value)
+                            setNaturalMHContentSubTheme('')
+                            setSelectedNaturalMHContentCodes([])
+                          }}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                        >
+                          <option value="">請選擇主題</option>
+                          {naturalMiddleHighContents.map((theme) => (
+                            <option key={theme.themeCode} value={theme.themeCode}>
+                              {theme.themeCode}. {theme.themeName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 第二層：選擇次主題 */}
+                      {naturalMHContentTheme && (() => {
+                        const selectedTheme = naturalMiddleHighContents.find(
+                          t => t.themeCode === naturalMHContentTheme
+                        )
+                        return selectedTheme && selectedTheme.subThemes.length > 0 ? (
+                          <div className="flex gap-2">
+                            <select
+                              value={naturalMHContentSubTheme}
+                              onChange={(e) => {
+                                setNaturalMHContentSubTheme(e.target.value)
+                                setSelectedNaturalMHContentCodes([])
+                              }}
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                            >
+                              <option value="">請選擇次主題</option>
+                              {selectedTheme.subThemes.map((subTheme) => (
+                                <option key={subTheme.subThemeCode} value={subTheme.subThemeCode}>
+                                  {subTheme.subThemeCode}. {subTheme.subThemeName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null
+                      })()}
+
+                      {/* 第三層：選擇學習內容 */}
+                      {naturalMHContentTheme && naturalMHContentSubTheme && (() => {
+                        const selectedTheme = naturalMiddleHighContents.find(
+                          t => t.themeCode === naturalMHContentTheme
+                        )
+                        const selectedSubTheme = selectedTheme?.subThemes.find(
+                          st => st.subThemeCode === naturalMHContentSubTheme
+                        )
+                        const contents = selectedSubTheme?.contents || []
+
+                        return contents.length > 0 ? (
+                          <div className="space-y-2">
+                            <label className="block text-gray-700 font-medium text-sm">
+                              選擇學習內容：
+                            </label>
+                            <select
+                              multiple
+                              size={Math.min(contents.length, 8)}
+                              value={selectedNaturalMHContentCodes}
+                              onChange={(e) => {
+                                const selected = Array.from(e.target.selectedOptions, option => option.value)
+                                setSelectedNaturalMHContentCodes(selected)
+                              }}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                            >
+                              {contents.map((item) => (
+                                <option key={item.id} value={item.code}>
+                                  {item.code}: {item.description}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500 text-sm">此次主題無學習內容</div>
+                        )
+                      })()}
+
+                      {/* 加入按鈕 */}
+                      {selectedNaturalMHContentCodes.length > 0 && naturalMHContentTheme && naturalMHContentSubTheme && (
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => {
+                              const selectedTheme = naturalMiddleHighContents.find(
+                                t => t.themeCode === naturalMHContentTheme
+                              )
+                              const selectedSubTheme = selectedTheme?.subThemes.find(
+                                st => st.subThemeCode === naturalMHContentSubTheme
+                              )
+                              const contents = selectedSubTheme?.contents || []
+                              const selectedContents = contents.filter(c => 
+                                selectedNaturalMHContentCodes.includes(c.code)
+                              )
+                              
+                              if (selectedContents.length > 0) {
+                                setAddedLearningContents([
+                                  ...addedLearningContents,
+                                  {
+                                    content: selectedContents.map(c => ({
+                                      code: c.code,
+                                      description: c.description
+                                    }))
+                                  }
+                                ])
+                                setNaturalMHContentTheme('')
+                                setNaturalMHContentSubTheme('')
+                                setSelectedNaturalMHContentCodes([])
+                              }
+                            }}
+                            className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                          >
+                            加入
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                // === 自然科的學習內容（國小）- 原有邏輯 ===
               <div className="space-y-3">
                 {/* 第一欄：選擇跨科概念 */}
                 <div className="flex gap-2">
@@ -4272,6 +6078,7 @@ export default function CourseObjectives({
                   </div>
                 )}
               </div>
+              )
             ) : (
               // === 未選擇課程領域或其他領域 ===
               <div className="text-gray-500 text-sm py-4">
