@@ -90,7 +90,13 @@ export async function POST(request: NextRequest) {
       inviteCode: updatedCommunities[0].inviteCode,
       memberCount: parseInt(updatedCommunities[0].memberCount) || 0,
       createdDate: updatedCommunities[0].createdDate
-        ? new Date(updatedCommunities[0].createdDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(updatedCommunities[0].createdDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
     }
 

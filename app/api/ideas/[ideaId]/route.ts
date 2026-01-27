@@ -162,7 +162,13 @@ export async function PUT(
       isConvergence: updatedIdeas[0].isConvergence === 1 || updatedIdeas[0].isConvergence === true,
       convergedIdeaIds,
       createdDate: updatedIdeas[0].createdDate
-        ? new Date(updatedIdeas[0].createdDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(updatedIdeas[0].createdDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
       createdTime: updatedIdeas[0].createdTime || '',
       creatorName: updatedIdeas[0].creatorName || '',

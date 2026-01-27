@@ -59,7 +59,13 @@ export async function GET(request: NextRequest) {
       inviteCode: community.inviteCode,
       memberCount: parseInt(community.memberCount) || 0,
       createdDate: community.createdDate
-        ? new Date(community.createdDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(community.createdDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
     }))
 
@@ -154,7 +160,13 @@ export async function POST(request: NextRequest) {
       inviteCode: newCommunity[0].inviteCode,
       memberCount: parseInt(newCommunity[0].memberCount) || 1,
       createdDate: newCommunity[0].createdDate
-        ? new Date(newCommunity[0].createdDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(newCommunity[0].createdDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
     }
 

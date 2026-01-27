@@ -48,7 +48,13 @@ export async function GET(
       isPublic: activities[0].isPublic === 1 || activities[0].isPublic === true,
       password: activities[0].password || '',
       createdDate: activities[0].createdDate
-        ? new Date(activities[0].createdDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(activities[0].createdDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
       createdTime: activities[0].createdTime || '',
       creatorId: activities[0].creatorId,
@@ -163,7 +169,13 @@ export async function PUT(
       isPublic: updatedActivities[0].isPublic === 1 || updatedActivities[0].isPublic === true,
       password: updatedActivities[0].password || '',
       createdDate: updatedActivities[0].createdDate
-        ? new Date(updatedActivities[0].createdDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(updatedActivities[0].createdDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
       createdTime: updatedActivities[0].createdTime || '',
       creatorName: updatedActivities[0].creatorName || '',
