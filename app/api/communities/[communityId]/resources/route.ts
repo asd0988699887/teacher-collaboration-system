@@ -46,7 +46,13 @@ export async function GET(
       fileSize: resource.fileSize || 0,
       fileType: resource.fileType || '',
       uploadDate: resource.uploadDate
-        ? new Date(resource.uploadDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(resource.uploadDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
       uploadTime: resource.uploadTime || '',
       uploaderName: resource.uploaderName || '',
@@ -257,7 +263,13 @@ export async function POST(
       fileSize: newResources[0].fileSize || 0,
       fileType: newResources[0].fileType || '',
       uploadDate: newResources[0].uploadDate
-        ? new Date(newResources[0].uploadDate).toISOString().split('T')[0].replace(/-/g, '/')
+        ? (() => {
+            const date = new Date(newResources[0].uploadDate)
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}/${month}/${day}`
+          })()
         : '',
       uploadTime: newResources[0].uploadTime || '',
       uploaderName: newResources[0].uploaderName || '',

@@ -141,6 +141,11 @@ export async function GET(request: NextRequest) {
       const grouped: Record<string, any> = {}
       
       for (const row of results as any[]) {
+        // 防護檢查：確保 row 和 row.topic 存在
+        if (!row || !row.topic) {
+          continue
+        }
+        
         // 判斷主分類：Aa-Ae 屬於 A，B/C/D 是獨立的主分類
         let mainCategoryCode = row.topic
         let mainCategoryName = ''
