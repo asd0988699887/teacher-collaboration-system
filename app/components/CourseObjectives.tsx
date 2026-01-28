@@ -52,11 +52,92 @@ export default function CourseObjectives({
   const [materialSource, setMaterialSource] = useState('')
   const [teachingEquipment, setTeachingEquipment] = useState('')
   const [learningObjectives, setLearningObjectives] = useState('')
+  // 核心素養相關狀態
   const [coreCompetencyCategory, setCoreCompetencyCategory] = useState('')
   const [coreCompetencyItem, setCoreCompetencyItem] = useState('')
   const [coreCompetencyDescription, setCoreCompetencyDescription] = useState('')
   const [addedCoreCompetencies, setAddedCoreCompetencies] = useState<Array<{
     content: string
+  }>>([])
+  
+  // 英文核心素養相關狀態（從 API 載入）
+  const [englishCoreCompetencies, setEnglishCoreCompetencies] = useState<Array<{
+    mainCategory: string
+    mainCategoryName: string
+    subCategories: Array<{
+      subCategory: string
+      subCategoryName: string
+      items: Array<{
+        id: number
+        code: string
+        generalDescription: string
+        specificDescription: string
+      }>
+    }>
+  }>>([])
+  
+  // 國文核心素養相關狀態（從 API 載入）
+  const [chineseCoreCompetencies, setChineseCoreCompetencies] = useState<Array<{
+    mainCategory: string
+    mainCategoryName: string
+    subCategories: Array<{
+      subCategory: string
+      subCategoryName: string
+      items: Array<{
+        id: number
+        code: string
+        generalDescription: string
+        specificDescription: string
+      }>
+    }>
+  }>>([])
+  
+  // 數學核心素養相關狀態（從 API 載入）
+  const [mathCoreCompetencies, setMathCoreCompetencies] = useState<Array<{
+    mainCategory: string
+    mainCategoryName: string
+    subCategories: Array<{
+      subCategory: string
+      subCategoryName: string
+      items: Array<{
+        id: number
+        code: string
+        generalDescription: string
+        specificDescription: string
+      }>
+    }>
+  }>>([])
+  
+  // 社會科核心素養相關狀態（從 API 載入）
+  const [socialCoreCompetencies, setSocialCoreCompetencies] = useState<Array<{
+    mainCategory: string
+    mainCategoryName: string
+    subCategories: Array<{
+      subCategory: string
+      subCategoryName: string
+      items: Array<{
+        id: number
+        code: string
+        generalDescription: string
+        specificDescription: string
+      }>
+    }>
+  }>>([])
+  
+  // 自然科核心素養相關狀態（從 API 載入）
+  const [naturalCoreCompetencies, setNaturalCoreCompetencies] = useState<Array<{
+    mainCategory: string
+    mainCategoryName: string
+    subCategories: Array<{
+      subCategory: string
+      subCategoryName: string
+      items: Array<{
+        id: number
+        code: string
+        generalDescription: string
+        specificDescription: string
+      }>
+    }>
   }>>([])
   const [learningPerformanceCategory, setLearningPerformanceCategory] = useState('')
   const [learningPerformanceSubItem, setLearningPerformanceSubItem] = useState('')
@@ -757,8 +838,8 @@ export default function CourseObjectives({
     }
   }
 
-  // 核心素養數據
-  const coreCompetencyData = {
+  // 核心素養數據（預設值，用於非英文科目或向後兼容）
+  const defaultCoreCompetencyData = {
     A: {
       name: '自主行動',
       items: {
@@ -820,6 +901,271 @@ export default function CourseObjectives({
       }
     }
   }
+  
+  // 核心素養數據（根據科目動態切換）
+  const coreCompetencyData = (courseDomain === '英文' && englishCoreCompetencies.length > 0)
+    ? (() => {
+        // 將 API 返回的資料轉換為與舊格式相容的結構
+        const converted: any = {}
+        englishCoreCompetencies.forEach((mainCat) => {
+          converted[mainCat.mainCategory] = {
+            name: mainCat.mainCategoryName,
+            items: {} as any
+          }
+          mainCat.subCategories.forEach((subCat) => {
+            // 只取第一個 item（因為同一 subCategory 在不同學段可能有不同內容）
+            // 實際使用時會根據選擇的學段和子項目來取得對應的內容
+            const firstItem = subCat.items[0]
+            if (firstItem) {
+              converted[mainCat.mainCategory].items[subCat.subCategory] = {
+                name: subCat.subCategoryName,
+                description: firstItem.generalDescription,
+                elementary: firstItem.specificDescription,
+                code: firstItem.code,
+                items: subCat.items // 保存所有 items 以便後續使用
+              }
+            }
+          })
+        })
+        return converted
+      })()
+    : (courseDomain === '國文' && chineseCoreCompetencies.length > 0)
+    ? (() => {
+        // 將 API 返回的資料轉換為與舊格式相容的結構
+        const converted: any = {}
+        chineseCoreCompetencies.forEach((mainCat) => {
+          converted[mainCat.mainCategory] = {
+            name: mainCat.mainCategoryName,
+            items: {} as any
+          }
+          mainCat.subCategories.forEach((subCat) => {
+            const firstItem = subCat.items[0]
+            if (firstItem) {
+              converted[mainCat.mainCategory].items[subCat.subCategory] = {
+                name: subCat.subCategoryName,
+                description: firstItem.generalDescription,
+                elementary: firstItem.specificDescription,
+                code: firstItem.code,
+                items: subCat.items // 保存所有 items 以便後續使用
+              }
+            }
+          })
+        })
+        return converted
+      })()
+    : (courseDomain === '數學' && mathCoreCompetencies.length > 0)
+    ? (() => {
+        // 將 API 返回的資料轉換為與舊格式相容的結構
+        const converted: any = {}
+        mathCoreCompetencies.forEach((mainCat) => {
+          converted[mainCat.mainCategory] = {
+            name: mainCat.mainCategoryName,
+            items: {} as any
+          }
+          mainCat.subCategories.forEach((subCat) => {
+            const firstItem = subCat.items[0]
+            if (firstItem) {
+              converted[mainCat.mainCategory].items[subCat.subCategory] = {
+                name: subCat.subCategoryName,
+                description: firstItem.generalDescription,
+                elementary: firstItem.specificDescription,
+                code: firstItem.code,
+                items: subCat.items // 保存所有 items 以便後續使用
+              }
+            }
+          })
+        })
+        return converted
+      })()
+    : (courseDomain === '社會' && socialCoreCompetencies.length > 0)
+    ? (() => {
+        // 將 API 返回的資料轉換為與舊格式相容的結構
+        const converted: any = {}
+        socialCoreCompetencies.forEach((mainCat) => {
+          converted[mainCat.mainCategory] = {
+            name: mainCat.mainCategoryName,
+            items: {} as any
+          }
+          mainCat.subCategories.forEach((subCat) => {
+            const firstItem = subCat.items[0]
+            if (firstItem) {
+              converted[mainCat.mainCategory].items[subCat.subCategory] = {
+                name: subCat.subCategoryName,
+                description: firstItem.generalDescription,
+                elementary: firstItem.specificDescription,
+                code: firstItem.code,
+                items: subCat.items // 保存所有 items 以便後續使用
+              }
+            }
+          })
+        })
+        return converted
+      })()
+    : (courseDomain === '自然' && naturalCoreCompetencies.length > 0)
+    ? (() => {
+        // 將 API 返回的資料轉換為與舊格式相容的結構
+        const converted: any = {}
+        naturalCoreCompetencies.forEach((mainCat) => {
+          converted[mainCat.mainCategory] = {
+            name: mainCat.mainCategoryName,
+            items: {} as any
+          }
+          mainCat.subCategories.forEach((subCat) => {
+            const firstItem = subCat.items[0]
+            if (firstItem) {
+              converted[mainCat.mainCategory].items[subCat.subCategory] = {
+                name: subCat.subCategoryName,
+                description: firstItem.generalDescription,
+                elementary: firstItem.specificDescription,
+                code: firstItem.code,
+                items: subCat.items // 保存所有 items 以便後續使用
+              }
+            }
+          })
+        })
+        return converted
+      })()
+    : defaultCoreCompetencyData
+
+  // 當課程領域為英文時，載入英文核心素養
+  useEffect(() => {
+    const loadEnglishCoreCompetencies = async () => {
+      if (courseDomain === '英文' && schoolLevel) {
+        try {
+          const apiSchoolLevel = schoolLevel === '高中（高職）' ? '高中' : schoolLevel
+          const response = await fetch(`/api/core-competencies/english?schoolLevel=${apiSchoolLevel}`)
+          if (response.ok) {
+            const data = await response.json()
+            setEnglishCoreCompetencies(data)
+            // 重置選擇
+            setCoreCompetencyCategory('')
+            setCoreCompetencyItem('')
+            setCoreCompetencyDescription('')
+          } else {
+            console.error('載入英文核心素養失敗')
+          }
+        } catch (error) {
+          console.error('載入英文核心素養錯誤:', error)
+        }
+      } else if (courseDomain !== '英文') {
+        // 如果不是英文，清空資料
+        setEnglishCoreCompetencies([])
+      }
+    }
+    loadEnglishCoreCompetencies()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為國文時，載入國文核心素養
+  useEffect(() => {
+    const loadChineseCoreCompetencies = async () => {
+      if (courseDomain === '國文' && schoolLevel) {
+        try {
+          const apiSchoolLevel = schoolLevel === '高中（高職）' ? '高中' : schoolLevel
+          const response = await fetch(`/api/core-competencies/chinese?schoolLevel=${apiSchoolLevel}`)
+          if (response.ok) {
+            const data = await response.json()
+            setChineseCoreCompetencies(data)
+            // 重置選擇
+            setCoreCompetencyCategory('')
+            setCoreCompetencyItem('')
+            setCoreCompetencyDescription('')
+          } else {
+            console.error('載入國文核心素養失敗')
+          }
+        } catch (error) {
+          console.error('載入國文核心素養錯誤:', error)
+        }
+      } else if (courseDomain !== '國文') {
+        // 如果不是國文，清空資料
+        setChineseCoreCompetencies([])
+      }
+    }
+    loadChineseCoreCompetencies()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為數學時，載入數學核心素養
+  useEffect(() => {
+    const loadMathCoreCompetencies = async () => {
+      if (courseDomain === '數學' && schoolLevel) {
+        try {
+          const apiSchoolLevel = schoolLevel === '高中（高職）' ? '高中' : schoolLevel
+          const response = await fetch(`/api/core-competencies/math?schoolLevel=${apiSchoolLevel}`)
+          if (response.ok) {
+            const data = await response.json()
+            setMathCoreCompetencies(data)
+            // 重置選擇
+            setCoreCompetencyCategory('')
+            setCoreCompetencyItem('')
+            setCoreCompetencyDescription('')
+          } else {
+            console.error('載入數學核心素養失敗')
+          }
+        } catch (error) {
+          console.error('載入數學核心素養錯誤:', error)
+        }
+      } else if (courseDomain !== '數學') {
+        // 如果不是數學，清空資料
+        setMathCoreCompetencies([])
+      }
+    }
+    loadMathCoreCompetencies()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為社會時，載入社會科核心素養
+  useEffect(() => {
+    const loadSocialCoreCompetencies = async () => {
+      if (courseDomain === '社會' && schoolLevel) {
+        try {
+          const apiSchoolLevel = schoolLevel === '高中（高職）' ? '高中' : schoolLevel
+          const response = await fetch(`/api/core-competencies/social?schoolLevel=${apiSchoolLevel}`)
+          if (response.ok) {
+            const data = await response.json()
+            setSocialCoreCompetencies(data)
+            // 重置選擇
+            setCoreCompetencyCategory('')
+            setCoreCompetencyItem('')
+            setCoreCompetencyDescription('')
+          } else {
+            console.error('載入社會科核心素養失敗')
+          }
+        } catch (error) {
+          console.error('載入社會科核心素養錯誤:', error)
+        }
+      } else if (courseDomain !== '社會') {
+        // 如果不是社會，清空資料
+        setSocialCoreCompetencies([])
+      }
+    }
+    loadSocialCoreCompetencies()
+  }, [courseDomain, schoolLevel])
+
+  // 當課程領域為自然時，載入自然科核心素養
+  useEffect(() => {
+    const loadNaturalCoreCompetencies = async () => {
+      if (courseDomain === '自然' && schoolLevel) {
+        try {
+          const apiSchoolLevel = schoolLevel === '高中（高職）' ? '高中' : schoolLevel
+          const response = await fetch(`/api/core-competencies/natural?schoolLevel=${apiSchoolLevel}`)
+          if (response.ok) {
+            const data = await response.json()
+            setNaturalCoreCompetencies(data)
+            // 重置選擇
+            setCoreCompetencyCategory('')
+            setCoreCompetencyItem('')
+            setCoreCompetencyDescription('')
+          } else {
+            console.error('載入自然科核心素養失敗')
+          }
+        } catch (error) {
+          console.error('載入自然科核心素養錯誤:', error)
+        }
+      } else if (courseDomain !== '自然') {
+        // 如果不是自然，清空資料
+        setNaturalCoreCompetencies([])
+      }
+    }
+    loadNaturalCoreCompetencies()
+  }, [courseDomain, schoolLevel])
 
   // 當選擇學習表現類別時，重置子項選擇
   useEffect(() => {
@@ -1522,14 +1868,60 @@ export default function CourseObjectives({
       if (category) {
         const item = category.items[coreCompetencyItem as keyof typeof category.items]
         if (item) {
-          const fullDescription = `總綱核心素養項目說明：\n${item.description}\n\n國民小學教育(E)：\n${item.elementary}`
-          setCoreCompetencyDescription(fullDescription)
+          // 如果是英文、國文、數學、社會或自然科目，需要根據學段取得對應的內容
+          if ((courseDomain === '英文' || courseDomain === '國文' || courseDomain === '數學' || courseDomain === '社會' || courseDomain === '自然') && schoolLevel && item.items) {
+            const apiSchoolLevel = schoolLevel === '高中（高職）' ? '高中' : schoolLevel
+            // 從 items 中找到對應學段的項目
+            const matchedItem = item.items.find((it: any) => {
+              if (courseDomain === '英文') {
+                // 根據 code 判斷學段：英-E- 是國小，英-J- 是國中，英S-U- 是高中
+                if (apiSchoolLevel === '國小' && it.code.startsWith('英-E-')) return true
+                if (apiSchoolLevel === '國中' && it.code.startsWith('英-J-')) return true
+                if (apiSchoolLevel === '高中' && it.code.startsWith('英S-U-')) return true
+              } else if (courseDomain === '國文') {
+                // 根據 code 判斷學段：國-E- 是國小，國-J- 是國中，國S-U- 或 國-S-U- 是高中
+                if (apiSchoolLevel === '國小' && it.code.startsWith('國-E-')) return true
+                if (apiSchoolLevel === '國中' && it.code.startsWith('國-J-')) return true
+                if (apiSchoolLevel === '高中' && (it.code.startsWith('國S-U-') || it.code.startsWith('國-S-U-'))) return true
+              } else if (courseDomain === '數學') {
+                // 根據 code 判斷學段：數-E- 是國小，數-J- 是國中，數S-U- 或 數-S-U- 是高中
+                if (apiSchoolLevel === '國小' && it.code.startsWith('數-E-')) return true
+                if (apiSchoolLevel === '國中' && it.code.startsWith('數-J-')) return true
+                if (apiSchoolLevel === '高中' && (it.code.startsWith('數S-U-') || it.code.startsWith('數-S-U-'))) return true
+              } else if (courseDomain === '社會') {
+                // 根據 code 判斷學段：社-E- 是國小，社-J- 是國中，社-U- 是高中
+                if (apiSchoolLevel === '國小' && it.code.startsWith('社-E-')) return true
+                if (apiSchoolLevel === '國中' && it.code.startsWith('社-J-')) return true
+                if (apiSchoolLevel === '高中' && it.code.startsWith('社-U-')) return true
+              } else if (courseDomain === '自然') {
+                // 根據 code 判斷學段：自-E- 是國小，自-J- 是國中，自S-U- 是高中
+                if (apiSchoolLevel === '國小' && it.code.startsWith('自-E-')) return true
+                if (apiSchoolLevel === '國中' && it.code.startsWith('自-J-')) return true
+                if (apiSchoolLevel === '高中' && it.code.startsWith('自S-U-')) return true
+              }
+              return false
+            })
+            
+            if (matchedItem) {
+              // 上方標籤使用編號（如：英-E-A1、國-E-A1、數-E-A1、社-E-A1 或 自-E-A1），內容只顯示文字描述
+              const fullDescription = `總綱核心素養項目說明：\n${matchedItem.generalDescription}\n\n${matchedItem.code}：\n${matchedItem.specificDescription}`
+              setCoreCompetencyDescription(fullDescription)
+            } else {
+              // 如果找不到對應學段的項目，使用預設格式（內容不再重複編號）
+              const fullDescription = `總綱核心素養項目說明：\n${item.description}\n\n${item.code || ''}：\n${item.elementary}`
+              setCoreCompetencyDescription(fullDescription)
+            }
+          } else {
+            // 非英文/國文/數學/社會/自然科目或舊格式
+            const fullDescription = `總綱核心素養項目說明：\n${item.description}\n\n國民小學教育(E)：\n${item.elementary}`
+            setCoreCompetencyDescription(fullDescription)
+          }
         }
       }
     } else {
       setCoreCompetencyDescription('')
     }
-  }, [coreCompetencyCategory, coreCompetencyItem])
+  }, [coreCompetencyCategory, coreCompetencyItem, courseDomain, schoolLevel, coreCompetencyData])
 
   // 載入當前版本號
   useEffect(() => {
@@ -3330,20 +3722,67 @@ export default function CourseObjectives({
             </label>
             <div className="space-y-3">
               {/* 第一個欄位：選擇 A、B、C */}
-              <div className="flex gap-2">
-                <select
-                  value={coreCompetencyCategory}
-                  onChange={(e) => setCoreCompetencyCategory(e.target.value)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
-                >
-                  <option value="">請選擇</option>
-                  <option value="A">A 自主行動</option>
-                  <option value="B">B 溝通互動</option>
-                  <option value="C">C 社會參與</option>
-                </select>
-              </div>
+              {/* 如果沒有選擇學段，不顯示選項 */}
+              {schoolLevel ? (
+                <div className="flex gap-2">
+                  <select
+                    value={coreCompetencyCategory}
+                    onChange={(e) => setCoreCompetencyCategory(e.target.value)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
+                  >
+                    <option value="">請選擇</option>
+                    {courseDomain === '英文' && englishCoreCompetencies.length > 0 ? (
+                      // 英文科目：從 API 載入的資料顯示
+                      englishCoreCompetencies.map((mainCat) => (
+                        <option key={mainCat.mainCategory} value={mainCat.mainCategory}>
+                          {mainCat.mainCategory} {mainCat.mainCategoryName}
+                        </option>
+                      ))
+                    ) : courseDomain === '國文' && chineseCoreCompetencies.length > 0 ? (
+                      // 國文科目：從 API 載入的資料顯示
+                      chineseCoreCompetencies.map((mainCat) => (
+                        <option key={mainCat.mainCategory} value={mainCat.mainCategory}>
+                          {mainCat.mainCategory} {mainCat.mainCategoryName}
+                        </option>
+                      ))
+                    ) : courseDomain === '數學' && mathCoreCompetencies.length > 0 ? (
+                      // 數學科目：從 API 載入的資料顯示
+                      mathCoreCompetencies.map((mainCat) => (
+                        <option key={mainCat.mainCategory} value={mainCat.mainCategory}>
+                          {mainCat.mainCategory} {mainCat.mainCategoryName}
+                        </option>
+                      ))
+                    ) : courseDomain === '社會' && socialCoreCompetencies.length > 0 ? (
+                      // 社會科目：從 API 載入的資料顯示
+                      socialCoreCompetencies.map((mainCat) => (
+                        <option key={mainCat.mainCategory} value={mainCat.mainCategory}>
+                          {mainCat.mainCategory} {mainCat.mainCategoryName}
+                        </option>
+                      ))
+                    ) : courseDomain === '自然' && naturalCoreCompetencies.length > 0 ? (
+                      // 自然科目：從 API 載入的資料顯示
+                      naturalCoreCompetencies.map((mainCat) => (
+                        <option key={mainCat.mainCategory} value={mainCat.mainCategory}>
+                          {mainCat.mainCategory} {mainCat.mainCategoryName}
+                        </option>
+                      ))
+                    ) : (
+                      // 非英文/國文/數學/社會/自然科目：顯示預設選項
+                      <>
+                        <option value="A">A 自主行動</option>
+                        <option value="B">B 溝通互動</option>
+                        <option value="C">C 社會參與</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              ) : (
+                <div className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500">
+                  請先選擇學段
+                </div>
+              )}
               {/* 第二個欄位：根據第一個欄位選擇顯示 A1/A2/A3 或 B1/B2/B3 或 C1/C2/C3 */}
-              {coreCompetencyCategory && (
+              {coreCompetencyCategory && schoolLevel && (
                 <div className="flex gap-2">
                   <select
                     value={coreCompetencyItem}
@@ -3383,10 +3822,65 @@ export default function CourseObjectives({
                      }}
                      dangerouslySetInnerHTML={{
                        __html: coreCompetencyDescription
-                         ? coreCompetencyDescription
-                             .replace(/總綱核心素養項目說明：/g, '<span style="color: #1e3a8a; font-weight: 600;">總綱核心素養項目說明：</span>')
-                             .replace(/國民小學教育\(E\)：/g, '<span style="color: #1e3a8a; font-weight: 600;">國民小學教育(E)：</span>')
-                             .replace(/\n/g, '<br>')
+                         ? (() => {
+                             let html = coreCompetencyDescription
+                             
+                             // 先提取編號（如果描述中已經有編號）
+                             let code = html.match(/(英-[EJ]-[A-C][1-3]|英S-U-[A-C][1-3]|國-[EJ]-[A-C][1-3]|國S-U-[A-C][1-3]|國-S-U-[A-C][1-3]|數-[EJ]-[A-C][1-3]|數S-U-[A-C][1-3]|數-S-U-[A-C][1-3]|社-[EJ]-[A-C][1-3]|社-U-[A-C][1-3]|自-[EJ]-[A-C][1-3]|自S-U-[A-C][1-3])/)?.[1] || null
+                             
+                             // 如果沒有編號，但描述中有「國民小學教育(E)：」等標籤，需要根據學段和選擇的項目來推斷編號
+                             if (!code && (courseDomain === '英文' || courseDomain === '國文' || courseDomain === '數學' || courseDomain === '社會' || courseDomain === '自然') && schoolLevel && coreCompetencyCategory && coreCompetencyItem) {
+                               const apiSchoolLevel = schoolLevel === '高中（高職）' ? '高中' : schoolLevel
+                               let prefix = ''
+                               if (courseDomain === '英文') {
+                                 if (apiSchoolLevel === '國小') prefix = '英-E-'
+                                 else if (apiSchoolLevel === '國中') prefix = '英-J-'
+                                 else if (apiSchoolLevel === '高中') prefix = '英S-U-'
+                               } else if (courseDomain === '國文') {
+                                 if (apiSchoolLevel === '國小') prefix = '國-E-'
+                                 else if (apiSchoolLevel === '國中') prefix = '國-J-'
+                                 else if (apiSchoolLevel === '高中') prefix = '國S-U-'
+                               } else if (courseDomain === '數學') {
+                                 if (apiSchoolLevel === '國小') prefix = '數-E-'
+                                 else if (apiSchoolLevel === '國中') prefix = '數-J-'
+                                 else if (apiSchoolLevel === '高中') prefix = '數S-U-'
+                               } else if (courseDomain === '社會') {
+                                 if (apiSchoolLevel === '國小') prefix = '社-E-'
+                                 else if (apiSchoolLevel === '國中') prefix = '社-J-'
+                                 else if (apiSchoolLevel === '高中') prefix = '社-U-'
+                               } else if (courseDomain === '自然') {
+                                 if (apiSchoolLevel === '國小') prefix = '自-E-'
+                                 else if (apiSchoolLevel === '國中') prefix = '自-J-'
+                                 else if (apiSchoolLevel === '高中') prefix = '自S-U-'
+                               }
+                               code = prefix + coreCompetencyItem
+                             }
+                             
+                             // 將「國民小學教育(E)：」等標籤替換為編號
+                             if (code) {
+                               html = html.replace(/國民小學教育\(E\)：/g, `${code}：`)
+                               html = html.replace(/國民中學教育\(J\)：/g, `${code}：`)
+                               html = html.replace(/普通型高級中等學校教育\(S-U\)：/g, `${code}：`)
+                               html = html.replace(/高級中等學校教育\(U\)：/g, `${code}：`)
+                             }
+                             
+                             // 格式化顯示
+                             html = html.replace(/總綱核心素養項目說明：/g, '<span style="color: #1e3a8a; font-weight: 600;">總綱核心素養項目說明：</span>')
+                             
+                             // 將編號標籤（如：英-E-A1：、國-E-A1：、數-E-A1：、社-E-A1：或 自-E-A1：）改為藍色，與「總綱核心素養項目說明：」一樣的顏色和大小
+                             html = html.replace(/(英-[EJ]-[A-C][1-3]|英S-U-[A-C][1-3]|國-[EJ]-[A-C][1-3]|國S-U-[A-C][1-3]|國-S-U-[A-C][1-3]|數-[EJ]-[A-C][1-3]|數S-U-[A-C][1-3]|數-S-U-[A-C][1-3]|社-[EJ]-[A-C][1-3]|社-U-[A-C][1-3]|自-[EJ]-[A-C][1-3]|自S-U-[A-C][1-3])：/g, '<span style="color: #1e3a8a; font-weight: 600;">$1：</span>')
+                             
+                             // 移除內容中重複的編號（在文字前面的編號）
+                             // 如果內容開頭有編號，移除它（但保留標籤位置的編號）
+                             if (code) {
+                               const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                               // 移除標籤後內容開頭的編號（格式：標籤<br>編號 文字）
+                               html = html.replace(new RegExp(`(<span style="color: #1e3a8a; font-weight: 600;">${escapedCode}：</span>\\s*<br>\\s*)${escapedCode}\\s+`, 'g'), '$1')
+                             }
+                             
+                             html = html.replace(/\n/g, '<br>')
+                             return html
+                           })()
                          : ''
                      }}
                    />
@@ -3433,10 +3927,33 @@ export default function CourseObjectives({
                        <div
                          className="text-sm text-gray-700 pr-16 whitespace-pre-wrap"
                          dangerouslySetInnerHTML={{
-                           __html: item.content
-                             .replace(/總綱核心素養項目說明：/g, '<span style="color: #1e3a8a; font-weight: 600;">總綱核心素養項目說明：</span>')
-                             .replace(/國民小學教育\(E\)：/g, '<span style="color: #1e3a8a; font-weight: 600;">國民小學教育(E)：</span>')
-                             .replace(/\n/g, '<br>')
+                           __html: (() => {
+                             let html = item.content
+                             // 先提取編號（如果有的話）
+                             const codeMatch = html.match(/(英-[EJ]-[A-C][1-3]|英S-U-[A-C][1-3]|國-[EJ]-[A-C][1-3]|國S-U-[A-C][1-3]|國-S-U-[A-C][1-3]|數-[EJ]-[A-C][1-3]|數S-U-[A-C][1-3]|數-S-U-[A-C][1-3]|社-[EJ]-[A-C][1-3]|社-U-[A-C][1-3]|自-[EJ]-[A-C][1-3]|自S-U-[A-C][1-3])/)
+                             const code = codeMatch ? codeMatch[1] : null
+                             
+                             // 將「國民小學教育(E)：」等標籤替換為編號
+                             if (code) {
+                               html = html.replace(/國民小學教育\(E\)：/g, `${code}：`)
+                               html = html.replace(/國民中學教育\(J\)：/g, `${code}：`)
+                               html = html.replace(/普通型高級中等學校教育\(S-U\)：/g, `${code}：`)
+                               html = html.replace(/高級中等學校教育\(U\)：/g, `${code}：`)
+                             }
+                             
+                             // 格式化顯示
+                             html = html.replace(/總綱核心素養項目說明：/g, '<span style="color: #1e3a8a; font-weight: 600;">總綱核心素養項目說明：</span>')
+                             // 將編號（如：英-E-A1：、國-E-A1：、數-E-A1：、社-E-A1：或 自-E-A1：）改為藍色，與「總綱核心素養項目說明：」一樣的顏色和大小
+                             html = html.replace(/(英-[EJ]-[A-C][1-3]|英S-U-[A-C][1-3]|國-[EJ]-[A-C][1-3]|國S-U-[A-C][1-3]|國-S-U-[A-C][1-3]|數-[EJ]-[A-C][1-3]|數S-U-[A-C][1-3]|數-S-U-[A-C][1-3]|社-[EJ]-[A-C][1-3]|社-U-[A-C][1-3]|自-[EJ]-[A-C][1-3]|自S-U-[A-C][1-3])：/g, '<span style="color: #1e3a8a; font-weight: 600;">$1：</span>')
+                             // 移除內容中重複的編號（在文字前面的編號）
+                             if (code) {
+                               const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                               html = html.replace(new RegExp(`(<span style="color: #1e3a8a; font-weight: 600;">${escapedCode}：</span>\\s*<br>\\s*)${escapedCode}\\s+`, 'g'), '$1')
+                               html = html.replace(new RegExp(`(${escapedCode}：\\s*<br>\\s*)${escapedCode}\\s+`, 'g'), '$1')
+                             }
+                             html = html.replace(/\n/g, '<br>')
+                             return html
+                           })()
                          }}
                        />
                      </div>
@@ -3452,8 +3969,14 @@ export default function CourseObjectives({
               學習表現
             </label>
             
-            {/* 根據課程領域顯示不同內容 */}
-            {courseDomain === '數學' ? (
+            {/* 如果沒有選擇學段，不顯示選項 */}
+            {!schoolLevel ? (
+              <div className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500">
+                請先選擇學段
+              </div>
+            ) : (
+            /* 根據課程領域顯示不同內容 */
+            courseDomain === '數學' ? (
               (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
                 // === 數學領域的學習表現（國中/高中）- 兩層下拉選單 ===
                 <div className="space-y-3">
@@ -4644,6 +5167,7 @@ export default function CourseObjectives({
               <div className="text-gray-500 text-sm py-4">
                 請先選擇課程領域（目前支持：數學、自然）
               </div>
+            )
             )}
 
             {/* 顯示已加入的學習表現（共用部分） */}
@@ -4683,8 +5207,14 @@ export default function CourseObjectives({
               學習內容
             </label>
             
-            {/* 根據課程領域顯示不同內容 */}
-            {courseDomain === '數學' ? (
+            {/* 如果沒有選擇學段，不顯示選項 */}
+            {!schoolLevel ? (
+              <div className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500">
+                請先選擇學段
+              </div>
+            ) : (
+            /* 根據課程領域顯示不同內容 */
+            courseDomain === '數學' ? (
               (schoolLevel === '國中' || schoolLevel === '高中（高職）') ? (
                 // === 數學領域的學習內容（國中/高中）- 兩層下拉選單 ===
                 <div className="space-y-3">
@@ -6084,6 +6614,7 @@ export default function CourseObjectives({
               <div className="text-gray-500 text-sm py-4">
                 請先選擇課程領域（目前支持：國文、英文、數學、自然、社會）
               </div>
+            )
             )}
 
             {/* 顯示已加入的學習內容（共用部分） */}
