@@ -12,6 +12,7 @@ interface DraggableTaskCardProps {
     startDate: string
     endDate: string
     assignees: string[]
+    createdAt?: string // 建立時間（ISO 字串）
   }
   listId: string
   onEdit: () => void
@@ -201,20 +202,37 @@ export default function DraggableTaskCard({
           )}
         </div>
 
-        {/* 3週前 */}
-        {task.startDate && (
+        {/* 顯示建立時間的相對時間 */}
+        {task.createdAt && (
           <div className="text-xs text-gray-400">
             {(() => {
-              const today = new Date()
-              const start = new Date(task.startDate)
-              const diffTime = today.getTime() - start.getTime()
-              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-              const diffWeeks = Math.floor(diffDays / 7)
-              
-              if (diffDays < 7) {
-                return `${diffDays}天前`
+              const now = new Date()
+              const created = new Date(task.createdAt)
+              const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000)
+
+              if (diffInSeconds < 0) {
+                // 如果時間差為負數（未來時間），顯示「剛剛」
+                return '剛剛'
+              } else if (diffInSeconds < 60) {
+                return '剛剛'
+              } else if (diffInSeconds < 3600) {
+                const minutes = Math.floor(diffInSeconds / 60)
+                return `${minutes}分鐘前`
+              } else if (diffInSeconds < 86400) {
+                const hours = Math.floor(diffInSeconds / 3600)
+                return `${hours}小時前`
+              } else if (diffInSeconds < 604800) {
+                const days = Math.floor(diffInSeconds / 86400)
+                return `${days}天前`
+              } else if (diffInSeconds < 2592000) {
+                const weeks = Math.floor(diffInSeconds / 604800)
+                return `${weeks}週前`
+              } else if (diffInSeconds < 31536000) {
+                const months = Math.floor(diffInSeconds / 2592000)
+                return `${months}個月前`
               } else {
-                return `${diffWeeks}週前`
+                const years = Math.floor(diffInSeconds / 31536000)
+                return `${years}年前`
               }
             })()}
           </div>
