@@ -17,7 +17,7 @@ interface DraggableTaskCardProps {
   listId: string
   onEdit: () => void
   onDelete: () => void
-  getUserColor: (userId: string) => string
+  getUserColor: (userId: string, nickname?: string) => string
   getMemberInfo: (userId: string) => { name: string; account: string }
   formatDateRange: (startDate: string, endDate: string) => string
   openMenuId: string | null
@@ -188,7 +188,7 @@ export default function DraggableTaskCard({
               <div
                 key={assigneeId}
                 className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-                style={{ backgroundColor: getUserColor(assigneeId) }}
+                style={{ backgroundColor: getUserColor(assigneeId, member.name) }}
                 title={member.name}
               >
                 {member.name.charAt(0).toUpperCase()}

@@ -92,7 +92,8 @@ export async function DELETE(
       )
     }
 
-    const isCreator = communities[0].creator_id === operatorId
+    const creatorId = communities[0].creator_id
+    const isCreator = creatorId === operatorId
 
     // 查詢操作者的角色
     const operatorMembers = await query(
@@ -102,20 +103,34 @@ export async function DELETE(
 
     const isAdmin = operatorMembers.length > 0 && operatorMembers[0].role === 'admin'
 
-    // 只有建立者或管理員可以刪除成員
-    if (!isCreator && !isAdmin) {
-      return NextResponse.json(
-        { error: '只有建立者或管理員可以刪除成員' },
-        { status: 403 }
-      )
-    }
+    // 檢查是否為自己退出社群
+    const isSelfExit = userId === operatorId
 
-    // 建立者不能刪除自己
-    if (userId === communities[0].creator_id) {
-      return NextResponse.json(
-        { error: '建立者不能刪除自己' },
-        { status: 400 }
-      )
+    // 如果是自己退出社群
+    if (isSelfExit) {
+      // 建立者不能退出社群（不能刪除自己）
+      if (userId === creatorId) {
+        return NextResponse.json(
+          { error: '建立者不能退出社群' },
+          { status: 400 }
+        )
+      }
+      // 其他成員可以自由退出
+    } else {
+      // 如果要刪除的是別人，只有建立者或管理員可以刪除成員
+      if (!isCreator && !isAdmin) {
+        return NextResponse.json(
+          { error: '只有建立者或管理員可以刪除成員' },
+          { status: 403 }
+        )
+      }
+      // 建立者不能刪除自己（這個情況理論上不會發生，因為 isSelfExit 已經處理了）
+      if (userId === creatorId) {
+        return NextResponse.json(
+          { error: '建立者不能刪除自己' },
+          { status: 400 }
+        )
+      }
     }
 
     // 刪除成員

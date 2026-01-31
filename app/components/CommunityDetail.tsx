@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -1689,19 +1689,102 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     'rgba(249,115,22,0.9)',  // 橘色
   ]
 
-  // 根據使用者ID生成固定顏色（確保同一個使用者總是得到相同顏色）
-  const getUserColor = (userId: string): string => {
+  // 計算所有成員的顏色映射（確保相同姓氏的成員使用不同顏色）
+  const userColorMap = useMemo(() => {
+    const colorMap = new Map<string, string>()
+    
+    if (fullCommunityMembers.length === 0) {
+      return colorMap
+    }
+    
+    // 按姓氏分組成員
+    const surnameGroups = new Map<string, Array<{ userId: string; nickname: string }>>()
+    
+    fullCommunityMembers.forEach(member => {
+      const surname = member.nickname ? member.nickname.charAt(0) : ''
+      if (!surnameGroups.has(surname)) {
+        surnameGroups.set(surname, [])
+      }
+      surnameGroups.get(surname)!.push({
+        userId: member.userId,
+        nickname: member.nickname
+      })
+    })
+    
+    // 為每個姓氏組分配顏色
+    surnameGroups.forEach((members, surname) => {
+      // 計算每個成員的初始顏色（基於 userId hash）
+      const memberColors = members.map(member => {
+        let hash = 0
+        for (let i = 0; i < member.userId.length; i++) {
+          const char = member.userId.charCodeAt(i)
+          hash = ((hash << 5) - hash) + char
+          hash = hash & hash
+        }
+        const index = Math.abs(hash) % USER_COLORS.length
+        return {
+          userId: member.userId,
+          initialColor: USER_COLORS[index],
+          initialIndex: index
+        }
+      })
+      
+      // 檢查是否有顏色衝突
+      const usedColors = new Set<string>()
+      const assignedColors = new Map<string, string>()
+      
+      // 第一輪：分配沒有衝突的顏色
+      memberColors.forEach(({ userId, initialColor }) => {
+        if (!usedColors.has(initialColor)) {
+          usedColors.add(initialColor)
+          assignedColors.set(userId, initialColor)
+        }
+      })
+      
+      // 第二輪：為有衝突的成員分配未使用的顏色
+      memberColors.forEach(({ userId, initialColor, initialIndex }) => {
+        if (!assignedColors.has(userId)) {
+          // 找一個未使用的顏色
+          for (let i = 0; i < USER_COLORS.length; i++) {
+            const color = USER_COLORS[(initialIndex + i) % USER_COLORS.length]
+            if (!usedColors.has(color)) {
+              usedColors.add(color)
+              assignedColors.set(userId, color)
+              break
+            }
+          }
+          // 如果所有顏色都被使用，使用初始顏色（極端情況）
+          if (!assignedColors.has(userId)) {
+            assignedColors.set(userId, initialColor)
+          }
+        }
+      })
+      
+      // 將分配的顏色加入映射表
+      assignedColors.forEach((color, userId) => {
+        colorMap.set(userId, color)
+      })
+    })
+    
+    return colorMap
+  }, [fullCommunityMembers])
+  
+  // 根據使用者ID獲取顏色
+  const getUserColor = (userId: string, nickname?: string): string => {
     if (!userId) return USER_COLORS[0]
     
-    // 簡單的 hash 函數：將 userId 轉換為數字
+    // 如果顏色映射表中有該使用者，直接返回
+    if (userColorMap.has(userId)) {
+      return userColorMap.get(userId)!
+    }
+    
+    // 如果顏色映射表中沒有（可能是外部使用者或成員列表未載入），使用原本的 hash 邏輯
     let hash = 0
     for (let i = 0; i < userId.length; i++) {
       const char = userId.charCodeAt(i)
       hash = ((hash << 5) - hash) + char
-      hash = hash & hash // 轉換為 32 位整數
+      hash = hash & hash
     }
-    
-    // 使用絕對值取模，確保索引在範圍內
     const index = Math.abs(hash) % USER_COLORS.length
     return USER_COLORS[index]
   }
@@ -2040,7 +2123,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                 ref={avatarRef}
                 onClick={handleAvatarClick}
                 className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                style={{ backgroundColor: userId ? getUserColor(userId) : 'rgba(138,99,210,0.9)' }}
+                style={{ backgroundColor: userId ? getUserColor(userId, userNickname) : 'rgba(138,99,210,0.9)' }}
               >
                 <span className="text-white font-semibold text-sm">
                   {userNickname.charAt(0).toUpperCase()}
@@ -2397,7 +2480,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                             {/* 頭像 */}
                             <div 
                               className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-semibold"
-                              style={{ backgroundColor: getUserColor(member.userId) }}
+                              style={{ backgroundColor: getUserColor(member.userId, member.nickname) }}
                             >
                               {member.nickname ? member.nickname.charAt(0).toUpperCase() : 'U'}
                             </div>
