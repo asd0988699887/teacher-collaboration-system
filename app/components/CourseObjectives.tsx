@@ -6706,61 +6706,67 @@ export default function CourseObjectives({
               {activeTab === 'activity' && (
                 <div className="space-y-6">
                   {/* 第一列：教學內容及實施方式、教學時間、教學資源、學習評量方式 */}
-                  <div className="flex gap-2">
-                    {/* 教學內容及實施方式 - 最寬 */}
-                    <div className="flex-[3]">
-                      <label className="block text-gray-700 font-medium mb-2">
-                        教學內容及實施方式
-                      </label>
-                      <textarea
-                        value={teachingContent}
-                        onChange={(e) => setTeachingContent(e.target.value)}
-                        placeholder="輸入教學內容及實施方式"
-                        rows={8}
-                        className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                      />
-                    </div>
+                  <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                    <div className="flex gap-2 min-w-max sm:min-w-0">
+                      {/* 教學內容及實施方式 - 最寬 */}
+                      <div className="flex-[4] sm:flex-[3] min-w-[200px] sm:min-w-0">
+                        <label className="block text-gray-700 font-medium mb-2 text-center">
+                          <span className="block">教學內容及</span>
+                          <span className="block">實施方式</span>
+                        </label>
+                        <textarea
+                          value={teachingContent}
+                          onChange={(e) => setTeachingContent(e.target.value)}
+                          placeholder="輸入教學內容及實施方式"
+                          rows={8}
+                          className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
+                        />
+                      </div>
 
-                    {/* 教學時間 - 最窄 */}
-                    <div className="w-16 flex-shrink-0">
-                      <label className="block text-gray-700 font-medium mb-2">
-                        教學時間
-                      </label>
-                      <textarea
-                        value={teachingTime}
-                        onChange={(e) => setTeachingTime(e.target.value)}
-                        placeholder="輸入教學時間"
-                        rows={8}
-                        className="w-full px-2 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                      />
-                    </div>
+                      {/* 教學時間 - 最窄 */}
+                      <div className="w-12 sm:w-16 flex-shrink-0">
+                        <label className="block text-gray-700 font-medium mb-2 text-center">
+                          <span className="block">教學</span>
+                          <span className="block">時間</span>
+                        </label>
+                        <textarea
+                          value={teachingTime}
+                          onChange={(e) => setTeachingTime(e.target.value)}
+                          placeholder="輸入教學時間"
+                          rows={8}
+                          className="w-full px-1 sm:px-2 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
+                        />
+                      </div>
 
-                    {/* 教學資源 - 第二窄 */}
-                    <div className="w-24 flex-shrink-0">
-                      <label className="block text-gray-700 font-medium mb-2">
-                        教學資源
-                      </label>
-                      <textarea
-                        value={teachingResources}
-                        onChange={(e) => setTeachingResources(e.target.value)}
-                        placeholder="輸入教學資源"
-                        rows={8}
-                        className="w-full px-2 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                      />
-                    </div>
+                      {/* 教學資源 - 第二窄 */}
+                      <div className="w-12 sm:w-24 flex-shrink-0">
+                        <label className="block text-gray-700 font-medium mb-2 text-center">
+                          <span className="block">教學</span>
+                          <span className="block">資源</span>
+                        </label>
+                        <textarea
+                          value={teachingResources}
+                          onChange={(e) => setTeachingResources(e.target.value)}
+                          placeholder="輸入教學資源"
+                          rows={8}
+                          className="w-full px-1 sm:px-2 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
+                        />
+                      </div>
 
-                    {/* 學習評量方式 */}
-                    <div className="flex-[2]">
-                      <label className="block text-gray-700 font-medium mb-2">
-                        學習評量方式
-                      </label>
-                      <textarea
-                        value={assessmentMethods}
-                        onChange={(e) => setAssessmentMethods(e.target.value)}
-                        placeholder="輸入學習評量方式"
-                        rows={8}
-                        className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                      />
+                      {/* 學習評量方式 */}
+                      <div className="flex-[2] min-w-[150px] sm:min-w-0">
+                        <label className="block text-gray-700 font-medium mb-2 text-center">
+                          <span className="block">學習評量</span>
+                          <span className="block">方式</span>
+                        </label>
+                        <textarea
+                          value={assessmentMethods}
+                          onChange={(e) => setAssessmentMethods(e.target.value)}
+                          placeholder="輸入學習評量方式"
+                          rows={8}
+                          className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -6797,27 +6803,31 @@ export default function CourseObjectives({
                     <div className="border border-gray-300">
                       {/* 表頭行 */}
                       <div className="flex border-b border-gray-300">
-                        <div className="flex-[3] bg-gray-100 font-medium text-gray-700 flex items-center" style={{ borderRight: '1px solid #d1d5db' }}>
+                        <div className="flex-[5] sm:flex-[3] bg-gray-100 font-medium text-gray-700 flex items-center" style={{ borderRight: '1px solid #d1d5db' }}>
                           <div className="px-4 py-2 w-full">教學內容及實施方式</div>
                         </div>
-                        <div className="w-16 flex-shrink-0 bg-gray-100 font-medium text-gray-700 flex items-center" style={{ borderRight: '1px solid #d1d5db' }}>
-                          <div className="px-2 py-2 w-full">教學時間</div>
+                        <div className="w-10 sm:w-16 flex-shrink-0 bg-gray-100 font-medium text-gray-700 flex items-center justify-center" style={{ borderRight: '1px solid #d1d5db' }}>
+                          <div className="px-1 py-2 w-full text-center" style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
+                            教學時間
+                          </div>
                         </div>
-                        <div className="w-24 flex-shrink-0 bg-gray-100 font-medium text-gray-700 flex items-center" style={{ borderRight: '1px solid #d1d5db' }}>
-                          <div className="px-2 py-2 w-full">教學資源</div>
+                        <div className="w-10 sm:w-24 flex-shrink-0 bg-gray-100 font-medium text-gray-700 flex items-center justify-center" style={{ borderRight: '1px solid #d1d5db' }}>
+                          <div className="px-1 py-2 w-full text-center" style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
+                            教學資源
+                          </div>
                         </div>
                         <div className="flex-[2] bg-gray-100 font-medium text-gray-700 flex items-center" style={{ borderRight: '1px solid #d1d5db' }}>
                           <div className="px-4 py-2 w-full">學習評量方式</div>
                         </div>
-                        <div className="w-20 flex-shrink-0 bg-gray-100">
-                        </div>
+                        {/* 桌面版刪除按鈕欄位（表頭） */}
+                        <div className="hidden sm:flex w-20 flex-shrink-0 bg-gray-100"></div>
                       </div>
 
                       {/* 已加入的列 - 表格樣式 */}
                       {activityRows.map((row, index) => (
                         <div key={row.id} className="flex" style={{ borderTop: index > 0 ? '1px solid #d1d5db' : 'none' }}>
                           {/* 教學內容及實施方式 */}
-                          <div className="flex-[3] flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
+                          <div className="flex-[5] sm:flex-[3] flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
                             <textarea
                               data-row-id={`activity-row-${index}`}
                               value={row.teachingContent}
@@ -6839,7 +6849,7 @@ export default function CourseObjectives({
                           </div>
 
                           {/* 教學時間 */}
-                          <div className="w-16 flex-shrink-0 flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
+                          <div className="w-10 sm:w-16 flex-shrink-0 flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
                             <textarea
                               data-row-id={`activity-row-${index}`}
                               value={row.teachingTime}
@@ -6855,13 +6865,13 @@ export default function CourseObjectives({
                                 syncRowHeight(index)
                               }}
                               placeholder="輸入教學時間"
-                              className="w-full px-2 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
+                              className="w-full px-1 sm:px-2 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden vertical-text sm:horizontal-text"
                               style={{ height: 'auto' }}
                             />
                           </div>
 
                           {/* 教學資源 */}
-                          <div className="w-24 flex-shrink-0 flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
+                          <div className="w-10 sm:w-24 flex-shrink-0 flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
                             <textarea
                               data-row-id={`activity-row-${index}`}
                               value={row.teachingResources}
@@ -6877,13 +6887,13 @@ export default function CourseObjectives({
                                 syncRowHeight(index)
                               }}
                               placeholder="輸入教學資源"
-                              className="w-full px-2 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
+                              className="w-full px-1 sm:px-2 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden vertical-text sm:horizontal-text"
                               style={{ height: 'auto' }}
                             />
                           </div>
 
                           {/* 學習評量方式 */}
-                          <div className="flex-[2] flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
+                          <div className="flex-[2] flex flex-col items-start">
                             <textarea
                               data-row-id={`activity-row-${index}`}
                               value={row.assessmentMethods}
@@ -6902,10 +6912,18 @@ export default function CourseObjectives({
                               className="w-full px-4 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
                               style={{ height: 'auto' }}
                             />
+                            <button
+                              onClick={() => {
+                                setActivityRows(activityRows.filter((_, i) => i !== index))
+                              }}
+                              className="mt-2 px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors self-center sm:hidden"
+                            >
+                              刪除
+                            </button>
                           </div>
 
-                          {/* 刪除按鈕欄位 */}
-                          <div className="w-20 flex-shrink-0 flex items-center justify-center">
+                          {/* 桌面版刪除按鈕欄位 */}
+                          <div className="hidden sm:flex w-20 flex-shrink-0 items-center justify-center">
                             <button
                               onClick={() => {
                                 setActivityRows(activityRows.filter((_, i) => i !== index))

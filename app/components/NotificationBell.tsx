@@ -160,14 +160,14 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
 
       {/* 通知下拉選單 */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[600px] overflow-hidden flex flex-col">
+        <div className="absolute right-0 sm:right-0 left-4 sm:left-auto mt-2 w-[calc(100vw-2rem)] sm:w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[600px] overflow-hidden flex flex-col">
           {/* 標題列 */}
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-800">通知</h3>
+          <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-gray-800 text-sm sm:text-base">通知</h3>
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="text-sm text-purple-600 hover:text-purple-700"
+                className="text-xs sm:text-sm text-purple-600 hover:text-purple-700 whitespace-nowrap flex-shrink-0"
               >
                 全部標記為已讀
               </button>
@@ -189,11 +189,11 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
                       markAsRead(notification.id)
                     }
                   }}
-                  className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
+                  className={`p-3 sm:p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
                     !notification.isRead ? 'bg-purple-50' : ''
                   }`}
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-2 sm:gap-3">
                     {/* 未讀指示點 */}
                     {!notification.isRead && (
                       <div className="w-2 h-2 bg-purple-600 rounded-full mt-2 flex-shrink-0"></div>
@@ -201,17 +201,17 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
                     
                     <div className="flex-1 min-w-0">
                       {/* 通知內容 */}
-                      <p className="text-sm text-gray-800 mb-1">
+                      <p className="text-sm text-gray-800 mb-1 break-words whitespace-normal">
                         {notification.content}
                       </p>
                       
                       {/* 時間和社群 */}
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>{formatTime(notification.createdAt)}</span>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                        <span className="whitespace-nowrap">{formatTime(notification.createdAt)}</span>
                         {notification.communityName && (
                           <>
                             <span>•</span>
-                            <span>{notification.communityName}</span>
+                            <span className="break-words">{notification.communityName}</span>
                           </>
                         )}
                       </div>

@@ -99,3 +99,16 @@ body > * {
     height: 0; /* 隱藏水平卷軸 */
   }
 }
+
+/* 教案編輯表格：手機版垂直文字 */
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+}
+
+@media (min-width: 640px) {
+  .horizontal-text {
+    writing-mode: horizontal-tb;
+    text-orientation: mixed;
+  }
+}

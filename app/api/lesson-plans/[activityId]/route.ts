@@ -111,6 +111,7 @@ export async function GET(
         courseDomain: lessonPlan.course_domain,
         designer: lessonPlan.designer,
         unitName: lessonPlan.unit_name,
+        schoolLevel: lessonPlan.school_level,
         implementationGrade: lessonPlan.implementation_grade,
         teachingTimeLessons: lessonPlan.teaching_time_lessons,
         teachingTimeMinutes: lessonPlan.teaching_time_minutes,

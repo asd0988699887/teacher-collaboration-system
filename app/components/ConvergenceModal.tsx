@@ -434,4 +434,3 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
     </>
   )
 }
-

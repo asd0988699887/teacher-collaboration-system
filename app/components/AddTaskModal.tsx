@@ -453,19 +453,19 @@ export default function AddTaskModal({
           </div>
           
           {/* 按鈕 - 固定在底部 */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-end gap-3 flex-shrink-0">
+          <div className="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-end gap-3 flex-shrink-0">
             <button
               type="button"
               onClick={handleClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              className="px-6 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
             >
-              返回
+              取消
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+              className="px-6 py-2 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] text-white rounded-lg font-medium transition-colors"
             >
-              {editMode ? '更新' : '確認'}
+              {editMode ? '儲存' : '新增'}
             </button>
           </div>
         </form>
@@ -474,4 +474,3 @@ export default function AddTaskModal({
     </>
   )
 }
-
