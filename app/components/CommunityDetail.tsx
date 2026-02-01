@@ -32,6 +32,7 @@ import DraggableIdeaCard from './DraggableIdeaCard'
 import DraggableTaskCard from './DraggableTaskCard'
 import DroppableList from './DroppableList'
 import ArrowsOverlay from './ArrowsOverlay'
+import ZoomableIdeasContainer from './ZoomableIdeasContainer'
 import ConvergenceModal from './ConvergenceModal'
 import VersionControlModal from './VersionControlModal'
 import IdeaContributionChart from './IdeaContributionChart'
@@ -107,6 +108,24 @@ interface Idea {
  */
 export default function CommunityDetail({ communityName, communityId: propCommunityId, onBack }: CommunityDetailProps) {
   const [activeTab, setActiveTab] = useState<TabType>('resources')
+  // 自定義水平卷軸狀態
+  const [scrollInfo, setScrollInfo] = useState<{
+    scrollLeft: number
+    scrollWidth: number
+    clientWidth: number
+    hasHorizontalScroll: boolean
+  }>({
+    scrollLeft: 0,
+    scrollWidth: 0,
+    clientWidth: 0,
+    hasHorizontalScroll: false,
+  })
+  const [isDraggingScrollbar, setIsDraggingScrollbar] = useState(false)
+  const scrollbarRef = useRef<HTMLDivElement>(null)
+  const prevHasHorizontalScrollRef = useRef(false) // 用於穩定 hasHorizontalScroll 狀態
+  const [isMobile, setIsMobile] = useState(false) // 檢測是否為手機版
+  const savedScrollLeftRef = useRef<number>(0) // 保存滾動位置
+  const prevActiveTabRef = useRef<TabType>('resources') // 追蹤上一個 tab
   const [resources, setResources] = useState<Resource[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [ideas, setIdeas] = useState<Idea[]>([])
@@ -218,11 +237,77 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     if (communityId) {
       loadActivities()
       loadResources()
-      loadIdeas()
+      loadIdeas(false) // 初始載入時不保留滾動位置
       loadKanban()
       loadCommunityMembers()
     }
   }, [communityId])
+  
+  // 追蹤 activeTab 變化，更新 prevActiveTabRef
+  useEffect(() => {
+    if (activeTab !== prevActiveTabRef.current) {
+      prevActiveTabRef.current = activeTab
+    }
+  }, [activeTab])
+
+  // 持續監聽滾動事件，即時保存滾動位置
+  useEffect(() => {
+    if (activeTab !== 'ideas') return
+
+    const container = document.getElementById('ideas-container')
+    if (!container) return
+
+    const handleScroll = () => {
+      savedScrollLeftRef.current = container.scrollLeft
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+    }
+  }, [activeTab])
+
+  // 在 ideas 狀態更新後立即恢復滾動位置
+  useEffect(() => {
+    if (activeTab !== 'ideas') return
+
+    const container = document.getElementById('ideas-container')
+    if (!container) return
+
+    // 如果保存的滾動位置為 0，且當前滾動位置也為 0，則不需要恢復
+    // 如果保存的滾動位置大於 0，則需要恢復
+    const shouldRestore = savedScrollLeftRef.current > 0 || container.scrollLeft > 0
+
+    if (!shouldRestore) return
+
+    // 使用多重 requestAnimationFrame 和 setTimeout 確保 DOM 已完全更新
+    // 因為 React 狀態更新和 DOM 渲染是異步的
+    const restoreScroll = () => {
+      if (!container) return
+      
+      // 再次檢查，避免在恢復過程中滾動位置被改變
+      const currentScrollLeft = container.scrollLeft
+      const savedScrollLeft = savedScrollLeftRef.current
+      
+      // 只有在保存的位置與當前位置不同時才恢復
+      // 並且保存的位置必須大於 0（表示用戶曾經滾動過）
+      if (savedScrollLeft > 0 && Math.abs(currentScrollLeft - savedScrollLeft) > 1) {
+        container.scrollLeft = savedScrollLeft
+      }
+    }
+
+    // 立即嘗試恢復
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreScroll()
+        // 如果還是沒有恢復，再延遲一點
+        setTimeout(() => {
+          restoreScroll()
+        }, 50)
+      })
+    })
+  }, [ideas, activeTab])
 
   // 組件卸載時清理所有 timeout
   useEffect(() => {
@@ -723,9 +808,30 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     setViewingActivity(null)
   }
 
+  // 處理 tab 切換的通用函數
+  const handleTabChange = (tabId: TabType) => {
+    // 如果離開想法牆，重置滾動位置
+    if (prevActiveTabRef.current === 'ideas' && tabId !== 'ideas') {
+      savedScrollLeftRef.current = 0
+    }
+    // 如果進入想法牆，重置滾動位置（從其他頁面進入）
+    if (prevActiveTabRef.current !== 'ideas' && tabId === 'ideas') {
+      savedScrollLeftRef.current = 0
+      setTimeout(() => {
+        const container = document.getElementById('ideas-container')
+        if (container) {
+          container.scrollLeft = 0
+        }
+      }, 100)
+    }
+    
+    prevActiveTabRef.current = tabId
+    setActiveTab(tabId)
+  }
+
   const handleSidebarClickFromActivity = (tabId: string) => {
     setViewingActivity(null)
-    setActiveTab(tabId as TabType)
+    handleTabChange(tabId as TabType)
   }
 
   const handleCardClick = (activityId: string) => {
@@ -1082,14 +1188,23 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }
 
-  const loadIdeas = async () => {
+  const loadIdeas = async (preserveScroll: boolean = true) => {
     if (!communityId) return
+
+    // 如果保留滾動位置，先保存當前位置
+    if (preserveScroll) {
+      const container = document.getElementById('ideas-container')
+      if (container) {
+        savedScrollLeftRef.current = container.scrollLeft
+      }
+    }
 
     try {
       const response = await fetch(`/api/communities/${communityId}/ideas`)
       const data = await response.json()
 
       if (response.ok) {
+        // 直接更新狀態，滾動位置恢復由 useEffect 處理
         setIdeas(data)
       } else {
         console.error('載入想法列表失敗:', data.error)
@@ -1162,7 +1277,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       }
 
       // 重新載入想法列表
-      await loadIdeas()
+      await loadIdeas(true) // 保留滾動位置
       setIsAddIdeaModalOpen(false)
       setExtendingFromIdeaId(null) // 清除延伸來源
       alert('建立想法成功！')
@@ -1173,6 +1288,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   }
 
   const handleEditIdea = (ideaId: string) => {
+    // 保存當前滾動位置
+    const container = document.getElementById('ideas-container')
+    if (container) {
+      savedScrollLeftRef.current = container.scrollLeft
+    }
+    
     const idea = ideas.find((i) => i.id === ideaId)
     if (idea) {
       setEditingIdea(idea)
@@ -1213,8 +1334,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         throw new Error(data.error || '更新想法失敗')
       }
 
-      // 重新載入想法列表
-      await loadIdeas()
+      // 重新載入想法列表（保留滾動位置）
+      await loadIdeas(true)
       setEditingIdea(null)
       setIsEditIdeaModalOpen(false)
       alert('更新想法成功！')
@@ -1243,8 +1364,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           throw new Error(data.error || '刪除想法失敗')
         }
 
-        // 重新載入想法列表
-        await loadIdeas()
+        // 重新載入想法列表（保留滾動位置）
+        await loadIdeas(true)
         setEditingIdea(null)
         setIsEditIdeaModalOpen(false)
         alert('想法已刪除')
@@ -1271,6 +1392,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   const handleCloseEditIdeaModal = () => {
     setIsEditIdeaModalOpen(false)
     setEditingIdea(null)
+    // 滾動位置恢復由 useEffect 處理
   }
 
   const handleConvergenceSubmit = async (data: {
@@ -1322,7 +1444,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       }
 
       // 重新載入想法列表
-      await loadIdeas()
+      await loadIdeas(true) // 保留滾動位置
       setIsConvergenceModalOpen(false)
       alert(`已收斂 ${data.selectedIdeaIds.length} 個想法節點`)
     } catch (error: any) {
@@ -1331,31 +1453,102 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }
 
-  const handleIdeaPositionChange = async (ideaId: string, position: { x: number; y: number }) => {
-    if (!userId || !userAccount) return
+  // 處理自定義水平卷軸拖動（支持滑鼠和觸控）
+  const handleScrollbarDrag = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    const container = document.getElementById('ideas-container')
+    if (!container || !scrollbarRef.current) return
 
-    // 檢查使用者是否為想法的建立者
+    const scrollbarRect = scrollbarRef.current.getBoundingClientRect()
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+    const clickX = clientX - scrollbarRect.left
+    const percentage = Math.max(0, Math.min(1, clickX / scrollbarRect.width))
+    
+    const maxScroll = scrollInfo.scrollWidth - scrollInfo.clientWidth
+    container.scrollLeft = percentage * maxScroll
+  }
+
+  const handleScrollbarClick = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (isDraggingScrollbar) return
+    
+    const container = document.getElementById('ideas-container')
+    if (!container || !scrollbarRef.current) return
+
+    const scrollbarRect = scrollbarRef.current.getBoundingClientRect()
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+    const clickX = clientX - scrollbarRect.left
+    const percentage = Math.max(0, Math.min(1, clickX / scrollbarRect.width))
+    
+    const maxScroll = scrollInfo.scrollWidth - scrollInfo.clientWidth
+    container.scrollLeft = percentage * maxScroll
+  }
+
+  // 穩定 hasHorizontalScroll 狀態，避免頻繁切換
+  useEffect(() => {
+    const shouldShow = scrollInfo.hasHorizontalScroll && scrollInfo.scrollWidth > scrollInfo.clientWidth + 10
+    // 使用更長的延遲和更寬鬆的閾值，避免頻繁切換
+    if (shouldShow !== prevHasHorizontalScrollRef.current) {
+      const timeoutId = setTimeout(() => {
+        // 再次確認，避免在延遲期間狀態又改變
+        const currentShouldShow = scrollInfo.hasHorizontalScroll && scrollInfo.scrollWidth > scrollInfo.clientWidth + 10
+        if (currentShouldShow === shouldShow) {
+          prevHasHorizontalScrollRef.current = shouldShow
+        }
+      }, 500) // 500ms 延遲，大幅減少閃爍
+      return () => clearTimeout(timeoutId)
+    }
+  }, [scrollInfo.hasHorizontalScroll, scrollInfo.scrollWidth, scrollInfo.clientWidth])
+
+  // 監聽卷軸拖動（支持滑鼠和觸控）
+  useEffect(() => {
+    if (!isDraggingScrollbar) return
+
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      const container = document.getElementById('ideas-container')
+      if (!container || !scrollbarRef.current) return
+
+      const scrollbarRect = scrollbarRef.current.getBoundingClientRect()
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+      const clickX = clientX - scrollbarRect.left
+      const percentage = Math.max(0, Math.min(1, clickX / scrollbarRect.width))
+      
+      const maxScroll = scrollInfo.scrollWidth - scrollInfo.clientWidth
+      container.scrollLeft = percentage * maxScroll
+    }
+
+    const handleEnd = () => {
+      setIsDraggingScrollbar(false)
+    }
+
+    document.addEventListener('mousemove', handleMove)
+    document.addEventListener('mouseup', handleEnd)
+    document.addEventListener('touchmove', handleMove, { passive: false })
+    document.addEventListener('touchend', handleEnd)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMove)
+      document.removeEventListener('mouseup', handleEnd)
+      document.removeEventListener('touchmove', handleMove)
+      document.removeEventListener('touchend', handleEnd)
+    }
+  }, [isDraggingScrollbar, scrollInfo])
+
+  const handleIdeaPositionChange = async (ideaId: string, position: { x: number; y: number }) => {
+    if (!userId) return
+
+    // 移除權限檢查：所有用戶都可以拖移任何想法卡片
     const idea = ideas.find((i) => i.id === ideaId)
     if (!idea) return
-
-    // 比較建立者帳號和當前使用者帳號
-    if (idea.creatorAccount && idea.creatorAccount !== userAccount) {
-      // 不是建立者，不允許移動，恢復到原始位置
-      const originalIdea = ideas.find((i) => i.id === ideaId)
-      if (originalIdea && originalIdea.position) {
-        setIdeas((prev) =>
-          prev.map((idea) =>
-            idea.id === ideaId ? { ...idea, position: originalIdea.position } : idea
-          )
-        )
-      }
-      return // 靜默返回，不顯示錯誤訊息
-    }
 
     // 限制卡片不能移動到邊界線上方（y 不能小於 0）
     const constrainedPosition = {
       x: position.x,
       y: Math.max(0, position.y)
+    }
+
+    // 在更新狀態前，先保存當前滾動位置（防止拖動時重置）
+    const container = document.getElementById('ideas-container')
+    if (container) {
+      savedScrollLeftRef.current = container.scrollLeft
     }
 
     // 先更新本地狀態（即時反饋）
@@ -1399,7 +1592,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           if (response.status === 403) {
             // 靜默處理，不記錄錯誤
             // 恢復到最後已知的有效位置
-            await loadIdeas()
+            await loadIdeas(true) // 保留滾動位置
             return
           }
           
@@ -1409,7 +1602,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
             console.warn('更新想法位置失敗:', data.error || '未知錯誤')
           }
           // 恢復到最後已知的有效位置
-          await loadIdeas()
+          await loadIdeas(true) // 保留滾動位置
           return
         }
 
@@ -1418,7 +1611,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       } catch (error) {
         console.error('更新想法位置錯誤:', error)
         // 如果失敗，重新載入想法列表以恢復正確位置
-        await loadIdeas()
+        await loadIdeas(true) // 保留滾動位置
       } finally {
         positionUpdateTimeoutRef.current.delete(ideaId)
       }
@@ -1429,6 +1622,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
   const handleIdeaRotationChange = async (ideaId: string, rotation: number) => {
     if (!userId) return
+
+    // 在更新狀態前，先保存當前滾動位置（防止旋轉時重置）
+    const container = document.getElementById('ideas-container')
+    if (container) {
+      savedScrollLeftRef.current = container.scrollLeft
+    }
 
     // 先更新本地狀態（即時反饋）
     setIdeas((prev) =>
@@ -1456,7 +1655,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     } catch (error) {
       console.error('更新想法旋轉錯誤:', error)
       // 如果失敗，重新載入想法列表
-      await loadIdeas()
+      await loadIdeas(true) // 保留滾動位置
     }
   }
 
@@ -1819,14 +2018,14 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   }
 
   return (
-    <div className="w-screen h-screen min-w-[1280px] min-h-[800px] bg-[#F5F3FA] flex">
-      {/* 左側導航欄 */}
-      <div className="w-[80px] bg-[#FAFAFA] flex flex-col items-center py-8 gap-6">
+    <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
+      {/* 左側導航欄 - 手機版隱藏，桌面版顯示 */}
+      <div className="hidden md:flex w-[80px] bg-[#FAFAFA] flex-col items-center py-8 gap-6 flex-shrink-0">
         {/* 導航選項 */}
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabChange(tab.id as TabType)}
             className={`w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
               activeTab === tab.id
                 ? 'bg-purple-100 text-purple-600'
@@ -2060,9 +2259,9 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       </div>
 
       {/* 主要內容區 */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col pb-16 md:pb-0">
         {/* Header */}
-        <div className="bg-[#FAFAFA] px-8 py-3 flex items-center justify-between">
+        <div className="bg-[#FAFAFA] px-4 sm:px-6 md:px-8 py-3 flex items-center justify-between">
           {/* 左側：社群圖標和名稱（可點擊返回） */}
           <button
             onClick={onBack}
@@ -2163,7 +2362,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         </div>
 
         {/* 內容區 */}
-        <div className="flex-1 bg-[#FEFBFF] px-12 py-8">
+        <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-6 md:px-12 py-4 md:py-8">
           {/* 標題欄 */}
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-2xl font-bold text-[#6D28D9]">
@@ -2395,45 +2594,45 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               </DndContext>
             )}
             {activeTab === 'history' && (
-              <div className="flex-1 px-8 py-6">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex-1 py-4 md:py-6 overflow-x-auto overflow-y-auto w-full" style={{ paddingLeft: '1vw', paddingRight: '1vw' }}>
+                <div className="bg-white min-w-0 w-full" style={{ padding: '1.5vw' }}>
                   {/* 圖表切換按鈕 */}
-                  <div className="flex gap-3 mb-6">
+                  <div className="flex flex-row gap-2 sm:gap-3 mb-4 sm:mb-6 overflow-x-auto">
                     <button
                       onClick={() => setActiveHistoryChart('contribution')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                         activeHistoryChart === 'contribution'
                           ? 'bg-[rgba(138,99,210,0.9)] text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      社群想法貢獻數量圖
+                      貢獻圖
                     </button>
                     <button
                       onClick={() => setActiveHistoryChart('network')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                         activeHistoryChart === 'network'
                           ? 'bg-[rgba(138,99,210,0.9)] text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      社群網絡圖
+                      網絡圖
                     </button>
                     <button
                       onClick={() => setActiveHistoryChart('trend')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                         activeHistoryChart === 'trend'
                           ? 'bg-[rgba(138,99,210,0.9)] text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      社群想法貢獻數量變化圖表
+                      變化圖
                     </button>
                   </div>
 
                   {/* 根據選中的圖表類型顯示對應內容 */}
                   {communityId && (
-                    <div>
+                    <div className="overflow-x-auto overflow-y-auto min-w-0 w-full">
                       {activeHistoryChart === 'contribution' && (
                         <IdeaContributionChart communityId={communityId} />
                       )}
@@ -2455,7 +2654,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               </div>
             )}
             {activeTab === 'management' && (
-              <div className="flex-1 px-8 py-6">
+              <div className="flex-1 px-4 sm:px-6 md:px-8 py-4 md:py-6">
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   {/* 標題 */}
                   <h2 className="text-xl font-semibold text-gray-800 mb-6">
@@ -2591,7 +2790,10 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
           {/* 想法牆（獨立容器，無白色背景） */}
           {activeTab === 'ideas' && (
-            <div className="flex-1 relative overflow-y-auto -mt-6">
+            <div className="flex-1 relative overflow-x-auto overflow-y-auto -mt-6" style={{
+              // 手機版：為底部導航欄留出空間，確保底部卷軸可見
+              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 80px)',
+            }}>
               {/* 想法收斂按鈕 */}
               <button 
                 onClick={() => setIsConvergenceModalOpen(true)}
@@ -2603,56 +2805,108 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               {/* 邊界線 */}
               <div className="border-t-2 border-gray-300 mb-4"></div>
 
-              {/* 想法內容區域 */}
-              <div className="px-12 relative" id="ideas-container" style={{ minHeight: '600px' }}>
-                {ideas.length === 0 ? (
-                  <div className="text-gray-400 text-center py-12">
-                    <p>目前還沒有想法</p>
-        </div>
-                ) : (
-                  <>
-                    {/* 想法卡片 - 自由拖拉布局 */}
-                    <div className="relative" style={{ minHeight: '600px' }}>
-                      {ideas.map((idea, index) => {
-                        // 根據 creatorName（nickname）從 communityMembers 中找到對應的 userId
-                        const creatorMember = communityMembers.find(
-                          (m) => m.name === idea.creatorName
-                        )
-                        const creatorId = creatorMember?.id || undefined
-                        
-                        return (
-                          <DraggableIdeaCard
-                            key={idea.id}
-                            id={idea.id}
-                            index={index}
-                            stage={idea.stage}
-                            title={idea.title}
-                            createdDate={idea.createdDate}
-                            createdTime={idea.createdTime}
-                            creatorName={idea.creatorName}
-                            creatorAvatar={idea.creatorAvatar}
-                            creatorId={creatorId}
-                            position={idea.position || { x: 50 + index * 200, y: 50 }}
-                            rotation={idea.rotation || 0}
-                            onClick={() => handleEditIdea(idea.id)}
-                            onPositionChange={handleIdeaPositionChange}
-                            onRotationChange={handleIdeaRotationChange}
-                            isConvergence={idea.isConvergence}
-                          />
-                        )
-                      })}
+              {/* 自定義水平卷軸 - 只在手機版顯示，放在想法收斂按鈕下方 */}
+              {/* 使用穩定的判斷邏輯，避免頻繁切換 */}
+              {isMobile && prevHasHorizontalScrollRef.current && (
+                <div className="mb-2 px-0 sm:px-6 md:px-12">
+                  <div
+                    ref={scrollbarRef}
+                    className="relative w-full h-2 bg-gray-200 rounded-full cursor-pointer touch-none"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      setIsDraggingScrollbar(true)
+                      handleScrollbarDrag(e)
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault()
+                      setIsDraggingScrollbar(true)
+                      handleScrollbarDrag(e)
+                    }}
+                    onClick={(e) => {
+                      if (!isDraggingScrollbar) {
+                        handleScrollbarClick(e)
+                      }
+                    }}
+                    onTouchEnd={(e) => {
+                      if (!isDraggingScrollbar) {
+                        handleScrollbarClick(e)
+                      }
+                    }}
+                  >
+                    <div
+                      className="absolute top-0 h-2 rounded-full transition-all"
+                      style={{
+                        backgroundColor: '#d1d5db', // 使用灰色，與垂直卷軸顏色一致
+                        left: scrollInfo.scrollWidth > scrollInfo.clientWidth
+                          ? `${(scrollInfo.scrollLeft / Math.max(1, scrollInfo.scrollWidth - scrollInfo.clientWidth)) * 100}%`
+                          : '0%',
+                        width: `${Math.min(100, (scrollInfo.clientWidth / Math.max(1, scrollInfo.scrollWidth)) * 100)}%`,
+                        minWidth: '20px',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 想法內容區域 - 使用可縮放容器 */}
+              <div className="px-0 sm:px-6 md:px-12 min-w-max">
+                <ZoomableIdeasContainer 
+                  containerId="ideas-container"
+                  onScrollInfoChange={setScrollInfo}
+                >
+                  {ideas.length === 0 ? (
+                    <div className="text-gray-400 text-center py-12">
+                      <p>目前還沒有想法</p>
                     </div>
-                    
-                    {/* 箭頭連接線層 - 使用單一 SVG 覆蓋層 */}
-                    <ArrowsOverlay ideas={ideas} />
-                  </>
-                )}
+                  ) : (
+                    <>
+                      {/* 想法卡片 - 自由拖拉布局 */}
+                      <div className="relative" style={{ minHeight: '600px', minWidth: 'max-content', width: 'max-content' }}>
+                        {ideas.map((idea, index) => {
+                          // 根據 creatorName（nickname）從 communityMembers 中找到對應的 userId
+                          const creatorMember = communityMembers.find(
+                            (m) => m.name === idea.creatorName
+                          )
+                          const creatorId = creatorMember?.id || undefined
+                          
+                          return (
+                            <DraggableIdeaCard
+                              key={idea.id}
+                              id={idea.id}
+                              index={index}
+                              stage={idea.stage}
+                              title={idea.title}
+                              createdDate={idea.createdDate}
+                              createdTime={idea.createdTime}
+                              creatorName={idea.creatorName}
+                              creatorAvatar={idea.creatorAvatar}
+                              creatorId={creatorId}
+                              position={idea.position || { x: 50 + index * 200, y: 50 }}
+                              rotation={idea.rotation || 0}
+                              onClick={() => handleEditIdea(idea.id)}
+                              onPositionChange={handleIdeaPositionChange}
+                              onRotationChange={handleIdeaRotationChange}
+                              isConvergence={idea.isConvergence}
+                            />
+                          )
+                        })}
+                      </div>
+                      
+                      {/* 箭頭連接線層 - 使用單一 SVG 覆蓋層 */}
+                      <ArrowsOverlay ideas={ideas} />
+                    </>
+                  )}
+                </ZoomableIdeasContainer>
               </div>
 
-              {/* 右下角浮動新增按鈕 */}
+              {/* 右下角浮動新增按鈕 - 手機版和桌面版都顯示 */}
               <button
                 onClick={() => setIsAddIdeaModalOpen(true)}
-                className="fixed bottom-8 right-8 w-14 h-14 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] rounded-full shadow-lg flex items-center justify-center text-white text-2xl font-light transition-colors z-10"
+                className="fixed right-4 sm:right-8 w-12 h-12 sm:w-14 sm:h-14 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] rounded-full shadow-lg flex items-center justify-center text-white text-2xl font-light transition-colors z-50"
+                style={{ 
+                  // 確保按鈕在手機版上也能顯示，避免被底部導航欄遮擋
+                  bottom: 'calc(env(safe-area-inset-bottom, 0px) + 80px)', // 手機版：底部導航欄高度約 80px
+                }}
               >
                 +
               </button>
@@ -2784,6 +3038,124 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         }
         onRestore={handleRestoreVersion}
       />
+
+      {/* 手機版底部導航欄 */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex items-center justify-around py-2 z-50">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => handleTabChange(tab.id as TabType)}
+            className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-colors ${
+              activeTab === tab.id
+                ? 'text-purple-600'
+                : 'text-gray-600'
+            }`}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className={activeTab === tab.id ? 'text-purple-600' : 'text-gray-600'}
+            >
+              {tab.id === 'resources' && (
+                <path
+                  d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              {tab.id === 'activities' && (
+                <>
+                  <path
+                    d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 2V8H20"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'ideas' && (
+                <path
+                  d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              {tab.id === 'teamwork' && (
+                <>
+                  <path
+                    d="M9 11L12 14L22 4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M21 12V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V5C3 3.89543 3.89543 3 5 3H16"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'history' && (
+                <>
+                  <path
+                    d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 2V8H20"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'management' && (
+                <>
+                  <path
+                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle
+                    cx="9"
+                    cy="7"
+                    r="4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+            </svg>
+            <span className="text-xs mt-1">{tab.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

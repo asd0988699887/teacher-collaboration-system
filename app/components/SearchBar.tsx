@@ -22,7 +22,7 @@ export default function SearchBar({
   }
 
   return (
-    <div className="w-[300px] h-[35px]">
+    <div className="w-full max-w-[300px] h-[35px]">
       <div className="relative w-full h-full">
         <input
           type="text"
@@ -31,11 +31,11 @@ export default function SearchBar({
           placeholder={placeholder}
           className="
             w-full h-full
-            px-4 py-2
+            px-3 md:px-4 py-2
             bg-white
             border border-[#E5E7EB]
             rounded-xl
-            text-[14px] font-medium text-gray-900
+            text-sm md:text-[14px] font-medium text-gray-900
             placeholder:text-[#6B7280] placeholder:text-center
             focus:outline-none
             focus:border-purple-400

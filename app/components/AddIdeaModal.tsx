@@ -36,6 +36,12 @@ export default function AddIdeaModal({
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // 拖移相關狀態
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const modalRef = useRef<HTMLDivElement>(null)
 
   // 預設的文字按鈕
   const presetButtons = [
@@ -77,15 +83,51 @@ export default function AddIdeaModal({
     loadActivities()
   }, [communityId, isOpen])
 
-  // 當模態框打開時，重置表單
+  // 當模態框打開時，重置表單和位置
   useEffect(() => {
     if (isOpen) {
       setSelectedActivityId('')
       setStage('')
       setTitle('')
       setContent('')
+      // 重置位置到中心（但允許用戶拖移）
+      setPosition({ x: 0, y: 0 })
     }
   }, [isOpen])
+
+  // 處理拖移開始
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return // 只處理左鍵
+    setIsDragging(true)
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    })
+    e.preventDefault()
+  }
+
+  // 處理拖移移動
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = e.clientX - dragStart.x
+      const newY = e.clientY - dragStart.y
+      setPosition({ x: newX, y: newY })
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, dragStart])
 
   // 處理預設按鈕點擊
   const handlePresetButtonClick = (text: string) => {
@@ -133,18 +175,29 @@ export default function AddIdeaModal({
         onClick={onClose}
       />
       {/* 模態框內容 */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-2 sm:p-4 pointer-events-none overflow-y-auto">
         <div
-          className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          ref={modalRef}
+          className="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col pointer-events-auto my-2 sm:my-0"
           onClick={(e) => e.stopPropagation()}
+          style={{
+            transform: `translate(${position.x}px, ${position.y}px)`,
+            cursor: isDragging ? 'grabbing' : 'default',
+            maxHeight: 'calc(100vh - 1rem - 80px)', // 手機版：減去底部導航欄高度
+            height: 'auto', // 改為 auto，讓內容決定高度
+            minHeight: 'min(calc(100vh - 1rem - 80px), 500px)', // 最小高度
+          }}
         >
-          {/* 標題 */}
-          <div className="px-6 py-4 border-b border-gray-200">
+          {/* 標題（可拖移區域） */}
+          <div
+            className="px-6 py-4 border-b border-gray-200 cursor-move select-none"
+            onMouseDown={handleMouseDown}
+          >
             <h2 className="text-xl font-semibold text-gray-800">新增想法</h2>
           </div>
 
-          {/* 表單內容 */}
-          <div className="px-6 py-4">
+          {/* 表單內容 - 可滾動區域 */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
             <div className="space-y-6">
               {/* 共備活動 */}
               <div>
@@ -201,15 +254,15 @@ export default function AddIdeaModal({
               </div>
 
               {/* 內容區域 */}
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 {/* 左側：預設按鈕 */}
-                <div className="flex flex-col gap-2 w-48 flex-shrink-0">
+                <div className="flex flex-row sm:flex-col gap-2 sm:w-40 w-full sm:flex-shrink-0 overflow-x-auto sm:overflow-x-visible">
                   {presetButtons.map((buttonText, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => handlePresetButtonClick(buttonText)}
-                      className="px-4 py-2 bg-white border border-purple-300 text-[#6D28D9] hover:bg-purple-50 text-sm rounded-lg font-medium transition-colors text-left"
+                      className="px-3 sm:px-4 py-2 bg-white border border-purple-300 text-[#6D28D9] hover:bg-purple-50 text-xs sm:text-sm rounded-lg font-medium transition-colors text-left whitespace-nowrap flex-shrink-0"
                     >
                       {buttonText}
                     </button>
@@ -217,7 +270,7 @@ export default function AddIdeaModal({
                 </div>
 
                 {/* 右側：內容輸入框 */}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     內容
                   </label>

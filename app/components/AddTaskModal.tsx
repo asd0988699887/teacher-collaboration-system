@@ -38,6 +38,11 @@ export default function AddTaskModal({
   const [assignees, setAssignees] = useState<string[]>(initialData?.assignees || [])
   const [assigneeInput, setAssigneeInput] = useState('')
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false)
+  
+  // 拖移相關狀態
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 
   // 定義一組色調差異明顯的顏色（用於區分不同使用者）
   const USER_COLORS = [
@@ -70,7 +75,7 @@ export default function AddTaskModal({
     return USER_COLORS[index]
   }
 
-  // 當模態框打開或 initialData 改變時，重置表單
+  // 當模態框打開或 initialData 改變時，重置表單和位置
   useEffect(() => {
     if (isOpen) {
       if (editMode && initialData) {
@@ -88,8 +93,44 @@ export default function AddTaskModal({
       }
       setAssigneeInput('')
       setShowAssigneeDropdown(false)
+      // 重置位置到中心（但允許用戶拖移）
+      setPosition({ x: 0, y: 0 })
     }
   }, [isOpen, editMode, initialData])
+
+  // 處理拖移開始
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return // 只處理左鍵
+    setIsDragging(true)
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    })
+    e.preventDefault()
+  }
+
+  // 處理拖移移動
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = e.clientX - dragStart.x
+      const newY = e.clientY - dragStart.y
+      setPosition({ x: newX, y: newY })
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, dragStart])
 
   const modalRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -198,21 +239,32 @@ export default function AddTaskModal({
       />
 
       {/* 對話框主體 */}
-      <div className="fixed inset-0 flex items-center justify-center z-50">
+      <div className="fixed inset-0 flex items-start sm:items-center justify-center z-[100] pointer-events-none p-2 sm:p-4 overflow-y-auto">
         <div
           ref={modalRef}
-          className="bg-white rounded-lg shadow-xl w-[600px] max-h-[80vh] overflow-y-auto"
+          className="bg-white rounded-lg shadow-xl w-full max-w-[600px] flex flex-col pointer-events-auto my-2 sm:my-0"
           onClick={(e) => e.stopPropagation()}
+          style={{
+            transform: `translate(${position.x}px, ${position.y}px)`,
+            cursor: isDragging ? 'grabbing' : 'default',
+            maxHeight: 'calc(100vh - 1rem - 80px)', // 手機版：減去底部導航欄高度
+            height: 'auto', // 改為 auto，讓內容決定高度
+            minHeight: 'min(calc(100vh - 1rem - 80px), 400px)', // 最小高度
+          }}
         >
-        {/* 標題 */}
-        <div className="px-6 py-4 border-b border-gray-200">
+        {/* 標題（可拖移區域） */}
+        <div
+          className="px-6 py-4 border-b border-gray-200 cursor-move select-none"
+          onMouseDown={handleMouseDown}
+        >
           <h2 className="text-xl font-semibold text-gray-800">
             {editMode ? '編輯任務' : '新增任務'}
           </h2>
         </div>
 
-        {/* 表單內容 */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {/* 表單內容 - 可滾動區域 */}
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* 任務類別 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -398,8 +450,10 @@ export default function AddTaskModal({
             </div>
           </div>
 
-          {/* 按鈕 */}
-          <div className="flex justify-end gap-3 pt-4">
+          </div>
+          
+          {/* 按鈕 - 固定在底部 */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-end gap-3 flex-shrink-0">
             <button
               type="button"
               onClick={handleClose}

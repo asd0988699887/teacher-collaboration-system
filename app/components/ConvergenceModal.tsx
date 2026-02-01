@@ -230,14 +230,18 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
       />
 
       {/* 模態框主體 */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-2 sm:p-4 pointer-events-none overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl flex flex-col pointer-events-auto my-2 sm:my-0" style={{
+          maxHeight: 'calc(100vh - 1rem - 80px)',
+          height: 'auto',
+          minHeight: 'min(calc(100vh - 1rem - 80px), 500px)',
+        }}>
           {/* 標題列 */}
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
             <h2 className="text-xl font-semibold text-gray-800">想法收斂</h2>
           </div>
 
-          <div className="p-6">
+          <div className="p-6 flex-1 overflow-y-auto">
             {/* 活動名稱 */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -407,22 +411,23 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
               </div>
             </div>
 
-            {/* 底部按鈕 */}
-            <div className="flex items-center justify-between pt-4 border-t">
-              <button
-                onClick={onClose}
-                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                返回
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!selectedStage || selectedIdeaIds.size === 0}
-                className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg hover:bg-[rgba(138,99,210,1)] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                開始收斂
-              </button>
-            </div>
+          </div>
+
+          {/* 底部按鈕 - 固定在底部 */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between flex-shrink-0">
+            <button
+              onClick={onClose}
+              className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              返回
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!selectedStage || selectedIdeaIds.size === 0}
+              className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg hover:bg-[rgba(138,99,210,1)] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            >
+              開始收斂
+            </button>
           </div>
         </div>
       </div>

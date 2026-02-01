@@ -47,6 +47,12 @@ export default function EditIdeaModal({
   const [content, setContent] = useState('')
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
+  
+  // 拖移相關狀態
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const modalRef = useRef<HTMLDivElement>(null)
 
   // 載入活動列表
   useEffect(() => {
@@ -77,15 +83,51 @@ export default function EditIdeaModal({
     loadActivities()
   }, [communityId, isOpen])
 
-  // 當模態框打開時，載入初始資料
+  // 當模態框打開時，載入初始資料和重置位置
   useEffect(() => {
     if (isOpen) {
       setSelectedActivityId(initialData.activityId || '')
       setStage(initialData.stage)
       setTitle(initialData.title)
       setContent(initialData.content)
+      // 重置位置到中心（但允許用戶拖移）
+      setPosition({ x: 0, y: 0 })
     }
   }, [isOpen, initialData])
+
+  // 處理拖移開始
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return // 只處理左鍵
+    setIsDragging(true)
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    })
+    e.preventDefault()
+  }
+
+  // 處理拖移移動
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = e.clientX - dragStart.x
+      const newY = e.clientY - dragStart.y
+      setPosition({ x: newX, y: newY })
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, dragStart])
 
   // 處理儲存
   const handleSave = () => {
@@ -109,20 +151,31 @@ export default function EditIdeaModal({
         onClick={onClose}
       />
       {/* 模態框內容 */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-2 sm:p-4 pointer-events-none overflow-y-auto">
         <div
-          className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          ref={modalRef}
+          className="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col pointer-events-auto my-2 sm:my-0"
           onClick={(e) => e.stopPropagation()}
+          style={{
+            transform: `translate(${position.x}px, ${position.y}px)`,
+            cursor: isDragging ? 'grabbing' : 'default',
+            maxHeight: 'calc(100vh - 1rem - 80px)', // 手機版：減去底部導航欄高度
+            height: 'auto', // 改為 auto，讓內容決定高度
+            minHeight: 'min(calc(100vh - 1rem - 80px), 500px)', // 最小高度
+          }}
         >
-          {/* 標題 */}
-          <div className="px-6 py-4 border-b border-gray-200">
+          {/* 標題（可拖移區域） */}
+          <div
+            className="px-6 py-4 border-b border-gray-200 cursor-move select-none"
+            onMouseDown={handleMouseDown}
+          >
             <h2 className="text-xl font-semibold text-gray-800">
               {isConvergence ? '收斂內容' : '檢視節點'}
             </h2>
           </div>
 
-          {/* 表單內容 */}
-          <div className="px-6 py-4">
+          {/* 表單內容 - 可滾動區域 */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
             <div className="space-y-6">
               {/* 活動名稱 */}
               <div>

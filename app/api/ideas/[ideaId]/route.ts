@@ -24,7 +24,7 @@ export async function PUT(
       )
     }
 
-    // 檢查使用者是否為想法建立者
+    // 檢查想法是否存在
     const ideas = await query(
       'SELECT creator_id, community_id FROM ideas WHERE id = ?',
       [ideaId]
@@ -37,9 +37,18 @@ export async function PUT(
       )
     }
 
-    if (ideas[0].creator_id !== userId) {
+    // 判斷是否只更新位置或旋轉（允許所有用戶操作）
+    const isOnlyPositionOrRotation = 
+      (position !== undefined || rotation !== undefined) &&
+      activityId === undefined &&
+      stage === undefined &&
+      title === undefined &&
+      content === undefined
+
+    // 如果不是只更新位置/旋轉，則需要檢查權限（只有建立者可以修改其他欄位）
+    if (!isOnlyPositionOrRotation && ideas[0].creator_id !== userId) {
       return NextResponse.json(
-        { error: '只有建立者可以修改想法' },
+        { error: '只有建立者可以修改想法的內容' },
         { status: 403 }
       )
     }

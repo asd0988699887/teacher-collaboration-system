@@ -105,11 +105,11 @@ export default function Header({ communityId }: HeaderProps = {}) {
   }
 
   return (
-    <header className="w-full bg-[#FAFAFA] px-16 py-3 flex items-center justify-between relative">
+    <header className="w-full bg-[#FAFAFA] px-4 sm:px-8 md:px-16 py-3 flex items-center justify-between relative">
       {/* Logo 區域 */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         {/* 共備社群 Icon - 使用現代化的協作圖標 */}
-        <div className="w-[30px] h-[30px] bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center shadow-md">
+        <div className="w-[24px] h-[24px] md:w-[30px] md:h-[30px] bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
           <svg
             width="18"
             height="18"
@@ -143,7 +143,7 @@ export default function Header({ communityId }: HeaderProps = {}) {
             />
           </svg>
         </div>
-        <span className="text-lg font-semibold text-gray-800">共備社群</span>
+        <span className="text-base md:text-lg font-semibold text-gray-800 whitespace-nowrap">共備社群</span>
       </div>
 
       {/* 右側使用者區域 */}

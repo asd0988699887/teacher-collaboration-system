@@ -113,9 +113,35 @@ export async function GET(
       receivedReplyMap.set(stat.userId, parseInt(stat.receivedReplyCount) || 0)
     })
 
+    // 7. 獲取保存的節點位置（如果有）
+    // 如果表不存在，優雅地處理，不影響主要功能
+    let savedPositions: any[] = []
+    try {
+      savedPositions = await query(
+        `SELECT user_id, position_x, position_y
+         FROM network_graph_positions
+         WHERE community_id = ?`,
+        [communityId]
+      ) as any[]
+    } catch (positionError: any) {
+      // 如果表不存在或其他錯誤，記錄但不中斷流程
+      console.warn('獲取節點位置失敗（表可能尚未創建）:', positionError.message)
+      savedPositions = []
+    }
+
+    const positionMap = new Map<string, { x: number; y: number }>()
+    savedPositions.forEach((pos: any) => {
+      positionMap.set(pos.user_id, {
+        x: parseFloat(pos.position_x),
+        y: parseFloat(pos.position_y),
+      })
+    })
+
     // 構建節點資料
     const nodes = members.map((member: any) => {
       const userId = member.userId
+      const savedPosition = positionMap.get(userId)
+      
       return {
         id: userId,
         label: member.nickname || member.account || '未知使用者',
@@ -124,6 +150,8 @@ export async function GET(
         createdCount: createdMap.get(userId) || 0,
         replyCount: replyMap.get(userId) || 0,
         receivedReplyCount: receivedReplyMap.get(userId) || 0,
+        // 如果有保存的位置，添加到節點資料中
+        savedPosition: savedPosition || null,
       }
     })
 

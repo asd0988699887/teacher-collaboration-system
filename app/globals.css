@@ -58,3 +58,44 @@ body > * {
     display: none !important;
   }
 }
+
+/* 想法牆容器的卷軸樣式 */
+#ideas-container {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+/* Chrome, Safari, Edge */
+#ideas-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#ideas-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#ideas-container::-webkit-scrollbar-thumb {
+  background: #d1d5db; /* 灰色 */
+  border-radius: 4px;
+}
+
+/* 手機版：隱藏原生水平卷軸（使用自定義卷軸） */
+@media (max-width: 767px) {
+  #ideas-container {
+    /* Firefox - 隱藏水平卷軸 */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  #ideas-container::-webkit-scrollbar:horizontal {
+    height: 0 !important;
+    display: none !important;
+  }
+
+  #ideas-container::-webkit-scrollbar {
+    width: 8px; /* 只顯示垂直卷軸 */
+    height: 0; /* 隱藏水平卷軸 */
+  }
+}

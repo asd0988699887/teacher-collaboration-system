@@ -3268,9 +3268,9 @@ export default function CourseObjectives({
   ]
 
   return (
-    <div className="w-screen h-screen min-w-[1280px] min-h-[800px] bg-[#F5F3FA] flex">
-      {/* 左側導航欄 */}
-      <div className="w-[80px] bg-[#FAFAFA] flex flex-col items-center py-8 gap-6">
+    <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
+      {/* 左側導航欄 - 手機版隱藏，桌面版顯示 */}
+      <div className="hidden md:flex w-[80px] bg-[#FAFAFA] flex-col items-center py-8 gap-6 flex-shrink-0">
         {/* 導航選項 */}
         {sidebarTabs.map((tab) => (
           <button
@@ -3515,7 +3515,7 @@ export default function CourseObjectives({
       {/* 主要內容區 */}
       <div className="flex-1 flex flex-col">
         {/* 返回按鈕和活動名稱 */}
-        <div className="px-16 pt-8 pb-4">
+        <div className="px-4 sm:px-6 md:px-16 pt-6 md:pt-8 pb-4">
           <button
             onClick={onBack}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
@@ -3541,7 +3541,7 @@ export default function CourseObjectives({
         </div>
 
         {/* 主要內容區 */}
-        <div className="flex-1 bg-[#FEFBFF] px-12 py-8 overflow-y-auto">
+        <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-6 md:px-12 py-4 md:py-8 overflow-y-auto">
           <div className="flex gap-8">
             {/* 左側表單區域 */}
             <div className="flex-1 max-w-3xl">

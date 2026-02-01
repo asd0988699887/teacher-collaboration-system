@@ -116,12 +116,12 @@ export default function IdeaContributionChart({ communityId }: IdeaContributionC
         社群想法貢獻數量圖表
       </h3>
       
-      <div style={{ width: '100%', height: Math.max(400, stats.length * 80) }}>
+      <div style={{ width: '100%', height: Math.max(400, stats.length * 80), marginLeft: '-1.5vw', paddingLeft: '1.5vw' }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
             layout="vertical"
-            margin={{ top: 20, right: 30, left: 120, bottom: 40 }}
+            margin={{ top: 20, right: 30, left: 60, bottom: 40 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis

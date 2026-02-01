@@ -29,7 +29,11 @@ interface IdeaTrendData {
   dateRange: {
     startDate: string
     endDate: string
+    originalStartDate?: string
+    originalEndDate?: string
     days: number
+    isAllData?: boolean
+    isExpanded?: boolean
   }
   userStats: UserTrendStat[]
   communityId: string
@@ -184,7 +188,7 @@ export default function IdeaTrendChart({ communityId }: IdeaTrendChartProps) {
   return (
     <div className="w-full">
       <h3 className="text-lg font-semibold text-gray-800 mb-4">
-        社群想法貢獻數量變化圖表（最近30天）
+        社群想法貢獻數量變化圖表{trendData.dateRange?.isAllData ? '' : '（最近30天）'}
       </h3>
       
       <div style={{ width: '100%', height: Math.max(500, trendData.userStats.length * 60 + 200) }}>
@@ -200,7 +204,19 @@ export default function IdeaTrendChart({ communityId }: IdeaTrendChartProps) {
               angle={-45}
               textAnchor="end"
               height={80}
-              interval="preserveStartEnd" // 只顯示首尾和中間的日期，避免擁擠
+              interval={(() => {
+                // 根據日期範圍長度動態調整X軸間隔
+                const days = trendData.dateRange?.days || chartData.length
+                if (days <= 30) {
+                  return 2 // 30天以內：每2天顯示一個標籤
+                } else if (days <= 90) {
+                  return Math.ceil(days / 18) // 31-90天：約每5天顯示一個標籤（18個標籤）
+                } else if (days <= 180) {
+                  return Math.ceil(days / 18) // 91-180天：約每10天顯示一個標籤（18個標籤）
+                } else {
+                  return Math.ceil(days / 12) // 181天以上：約每30天顯示一個標籤（12個標籤）
+                }
+              })()}
             />
             <YAxis
               label={{ value: '想法數量', angle: -90, position: 'insideLeft' }}
@@ -249,7 +265,12 @@ export default function IdeaTrendChart({ communityId }: IdeaTrendChartProps) {
       {/* 顯示日期範圍 */}
       {trendData.dateRange && (
         <div className="mt-4 text-sm text-gray-500 text-center">
-          日期範圍：{formatDate(trendData.dateRange.startDate)} ~ {formatDate(trendData.dateRange.endDate)}
+          日期範圍：{formatDate(trendData.dateRange.originalStartDate || trendData.dateRange.startDate)} ~ {formatDate(trendData.dateRange.originalEndDate || trendData.dateRange.endDate)}
+          {trendData.dateRange.isExpanded && (
+            <span className="ml-2 text-xs text-gray-400">
+              （圖表已擴展顯示範圍以確保曲線可見）
+            </span>
+          )}
         </div>
       )}
     </div>

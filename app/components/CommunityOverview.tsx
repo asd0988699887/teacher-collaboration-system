@@ -333,23 +333,23 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
 
   // 否則顯示社群總覽頁面
   return (
-    <div className="w-screen h-screen min-w-[1280px] min-h-[800px] bg-[#F5F3FA]">
+    <div className="w-full min-h-screen bg-[#F5F3FA]">
       {/* 畫布 */}
-      <div className="w-full h-full flex flex-col">
+      <div className="w-full min-h-screen flex flex-col">
         {/* Header */}
         <Header />
 
         {/* 主要內容區 */}
-        <div className="flex-1 bg-[#FEFBFF] px-16 pb-16">
+        <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-8 md:px-16 pb-8 md:pb-16">
           {/* 標題與操作按鈕列 */}
-          <div className="flex items-center mb-8 pt-8">
+          <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-0 mb-6 md:mb-8 pt-6 md:pt-8">
             {/* 標題 */}
-            <h1 className="text-[24px] font-bold text-[#6D28D9] leading-[40px]">
+            <h1 className="text-xl md:text-[24px] font-bold text-[#6D28D9] leading-[32px] md:leading-[40px]">
               社群總覽
             </h1>
 
             {/* 搜尋框 - 置中 */}
-            <div className="flex-1 flex justify-center px-8">
+            <div className="flex-1 flex justify-center px-0 md:px-8 order-3 md:order-2">
               <SearchBar
                 placeholder="搜尋社群名稱"
                 value={searchQuery}
@@ -358,7 +358,7 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
             </div>
 
             {/* 右側按鈕群組 */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4 order-2 md:order-3">
               {/* 新增社群按鈕 */}
               <CommunityButton
                 label="新增社群"
