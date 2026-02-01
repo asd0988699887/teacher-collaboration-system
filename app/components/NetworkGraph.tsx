@@ -79,6 +79,8 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
   // 追蹤視圖狀態（縮放比例和平移位置）
   const [viewState, setViewState] = useState({ zoom: 1.0, panX: 0, panY: 0 })
   const viewStateRef = useRef({ zoom: 1.0, panX: 0, panY: 0 })
+  // 用於優化拖動性能的 requestAnimationFrame
+  const dragRafRef = useRef<number | null>(null)
   
   // 檢測是否為觸控設備
   const [isTouchDevice, setIsTouchDevice] = useState(false)
@@ -794,22 +796,39 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             }}
             onNodeDrag={(node) => {
               // 節點拖動時，固定該節點位置，防止力模擬移動它
+              // 直接更新，不使用 requestAnimationFrame，確保即時響應
               const nodeX = typeof node.x === 'number' ? node.x : 0
               const nodeY = typeof node.y === 'number' ? node.y : 0
+              
+              // 直接更新節點固定位置，這是最關鍵的操作，必須即時執行
               node.fx = nodeX
               node.fy = nodeY
               
-              // 更新節點位置追蹤
-              if (node.id) {
-                nodesPositionRef.current.set(node.id, {
-                  x: nodeX,
-                  y: nodeY,
-                  fx: nodeX,
-                  fy: nodeY,
-                })
+              // 使用 requestAnimationFrame 節流更新 Map，減少頻繁操作
+              // 但保持節點位置更新即時，確保拖動流暢
+              if (dragRafRef.current) {
+                cancelAnimationFrame(dragRafRef.current)
               }
+              
+              dragRafRef.current = requestAnimationFrame(() => {
+                // 只在動畫幀中更新位置追蹤，減少 Map 操作頻率
+                if (node.id) {
+                  nodesPositionRef.current.set(node.id, {
+                    x: nodeX,
+                    y: nodeY,
+                    fx: nodeX,
+                    fy: nodeY,
+                  })
+                }
+              })
             }}
             onNodeDragEnd={(node) => {
+              // 清理拖動時的 requestAnimationFrame
+              if (dragRafRef.current) {
+                cancelAnimationFrame(dragRafRef.current)
+                dragRafRef.current = null
+              }
+              
               // 拖動結束時，保持固定位置，不讓力模擬移動它
               // 確保使用最新的 x, y 值來固定節點
               const finalX = typeof node.x === 'number' ? node.x : 0
@@ -817,7 +836,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
               node.fx = finalX
               node.fy = finalY
               
-              // 更新節點位置追蹤
+              // 更新節點位置追蹤（拖動結束時才更新，減少頻繁操作）
               if (node.id) {
                 nodesPositionRef.current.set(node.id, {
                   x: finalX,
@@ -861,14 +880,16 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
               }
               
               // 完全停止力模擬，防止所有節點繼續漂移
-              if (fgRef.current) {
-                try {
-                  // 方法1：停止模擬
-                  const simulation = fgRef.current.d3Force('simulation')
-                  if (simulation) {
-                    simulation.stop() // 完全停止模擬
-                    simulation.alpha(0) // 設置 alpha 為 0，確保停止
-                  }
+              // 使用 requestAnimationFrame 確保在下一幀執行，不阻塞拖動結束的回調
+              requestAnimationFrame(() => {
+                if (fgRef.current) {
+                  try {
+                    // 方法1：停止模擬
+                    const simulation = fgRef.current.d3Force('simulation')
+                    if (simulation) {
+                      simulation.stop() // 完全停止模擬
+                      simulation.alpha(0) // 設置 alpha 為 0，確保停止
+                    }
                   
                   // 方法2：固定所有節點，防止任何節點移動
                   // 使用 graphData state 來獲取所有節點 ID，然後從 ForceGraph2D 獲取實際節點對象
@@ -894,10 +915,11 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                       }
                     })
                   }
-                } catch (e) {
-                  console.warn('停止模擬失敗:', e)
+                  } catch (e) {
+                    console.warn('停止模擬失敗:', e)
+                  }
                 }
-              }
+              })
               
               // 桌面版：節流保存所有節點位置到後端（手機版已在上面立即保存）
               if (!isTouchDevice) {
