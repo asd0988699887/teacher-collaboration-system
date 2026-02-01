@@ -570,13 +570,16 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             viewStateSaveTimeoutRef.current = setTimeout(() => {
               try {
                 const currentZoom = fgRef.current.zoom() || 1.0
-                const pan = fgRef.current.center() || { x: 0, y: 0 }
+                // center() 方法不能用來獲取當前中心點，只能設置中心點
+                // 使用 viewStateRef 中保存的值，或使用默認值
+                const panX = viewStateRef.current.panX || 0
+                const panY = viewStateRef.current.panY || 0
                 viewStateRef.current = {
                   zoom: currentZoom,
-                  panX: pan.x || 0,
-                  panY: pan.y || 0,
+                  panX,
+                  panY,
                 }
-                saveViewState(currentZoom, pan.x || 0, pan.y || 0)
+                saveViewState(currentZoom, panX, panY)
               } catch (e) {
                 console.warn('保存視圖狀態失敗:', e)
               }
