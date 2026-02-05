@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
+import { createNotificationsForCommunity } from '@/lib/notifications'
 
 // GET: 獲取指定階段的留言列表
 export async function GET(
@@ -43,6 +44,7 @@ export async function GET(
         `SELECT 
           cc.id,
           cc.content,
+          cc.author_id AS authorId,
           COALESCE(u.nickname, cc.author_account, '未知使用者') AS authorNickname,
           cc.created_at AS createdAt
         FROM convergence_comments cc
@@ -69,6 +71,7 @@ export async function GET(
     const formattedComments = comments.map((comment) => ({
       id: comment.id,
       content: comment.content,
+      authorId: comment.authorId || '',
       authorNickname: comment.authorNickname || '未知使用者',
       createdAt: comment.createdAt ? new Date(comment.createdAt).toISOString() : new Date().toISOString(),
     }))
@@ -192,9 +195,34 @@ export async function POST(
       createdAt: newComments[0].createdAt ? new Date(newComments[0].createdAt).toISOString() : new Date().toISOString(),
     }
 
+    // 創建通知給社群內其他成員
+    // 截取留言內容前 20 個字作為摘要（避免通知內容過長）
+    const contentPreview = content.length > 20 ? content.substring(0, 20) + '...' : content
+    let notificationCreated = false
+    try {
+      await createNotificationsForCommunity({
+        communityId,
+        actorId: authorId,
+        type: 'convergence',
+        action: 'create',
+        content: `${authorNickname} 在想法收斂討論區留言「${contentPreview}」`,
+        relatedId: commentId,
+      })
+      notificationCreated = true
+      console.log('✅ 收斂討論區留言通知創建成功')
+    } catch (notificationError: any) {
+      // 通知失敗不影響留言建立，但記錄錯誤
+      console.error('❌ 創建收斂討論區留言通知失敗:', notificationError)
+      console.error('通知錯誤詳情:', {
+        message: notificationError.message,
+        stack: notificationError.stack,
+      })
+    }
+
     return NextResponse.json({
       comment: formattedComment,
       message: '留言建立成功',
+      notificationCreated, // 返回通知創建狀態
     })
   } catch (error: any) {
     console.error('建立收斂討論區留言錯誤:', error)

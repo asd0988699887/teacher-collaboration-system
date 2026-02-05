@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 interface CreateNotificationParams {
   communityId: string
   actorId: string // 執行操作的使用者ID
-  type: 'file' | 'task' | 'idea' | 'lesson_plan'
+  type: 'file' | 'task' | 'idea' | 'lesson_plan' | 'convergence'
   action: 'create' | 'update' | 'reply'
   content: string
   relatedId?: string

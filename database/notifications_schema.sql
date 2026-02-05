@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     community_id VARCHAR(36) NOT NULL COMMENT '社群ID',
     user_id VARCHAR(36) NOT NULL COMMENT '接收通知的使用者',
     actor_id VARCHAR(36) NOT NULL COMMENT '執行操作的使用者',
-    type ENUM('file', 'task', 'idea', 'lesson_plan') NOT NULL COMMENT '通知類型',
+    type ENUM('file', 'task', 'idea', 'lesson_plan', 'convergence') NOT NULL COMMENT '通知類型',
     action ENUM('create', 'update', 'reply') NOT NULL COMMENT '操作類型',
     content TEXT NOT NULL COMMENT '通知內容',
     related_id VARCHAR(36) COMMENT '相關項目ID',

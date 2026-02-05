@@ -21,6 +21,7 @@ interface Idea {
 interface ConvergenceComment {
   id: string
   content: string
+  authorId: string  // 使用者ID，用於生成頭像顏色
   authorNickname: string  // 改為顯示使用者名稱
   createdAt: string
 }
@@ -46,6 +47,43 @@ interface ConvergenceModalProps {
 }
 
 export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId, userId, userAccount }: ConvergenceModalProps) {
+  // 定義一組色調差異明顯的顏色（用於區分不同使用者，與社群管理保持一致）
+  const USER_COLORS = [
+    'rgba(138,99,210,0.9)',  // 紫色
+    'rgba(59,130,246,0.9)',  // 藍色
+    'rgba(16,185,129,0.9)',  // 綠色
+    'rgba(245,158,11,0.9)',  // 橙色
+    'rgba(239,68,68,0.9)',   // 紅色
+    'rgba(14,165,233,0.9)',  // 青色
+    'rgba(168,85,247,0.9)',  // 淺紫色
+    'rgba(236,72,153,0.9)',  // 粉色
+    'rgba(34,197,94,0.9)',   // 淺綠色
+    'rgba(249,115,22,0.9)',  // 橘色
+  ]
+
+  // 根據使用者ID生成固定顏色（確保同一個使用者總是得到相同顏色）
+  const getUserColor = (userId?: string): string => {
+    if (!userId) return USER_COLORS[0]
+    
+    // 簡單的 hash 函數：將 userId 轉換為數字
+    let hash = 0
+    for (let i = 0; i < userId.length; i++) {
+      const char = userId.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // 轉換為 32 位整數
+    }
+    
+    // 使用絕對值取模，確保索引在範圍內
+    const index = Math.abs(hash) % USER_COLORS.length
+    return USER_COLORS[index]
+  }
+
+  // 獲取使用者名稱的首字作為頭像
+  const getInitial = (name?: string) => {
+    if (!name) return 'U'
+    return name.charAt(0).toUpperCase()
+  }
+
   // 從所有想法中提取不重複的階段（排除收斂節點）
   const stages = Array.from(new Set(ideas.filter(idea => !idea.isConvergence).map(idea => idea.stage))).filter(Boolean)
   
@@ -181,7 +219,13 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
         // 新增留言到列表
         setComments([...comments, data.comment])
         setCommentText('')
+        if (data.notificationCreated) {
+          console.log('✅ 留言發送成功，通知已創建')
+        } else {
+          console.warn('⚠️ 留言發送成功，但通知創建可能失敗（請查看伺服器端日誌）')
+        }
       } else {
+        console.error('❌ 留言發送失敗:', data.error)
         alert(data.error || '留言發送失敗')
       }
     } catch (error) {
@@ -362,10 +406,11 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
                 <div className="mb-3 space-y-2 max-h-48 overflow-y-auto">
                   {comments.map((comment) => (
                     <div key={comment.id} className="flex items-start space-x-2 bg-gray-50 p-3 rounded-lg">
-                      <div className="w-8 h-8 bg-orange-400 rounded-full flex items-center justify-center flex-shrink-0">
-                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                        </svg>
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold"
+                        style={{ backgroundColor: getUserColor(comment.authorId) }}
+                      >
+                        {getInitial(comment.authorNickname)}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">

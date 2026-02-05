@@ -7,7 +7,7 @@ interface Notification {
   communityId: string
   communityName: string
   actorName: string
-  type: 'file' | 'task' | 'idea' | 'lesson_plan'
+  type: 'file' | 'task' | 'idea' | 'lesson_plan' | 'convergence'
   action: 'create' | 'update' | 'reply'
   content: string
   relatedId?: string
