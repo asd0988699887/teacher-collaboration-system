@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback, ReactNode } from 'react'
 interface ZoomableIdeasContainerProps {
   children: ReactNode
   containerId: string
+  communityId?: string // 社群ID，用於儲存視圖狀態
   onScrollInfoChange?: (info: { scrollLeft: number; scrollWidth: number; clientWidth: number; hasHorizontalScroll: boolean }) => void
 }
 
@@ -12,7 +13,7 @@ interface ZoomableIdeasContainerProps {
  * 可縮放的想法牆容器組件
  * 支援滑鼠滾輪縮放（電腦）和手勢縮放（手機）
  */
-export default function ZoomableIdeasContainer({ children, containerId, onScrollInfoChange }: ZoomableIdeasContainerProps) {
+export default function ZoomableIdeasContainer({ children, containerId, communityId, onScrollInfoChange }: ZoomableIdeasContainerProps) {
   const [scale, setScale] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
@@ -22,6 +23,10 @@ export default function ZoomableIdeasContainer({ children, containerId, onScroll
   // 使用 ref 來存儲當前的 scale 和 pan，避免閉包問題
   const scaleRef = useRef(1)
   const panRef = useRef({ x: 0, y: 0 })
+  
+  // 視圖狀態儲存相關
+  const viewStateSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isInitialLoadRef = useRef(true) // 標記是否為初始載入
   
   // 追蹤是否有內容超出邊界，用於動態顯示卷軸
   const [hasOverflow, setHasOverflow] = useState(false)
@@ -42,6 +47,88 @@ export default function ZoomableIdeasContainer({ children, containerId, onScroll
     scaleRef.current = scale
     panRef.current = pan
   }, [scale, pan])
+  
+  // 保存視圖狀態的函數
+  const saveViewState = useCallback(async (zoom: number, panX: number, panY: number) => {
+    if (!communityId) return // 如果沒有 communityId，不保存
+    
+    try {
+      const response = await fetch(
+        `/api/communities/${communityId}/idea-wall/view-state`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ zoom, panX, panY }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        console.error('保存想法牆視圖狀態失敗:', data.error || '未知錯誤')
+      } else {
+        console.log('✅ 想法牆視圖狀態保存成功')
+      }
+    } catch (error: any) {
+      console.error('保存想法牆視圖狀態錯誤:', error)
+    }
+  }, [communityId])
+  
+  // 載入視圖狀態
+  useEffect(() => {
+    const loadViewState = async () => {
+      if (!communityId || !isInitialLoadRef.current) return
+      
+      try {
+        const response = await fetch(
+          `/api/communities/${communityId}/idea-wall/view-state`
+        )
+        
+        if (response.ok) {
+          const data = await response.json()
+          if (data.zoom !== undefined && data.panX !== undefined && data.panY !== undefined) {
+            // 只有在有保存的狀態且不是默認值時才恢復
+            if (data.zoom !== 1.0 || data.panX !== 0 || data.panY !== 0) {
+              setScale(data.zoom)
+              setPan({ x: data.panX, y: data.panY })
+              scaleRef.current = data.zoom
+              panRef.current = { x: data.panX, y: data.panY }
+              console.log('✅ 想法牆視圖狀態恢復成功:', { zoom: data.zoom, panX: data.panX, panY: data.panY })
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error('載入想法牆視圖狀態錯誤:', error)
+      } finally {
+        isInitialLoadRef.current = false
+      }
+    }
+    
+    loadViewState()
+  }, [communityId])
+  
+  // 當縮放或平移改變時，保存視圖狀態（使用防抖）
+  useEffect(() => {
+    if (isInitialLoadRef.current) return // 初始載入時不保存
+    
+    // 清除之前的定時器
+    if (viewStateSaveTimeoutRef.current) {
+      clearTimeout(viewStateSaveTimeoutRef.current)
+    }
+    
+    // 設置新的定時器（500ms 防抖）
+    viewStateSaveTimeoutRef.current = setTimeout(() => {
+      saveViewState(scale, pan.x, pan.y)
+    }, 500)
+    
+    return () => {
+      if (viewStateSaveTimeoutRef.current) {
+        clearTimeout(viewStateSaveTimeoutRef.current)
+      }
+    }
+  }, [scale, pan.x, pan.y, saveViewState])
   
   // 觸控手勢相關
   const touchStartDistanceRef = useRef(0)

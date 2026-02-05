@@ -2852,6 +2852,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               <div className="px-0 sm:px-6 md:px-12 min-w-max">
                 <ZoomableIdeasContainer 
                   containerId="ideas-container"
+                  communityId={communityId || undefined}
                   onScrollInfoChange={setScrollInfo}
                 >
                   {ideas.length === 0 ? (
