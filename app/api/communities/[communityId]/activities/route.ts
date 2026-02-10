@@ -9,10 +9,10 @@ import { query } from '@/lib/db'
 // GET: 讀取社群的所有活動列表
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     // 查詢社群的所有活動
@@ -67,9 +67,11 @@ export async function GET(
 // POST: 建立新活動
 export async function POST(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
+    const resolvedParams = await params
+    const { communityId } = resolvedParams
     const resolvedParams = params instanceof Promise ? await params : params
     const { communityId } = resolvedParams
     

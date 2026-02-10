@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // GET: 讀取單一社群資訊
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     // 查詢社群資訊（包含成員數量）
@@ -69,10 +69,10 @@ export async function GET(
 // PUT: 更新社群資訊
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     const body = await request.json()
     const { name, description, inviteCode, userId } = body
@@ -197,9 +197,11 @@ export async function PUT(
 // DELETE: 刪除社群
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
+    const resolvedParams = await params
+    const { communityId } = resolvedParams
     const resolvedParams = params instanceof Promise ? await params : params
     const { communityId } = resolvedParams
     const searchParams = request.nextUrl.searchParams

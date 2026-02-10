@@ -10,10 +10,10 @@ import { createNotificationsForCommunity } from '@/lib/notifications'
 // GET: 讀取社群的所有想法
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     // 查詢社群的所有想法
@@ -107,10 +107,10 @@ export async function GET(
 // POST: 建立新想法
 export async function POST(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     
     // 驗證 communityId
