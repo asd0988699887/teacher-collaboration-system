@@ -2043,7 +2043,7 @@ export default function CourseObjectives({
           // 載入學習目標：將字串轉換為陣列
           const learningObjectivesStr = data.lessonPlan.learningObjectives || ''
           if (learningObjectivesStr) {
-            const objectivesArray = learningObjectivesStr.split('\n').filter(line => line.trim())
+            const objectivesArray = learningObjectivesStr.split('\n').filter((line: string) => line.trim())
             setLearningObjectives(objectivesArray.map(content => ({ content: content.trim() })))
           } else {
             setLearningObjectives([])
