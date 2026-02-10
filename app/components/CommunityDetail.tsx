@@ -1318,7 +1318,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          activityId: ideaData.activityId || null,
+          activityId: editingIdea.activityId || null,
           stage: ideaData.stage,
           title: ideaData.title,
           content: ideaData.content,
