@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // GET: 讀取社群成員列表
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     // 查詢社群成員（使用視圖）
@@ -63,10 +63,10 @@ export async function GET(
 // DELETE: 退出社群或刪除成員
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId') // 要刪除的成員ID
@@ -152,10 +152,10 @@ export async function DELETE(
 // PUT: 更新成員角色
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     const body = await request.json()
     const { userId, role, operatorId } = body

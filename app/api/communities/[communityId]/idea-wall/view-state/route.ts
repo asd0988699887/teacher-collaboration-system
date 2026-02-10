@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // GET: 獲取想法牆的視圖狀態
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     if (!communityId) {
@@ -63,10 +63,10 @@ export async function GET(
 // PUT: 保存想法牆的視圖狀態
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     if (!communityId) {

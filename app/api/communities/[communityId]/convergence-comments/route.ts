@@ -12,10 +12,10 @@ import { createNotificationsForCommunity } from '@/lib/notifications'
 // GET: 獲取指定階段的留言列表
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     // 從查詢參數獲取階段
@@ -93,10 +93,10 @@ export async function GET(
 // POST: 建立新留言
 export async function POST(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     if (!communityId) {

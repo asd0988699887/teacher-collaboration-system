@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // PUT: 更新想法
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { ideaId: string } }
+  { params }: { params: Promise<{ ideaId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { ideaId } = resolvedParams
     const body = await request.json()
     const { activityId, stage, title, content, position, rotation, userId } = body
@@ -197,10 +197,10 @@ export async function PUT(
 // DELETE: 刪除想法
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { ideaId: string } }
+  { params }: { params: Promise<{ ideaId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { ideaId } = resolvedParams
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')

@@ -14,10 +14,10 @@ import { storageConfig, isFileTypeAllowed, formatFileSize } from '@/lib/storage-
 // GET: 讀取社群資源列表
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     // 查詢社群的所有資源
@@ -72,11 +72,11 @@ export async function GET(
 // POST: 上傳資源（支援實際檔案上傳）
 export async function POST(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
     // 在 Next.js 16 中，params 可能需要 await（如果是 Promise）
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     
     // 驗證 communityId
@@ -327,10 +327,10 @@ export async function POST(
 // DELETE: 刪除資源
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     const searchParams = request.nextUrl.searchParams
     const resourceId = searchParams.get('resourceId')

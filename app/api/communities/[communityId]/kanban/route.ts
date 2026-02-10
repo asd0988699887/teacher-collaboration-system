@@ -10,10 +10,10 @@ import { createNotificationsForCommunity } from '@/lib/notifications'
 // GET: 讀取社群的 Kanban 資料（包含列表和任務）
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     // 查詢所有列表
@@ -121,10 +121,10 @@ export async function GET(
 // POST: 建立列表或任務
 export async function POST(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     
     // 驗證 communityId
@@ -361,10 +361,10 @@ export async function POST(
 // PUT: 更新列表或任務
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     const body = await request.json()
     const { type, id, title, content, startDate, endDate, assignees } = body
@@ -447,10 +447,10 @@ export async function PUT(
 // DELETE: 刪除列表或任務
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type')

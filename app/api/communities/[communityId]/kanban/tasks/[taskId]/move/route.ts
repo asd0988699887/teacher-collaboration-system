@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // PATCH: 移動任務到不同的列表或調整順序
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { communityId: string; taskId: string } }
+  { params }: { params: Promise<{ communityId: string; taskId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId, taskId } = resolvedParams
     const body = await request.json()
     const { targetListId, sortOrder } = body

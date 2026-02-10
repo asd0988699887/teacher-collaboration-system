@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { notificationId: string } }
+  { params }: { params: Promise<{ notificationId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { notificationId } = resolvedParams
 
     if (!notificationId) {

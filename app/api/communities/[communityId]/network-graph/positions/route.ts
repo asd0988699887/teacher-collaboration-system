@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // PUT: 批量保存節點位置
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
     const body = await request.json()
     const { positions } = body // positions: [{ userId, x, y }]

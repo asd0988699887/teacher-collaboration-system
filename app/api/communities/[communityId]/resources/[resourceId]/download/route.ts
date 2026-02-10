@@ -11,10 +11,10 @@ import { existsSync } from 'fs'
 // GET: 下載資源檔案
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string; resourceId: string } }
+  { params }: { params: Promise<{ communityId: string; resourceId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId, resourceId } = resolvedParams
 
     // 查詢資源資訊

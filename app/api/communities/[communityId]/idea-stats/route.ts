@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // GET: 統計社群中每個使用者的想法貢獻數量
 export async function GET(
   request: NextRequest,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { communityId } = resolvedParams
 
     if (!communityId) {
