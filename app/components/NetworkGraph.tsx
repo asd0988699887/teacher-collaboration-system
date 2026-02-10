@@ -339,6 +339,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
       
       // 強制自動縮放，確保所有節點都在畫面內（避免跑版）
       // 無論是否有保存的視圖狀態，都先執行 zoomToFit 確保節點可見
+      // 使用更長的延遲，確保圖表完全初始化並且節點位置已穩定
       const restoreViewStateTimeout = setTimeout(() => {
         if (fgRef.current) {
           try {
@@ -346,44 +347,11 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             // 使用較大的邊距（200, 200）確保節點不會貼邊
             fgRef.current.zoomToFit(200, 200)
             console.log('✅ 已執行自動縮放，確保所有節點在畫面內')
-            
-            // 如果有保存的視圖狀態（不是默認值），在自動縮放後再恢復縮放比例
-            // 但只恢復縮放，不恢復平移（因為平移可能導致節點跑出畫面）
-            const savedZoom = viewStateRef.current.zoom
-            const savedPanX = viewStateRef.current.panX
-            const savedPanY = viewStateRef.current.panY
-            
-            if (savedZoom !== 1.0 || savedPanX !== 0 || savedPanY !== 0) {
-              // 驗證縮放比例是否合理（限制在 0.1 到 2 之間，避免太大導致跑版）
-              if (savedZoom >= 0.1 && savedZoom <= 2 && !isNaN(savedZoom)) {
-                // 延遲一點再恢復縮放，確保 zoomToFit 已完成
-                setTimeout(() => {
-                  if (fgRef.current) {
-                    try {
-                      fgRef.current.zoom(savedZoom)
-                      console.log('✅ 已恢復縮放比例:', savedZoom)
-                    } catch (e) {
-                      console.warn('恢復縮放比例失敗:', e)
-                    }
-                  }
-                }, 100)
-              } else {
-                console.warn('保存的縮放比例異常，跳過恢復:', savedZoom)
-              }
-            }
           } catch (e) {
-            console.error('恢復視圖狀態失敗:', e)
-            // 如果恢復失敗，再次嘗試自動縮放
-            try {
-              if (fgRef.current) {
-                fgRef.current.zoomToFit(200, 200)
-              }
-            } catch (e2) {
-              console.error('自動縮放失敗:', e2)
-            }
+            console.error('自動縮放失敗:', e)
           }
         }
-      }, 1000) // 等待 1 秒，確保圖表已初始化
+      }, 1500) // 等待 1.5 秒，確保圖表已完全初始化
       
       // 備用自動縮放，確保節點在畫面內（雙重保險）
       const autoFitTimeout2 = setTimeout(() => {
@@ -396,11 +364,25 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             console.error('備用自動縮放失敗:', e)
           }
         }
-      }, 2000) // 等待 2 秒，作為備用方案
+      }, 2500) // 等待 2.5 秒，作為備用方案
+      
+      // 第三次自動縮放，確保節點在畫面內（三重保險）
+      const autoFitTimeout3 = setTimeout(() => {
+        if (fgRef.current) {
+          try {
+            // 最後一次執行自動縮放，確保所有節點都在畫面內
+            fgRef.current.zoomToFit(200, 200)
+            console.log('✅ 第三次自動縮放已執行（確保節點在畫面內）')
+          } catch (e) {
+            console.error('第三次自動縮放失敗:', e)
+          }
+        }
+      }, 3500) // 等待 3.5 秒，作為最後的保險
       
       return () => {
         clearTimeout(restoreViewStateTimeout)
         clearTimeout(autoFitTimeout2)
+        clearTimeout(autoFitTimeout3)
         if (positionSaveTimeoutRef.current) {
           clearTimeout(positionSaveTimeoutRef.current)
         }

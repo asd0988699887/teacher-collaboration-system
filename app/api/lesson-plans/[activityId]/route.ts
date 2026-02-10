@@ -158,13 +158,45 @@ export async function GET(
           }),
         }))
       })(),
-      activityRows: (activityRows || []).map((row: any) => ({
-        id: row.id,
-        teachingContent: row.teaching_content || '',
-        teachingTime: row.teaching_time || '',
-        teachingResources: row.teaching_resources || '',
-        assessmentMethods: row.assessment_methods || '',
-      })),
+      activityRows: (activityRows || []).map((row: any) => {
+        // 嘗試解析 teaching_resources 中的 JSON 資料（新格式）
+        let selectedLearningObjectives: string[] = []
+        let notes = ''
+        let sequenceNumber = ''
+        
+        if (row.teaching_resources) {
+          try {
+            const parsed = JSON.parse(row.teaching_resources)
+            if (parsed && typeof parsed === 'object') {
+              selectedLearningObjectives = parsed.selectedLearningObjectives || []
+              notes = parsed.notes || ''
+              sequenceNumber = parsed.sequenceNumber || ''
+            } else {
+              // 如果不是 JSON，可能是舊格式的純文字
+              notes = row.teaching_resources
+            }
+          } catch (e) {
+            // 解析失敗，當作舊格式的純文字處理
+            notes = row.teaching_resources
+          }
+        }
+        
+        // 返回新格式，同時保持向後相容性
+        return {
+          id: row.id,
+          sequenceNumber: sequenceNumber,
+          selectedLearningObjectives: selectedLearningObjectives,
+          activityFlow: row.teaching_content || '',
+          time: row.teaching_time || '',
+          assessmentMethod: row.assessment_methods || '',
+          notes: notes,
+          // 保持向後相容性
+          teachingContent: row.teaching_content || '',
+          teachingTime: row.teaching_time || '',
+          teachingResources: row.teaching_resources || '',
+          assessmentMethods: row.assessment_methods || '',
+        }
+      }),
       specificationPerformances: (specificationPerformances || []).map((item: any) => ({
         performanceId: item.performance_id,
         activityRowId: item.activity_row_id,
@@ -415,17 +447,75 @@ export async function POST(
 
       // 6. 插入活動與評量設計
       if (body.activityRows && body.activityRows.length > 0) {
-        for (let index = 0; index < body.activityRows.length; index++) {
-          const row = body.activityRows[index]
+        // 先排序活動行
+        const sortedRows = [...body.activityRows].sort((a: any, b: any) => {
+          const seqA = a.sequenceNumber || ''
+          const seqB = b.sequenceNumber || ''
+          
+          if (!seqA && !seqB) return 0
+          if (!seqA) return 1
+          if (!seqB) return -1
+          
+          const parseSequence = (seq: string): number[] => {
+            return seq.split('-').map((part: string) => {
+              const num = parseInt(part.trim(), 10)
+              return isNaN(num) ? 0 : num
+            })
+          }
+          
+          const partsA = parseSequence(seqA)
+          const partsB = parseSequence(seqB)
+          
+          const maxLength = Math.max(partsA.length, partsB.length)
+          for (let i = 0; i < maxLength; i++) {
+            const partA = partsA[i] || 0
+            const partB = partsB[i] || 0
+            
+            if (partA !== partB) {
+              return partA - partB
+            }
+          }
+          
+          return (a.id || '').localeCompare(b.id || '')
+        })
+
+        for (let index = 0; index < sortedRows.length; index++) {
+          const row = sortedRows[index]
+          
+          // 處理新格式：將 selectedLearningObjectives 和 notes 序列化到 teaching_resources
+          // 同時保持向後相容性
+          let teachingContent = row.activityFlow || row.teachingContent || null
+          let teachingTime = row.time || row.teachingTime || null
+          let teachingResources = null
+          let assessmentMethods = row.assessmentMethod || row.assessmentMethods || null
+          
+          // 如果有新格式的資料，序列化到 teaching_resources
+          if (row.selectedLearningObjectives !== undefined || row.notes !== undefined || row.sequenceNumber !== undefined) {
+            const resourcesData: any = {}
+            if (row.selectedLearningObjectives !== undefined) {
+              resourcesData.selectedLearningObjectives = row.selectedLearningObjectives
+            }
+            if (row.notes !== undefined) {
+              resourcesData.notes = row.notes
+            }
+            if (row.sequenceNumber !== undefined) {
+              resourcesData.sequenceNumber = row.sequenceNumber
+            }
+            teachingResources = JSON.stringify(resourcesData)
+          } else if (row.teachingResources) {
+            // 保持舊格式
+            teachingResources = row.teachingResources
+          }
+          
           await connection.execute(
             'INSERT INTO lesson_plan_activity_rows (id, lesson_plan_id, teaching_content, teaching_time, teaching_resources, assessment_methods, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
               row.id || generateUUID(),
               lessonPlanId,
-              row.teachingContent || null,
-              row.teachingTime || null,
-              row.teachingResources || null,
-              row.assessmentMethods || null,
+              teachingContent,
+              teachingTime,
+              teachingResources,
+              assessmentMethods,
               index,
             ]
           )

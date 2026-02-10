@@ -193,21 +193,78 @@ export async function POST(
 
             // 複製活動流程（從快照，建立 ID 映射）
             const activityRows = lessonPlanSnapshot.activityRows || []
-            for (let i = 0; i < activityRows.length; i++) {
-              const row = activityRows[i]
+            
+            // 先排序活動行（如果有 sequenceNumber）
+            const sortedRows = [...activityRows].sort((a: any, b: any) => {
+              const seqA = a.sequenceNumber || ''
+              const seqB = b.sequenceNumber || ''
+              
+              if (!seqA && !seqB) return 0
+              if (!seqA) return 1
+              if (!seqB) return -1
+              
+              const parseSequence = (seq: string): number[] => {
+                return seq.split('-').map((part: string) => {
+                  const num = parseInt(part.trim(), 10)
+                  return isNaN(num) ? 0 : num
+                })
+              }
+              
+              const partsA = parseSequence(seqA)
+              const partsB = parseSequence(seqB)
+              
+              const maxLength = Math.max(partsA.length, partsB.length)
+              for (let i = 0; i < maxLength; i++) {
+                const partA = partsA[i] || 0
+                const partB = partsB[i] || 0
+                
+                if (partA !== partB) {
+                  return partA - partB
+                }
+              }
+              
+              return (a.id || '').localeCompare(b.id || '')
+            })
+            
+            for (let i = 0; i < sortedRows.length; i++) {
+              const row = sortedRows[i]
               const newId = uuidv4()
               const oldId = row.id || `temp-${i}`
               activityRowIdMap.set(oldId, newId)
+              
+              // 處理新格式：將 selectedLearningObjectives 和 notes 序列化到 teaching_resources
+              // 同時保持向後相容性
+              let teachingContent = row.activityFlow || row.teachingContent || row.teaching_content || ''
+              let teachingTime = row.time || row.teachingTime || row.teaching_time || ''
+              let teachingResources = null
+              let assessmentMethods = row.assessmentMethod || row.assessmentMethods || row.assessment_methods || ''
+              
+              // 如果有新格式的資料，序列化到 teaching_resources
+              if (row.selectedLearningObjectives !== undefined || row.notes !== undefined || row.sequenceNumber !== undefined) {
+                const resourcesData: any = {}
+                if (row.selectedLearningObjectives !== undefined) {
+                  resourcesData.selectedLearningObjectives = row.selectedLearningObjectives
+                }
+                if (row.notes !== undefined) {
+                  resourcesData.notes = row.notes
+                }
+                if (row.sequenceNumber !== undefined) {
+                  resourcesData.sequenceNumber = row.sequenceNumber
+                }
+                teachingResources = JSON.stringify(resourcesData)
+              } else if (row.teachingResources) {
+                // 保持舊格式
+                teachingResources = row.teachingResources
+              }
+              
               await connection.execute(
                 `INSERT INTO lesson_plan_activity_rows (
                   id, lesson_plan_id, teaching_content, teaching_time, 
                   teaching_resources, assessment_methods, sort_order
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
                 [
-                  newId, existingId, row.teachingContent || row.teaching_content || '', 
-                  row.teachingTime || row.teaching_time || '',
-                  row.teachingResources || row.teaching_resources || '', 
-                  row.assessmentMethods || row.assessment_methods || '', i
+                  newId, existingId, teachingContent, teachingTime, 
+                  teachingResources, assessmentMethods, i
                 ]
               )
             }

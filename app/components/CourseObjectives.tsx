@@ -51,7 +51,8 @@ export default function CourseObjectives({
   const [teachingTimeMinutes, setTeachingTimeMinutes] = useState('')
   const [materialSource, setMaterialSource] = useState('')
   const [teachingEquipment, setTeachingEquipment] = useState('')
-  const [learningObjectives, setLearningObjectives] = useState('')
+  const [learningObjectives, setLearningObjectives] = useState<Array<{ content: string }>>([])
+  const [learningObjectiveInput, setLearningObjectiveInput] = useState('')
   // 核心素養相關狀態
   const [coreCompetencyCategory, setCoreCompetencyCategory] = useState('')
   const [coreCompetencyItem, setCoreCompetencyItem] = useState('')
@@ -502,22 +503,79 @@ export default function CourseObjectives({
   
   // 下載功能（僅支援 Word）
   
-  // 活動與評量設計的狀態
-  const [teachingContent, setTeachingContent] = useState('')
-  const [teachingTime, setTeachingTime] = useState('')
-  const [teachingResources, setTeachingResources] = useState('')
-  const [assessmentMethods, setAssessmentMethods] = useState('')
+  // 活動與評量設計的狀態（已移除舊的輸入欄位，改用 activityRows）
   const [assessmentTools, setAssessmentTools] = useState('')
   const [references, setReferences] = useState('')
   
   // 活動與評量設計的多列資料
   const [activityRows, setActivityRows] = useState<Array<{
     id: string
-    teachingContent: string
-    teachingTime: string
-    teachingResources: string
-    assessmentMethods: string
+    sequenceNumber: string // 活動序號
+    selectedLearningObjectives: string[] // 選中的學習目標索引或ID
+    activityFlow: string // 活動流程
+    time: string // 時間
+    assessmentMethod: string // 評量方式
+    notes: string // 備註
   }>>([])
+
+  // 排序活動行的函數：根據序號排序
+  const sortActivityRows = (rows: typeof activityRows) => {
+    return [...rows].sort((a, b) => {
+      const seqA = a.sequenceNumber || ''
+      const seqB = b.sequenceNumber || ''
+      
+      // 如果兩個序號都為空，使用 id 來穩定排序
+      if (!seqA && !seqB) {
+        return a.id.localeCompare(b.id)
+      }
+      if (!seqA) return 1 // 空序號排在後面
+      if (!seqB) return -1
+      
+      // 解析序號：支持純數字（如 "1"）和帶連字符的格式（如 "1-2", "2-1"）
+      const parseSequence = (seq: string): number[] => {
+        return seq.split('-').map(part => {
+          const num = parseInt(part.trim(), 10)
+          return isNaN(num) ? 0 : num
+        })
+      }
+      
+      const partsA = parseSequence(seqA)
+      const partsB = parseSequence(seqB)
+      
+      // 比較每個部分
+      const maxLength = Math.max(partsA.length, partsB.length)
+      for (let i = 0; i < maxLength; i++) {
+        const partA = partsA[i] || 0
+        const partB = partsB[i] || 0
+        
+        if (partA !== partB) {
+          return partA - partB
+        }
+      }
+      
+      // 如果所有部分都相同，使用 id 來穩定排序
+      return a.id.localeCompare(b.id)
+    })
+  }
+
+  // 新增活動 Modal 狀態
+  const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false)
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null) // 正在編輯的活動ID，null表示新增模式
+  const [newActivityData, setNewActivityData] = useState<{
+    sequenceNumber: string
+    selectedLearningObjectives: string[]
+    activityFlow: string
+    time: string
+    assessmentMethod: string
+    notes: string
+  }>({
+    sequenceNumber: '',
+    selectedLearningObjectives: [],
+    activityFlow: '',
+    time: '',
+    assessmentMethod: '',
+    notes: '',
+  })
 
   // 當前版本號
   const [currentVersion, setCurrentVersion] = useState<string>('')
@@ -1982,7 +2040,14 @@ export default function CourseObjectives({
           setTeachingTimeMinutes(data.lessonPlan.teachingTimeMinutes?.toString() || '')
           setMaterialSource(data.lessonPlan.materialSource || '')
           setTeachingEquipment(data.lessonPlan.teachingEquipment || '')
-          setLearningObjectives(data.lessonPlan.learningObjectives || '')
+          // 載入學習目標：將字串轉換為陣列
+          const learningObjectivesStr = data.lessonPlan.learningObjectives || ''
+          if (learningObjectivesStr) {
+            const objectivesArray = learningObjectivesStr.split('\n').filter(line => line.trim())
+            setLearningObjectives(objectivesArray.map(content => ({ content: content.trim() })))
+          } else {
+            setLearningObjectives([])
+          }
           setAssessmentTools(data.lessonPlan.assessmentTools || '')
           setReferences(data.lessonPlan.references || '')
 
@@ -2003,13 +2068,53 @@ export default function CourseObjectives({
 
           // 載入活動與評量設計
           if (data.activityRows && Array.isArray(data.activityRows)) {
-            setActivityRows(data.activityRows.map((row: any) => ({
-              id: row.id || '',
-              teachingContent: row.teachingContent || '',
-              teachingTime: row.teachingTime || '',
-              teachingResources: row.teachingResources || '',
-              assessmentMethods: row.assessmentMethods || '',
-            })))
+            setActivityRows(data.activityRows.map((row: any) => {
+              // 檢查 notes 是否是 JSON 字串（未解析）
+              let notes = row.notes || ''
+              let selectedLearningObjectives: string[] = Array.isArray(row.selectedLearningObjectives) ? row.selectedLearningObjectives : []
+              let sequenceNumber = row.sequenceNumber || ''
+              
+              // 如果 notes 看起來像 JSON 字串（包含 selectedLearningObjectives），嘗試解析
+              if (typeof notes === 'string' && notes.trim().startsWith('{') && notes.includes('selectedLearningObjectives')) {
+                try {
+                  const parsed = JSON.parse(notes)
+                  if (parsed && typeof parsed === 'object') {
+                    selectedLearningObjectives = parsed.selectedLearningObjectives || []
+                    notes = parsed.notes || ''
+                    sequenceNumber = parsed.sequenceNumber || ''
+                  }
+                } catch (e) {
+                  // 解析失敗，保持原值
+                }
+              }
+              
+              // 如果 teachingResources 存在且 notes 還是空的，嘗試從 teachingResources 解析
+              if ((!notes || notes === '') && row.teachingResources) {
+                try {
+                  const parsed = JSON.parse(row.teachingResources)
+                  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.selectedLearningObjectives)) {
+                    selectedLearningObjectives = parsed.selectedLearningObjectives || []
+                    notes = parsed.notes || ''
+                    sequenceNumber = parsed.sequenceNumber || ''
+                  } else {
+                    notes = row.teachingResources
+                  }
+                } catch (e) {
+                  notes = row.teachingResources
+                }
+              }
+              
+              // 優先使用新格式的欄位，如果不存在則使用舊格式
+              return {
+                id: row.id || Date.now().toString(),
+                sequenceNumber: sequenceNumber,
+                selectedLearningObjectives: selectedLearningObjectives,
+                activityFlow: row.activityFlow || row.teachingContent || '',
+                time: row.time || row.teachingTime || '',
+                assessmentMethod: row.assessmentMethod || row.assessmentMethods || '',
+                notes: notes,
+              }
+            }))
           }
 
           // 載入雙向細目表勾選狀態
@@ -2401,7 +2506,10 @@ export default function CourseObjectives({
     startY = (pdf as any).lastAutoTable.finalY + 5
 
     // 第十行：學習目標
-    const row10Data = [['學習目標', learningObjectives || '']]
+    const learningObjectivesText = learningObjectives.length > 0
+      ? learningObjectives.map(obj => obj.content).join('\n')
+      : ''
+    const row10Data = [['學習目標', learningObjectivesText]]
     autoTable(pdf, {
       startY,
       head: [['', '']],
@@ -2426,23 +2534,39 @@ export default function CourseObjectives({
 
     // 活動與評量設計表格
     if (activityRows.length > 0) {
-      const tableData = activityRows.map(row => [
-        row.teachingContent || '',
-        row.teachingTime || '',
-        row.teachingResources || '',
-        row.assessmentMethods || ''
-      ])
+      const tableData = sortActivityRows(activityRows).map((row, index) => {
+        // 取得選中的學習目標文字
+        const selectedObjectives = row.selectedLearningObjectives
+          .map(idx => {
+            const objIdx = parseInt(idx)
+            return learningObjectives[objIdx]?.content || ''
+          })
+          .filter(Boolean)
+          .join('、')
+        
+        return [
+          row.sequenceNumber || (index + 1).toString(), // 序號
+          selectedObjectives || '', // 學習目標
+          row.activityFlow || '', // 活動流程
+          row.time || '', // 時間
+          row.assessmentMethod || '', // 評量方式
+          row.notes || '' // 備註
+        ]
+      })
 
       autoTable(pdf, {
         startY,
-        head: [['教學內容及實施方式', '教學時間', '教學資源', '學習評量方式']],
+        head: [['#', '活動目標', '活動流程', '時間', '備註']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [230, 230, 230], fontStyle: 'bold', fontSize: 10 },
         bodyStyles: { fontSize: 9 },
         columnStyles: {
-          0: { cellWidth: 60 },
-          1: { cellWidth: 25 },
+          0: { cellWidth: 15 }, // 序號
+          1: { cellWidth: 40 }, // 學習目標
+          2: { cellWidth: 60 }, // 活動流程
+          3: { cellWidth: 20 }, // 時間
+          4: { cellWidth: 30 }, // 備註
           2: { cellWidth: 30 },
           3: { cellWidth: 50 }
         },
@@ -2452,40 +2576,6 @@ export default function CourseObjectives({
       startY = (pdf as any).lastAutoTable.finalY + 5
     }
 
-    // 評量工具
-    const assessmentRowData = [['評量工具', assessmentTools || '']]
-    autoTable(pdf, {
-      startY,
-      head: [['', '']],
-      body: assessmentRowData,
-      theme: 'grid',
-      headStyles: { fillColor: [230, 230, 230], fontStyle: 'bold' },
-      bodyStyles: { fontSize: 10 },
-      columnStyles: {
-        0: { cellWidth: 30, fontStyle: 'bold' },
-        1: { cellWidth: 'auto' }
-      },
-      margin: { left: margin, right: margin },
-      styles: { cellPadding: 3 }
-    })
-    startY = (pdf as any).lastAutoTable.finalY + 5
-
-    // 參考資料
-    const referenceRowData = [['參考資料', references || '']]
-    autoTable(pdf, {
-      startY,
-      head: [['', '']],
-      body: referenceRowData,
-      theme: 'grid',
-      headStyles: { fillColor: [230, 230, 230], fontStyle: 'bold' },
-      bodyStyles: { fontSize: 10 },
-      columnStyles: {
-        0: { cellWidth: 30, fontStyle: 'bold' },
-        1: { cellWidth: 'auto' }
-      },
-      margin: { left: margin, right: margin },
-      styles: { cellPadding: 3 }
-    })
 
     return pdf
   }
@@ -2837,7 +2927,12 @@ export default function CourseObjectives({
           }),
           new TableCell({
             children: [new Paragraph({ 
-              children: [new TextRun({ text: learningObjectives || '', ...textStyle })],
+              children: [new TextRun({ 
+                text: learningObjectives.length > 0 
+                  ? learningObjectives.map(obj => obj.content).join('\n')
+                  : '', 
+                ...textStyle 
+              })],
               spacing: { after: 300, before: 300 }, // 增加上下間距，提高欄位高度（1.5倍）
             })],
             columnSpan: 3,
@@ -2884,7 +2979,7 @@ export default function CourseObjectives({
               children: [new TextRun({ text: '學習活動設計', ...headerTextStyle })],
               alignment: AlignmentType.CENTER,
             })],
-            columnSpan: 5,
+            columnSpan: 6,
             borders: {
               top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
               bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' }, // 學習活動設計下面是內框
@@ -2895,16 +2990,15 @@ export default function CourseObjectives({
           }),
         ],
       }),
-      // Row 1: 標題列（第1-2欄合併顯示「教學內容及實施方式」，第3欄「教學時間」，第4欄「教學資源」，第5欄「學習評量方式」）
+      // Row 1: 標題列（#、學習目標、活動流程、時間、評量方式、備註）
       new TableRow({
         children: [
           new TableCell({
             children: [new Paragraph({ 
-              children: [new TextRun({ text: '教學內容及實施方式', ...headerTextStyle })],
+              children: [new TextRun({ text: '#', ...headerTextStyle })],
               alignment: AlignmentType.CENTER,
             })],
-            columnSpan: 2,
-            width: { size: 47, type: WidthType.PERCENTAGE },
+            width: { size: 6, type: WidthType.PERCENTAGE },
             borders: {
               top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
               bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
@@ -2914,10 +3008,10 @@ export default function CourseObjectives({
           }),
           new TableCell({
             children: [new Paragraph({ 
-              children: [new TextRun({ text: '教學時間', ...headerTextStyle })],
+              children: [new TextRun({ text: '活動目標', ...headerTextStyle })],
               alignment: AlignmentType.CENTER,
             })],
-            width: { size: 12, type: WidthType.PERCENTAGE },
+            width: { size: 15, type: WidthType.PERCENTAGE },
             borders: {
               top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
               bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
@@ -2927,10 +3021,10 @@ export default function CourseObjectives({
           }),
           new TableCell({
             children: [new Paragraph({ 
-              children: [new TextRun({ text: '教學資源', ...headerTextStyle })],
+              children: [new TextRun({ text: '活動流程', ...headerTextStyle })],
               alignment: AlignmentType.CENTER,
             })],
-            width: { size: 12, type: WidthType.PERCENTAGE },
+            width: { size: 40, type: WidthType.PERCENTAGE },
             borders: {
               top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
               bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
@@ -2940,10 +3034,36 @@ export default function CourseObjectives({
           }),
           new TableCell({
             children: [new Paragraph({ 
-              children: [new TextRun({ text: '學習評量方式', ...headerTextStyle })],
+              children: [new TextRun({ text: '時間', ...headerTextStyle })],
               alignment: AlignmentType.CENTER,
             })],
-            width: { size: 29, type: WidthType.PERCENTAGE },
+            width: { size: 8, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '評量方式', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '備註', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 13, type: WidthType.PERCENTAGE },
             borders: {
               top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
               bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
@@ -2955,49 +3075,79 @@ export default function CourseObjectives({
       }),
     ]
 
-    // Row 2: 空白資料列（第1-2欄合併，第3-5欄各為空白）
+    // Row 2: 活動資料列
     if (activityRows.length > 0) {
       // 如果有活動資料，為每個活動建立一行
-      activityRows.forEach((row) => {
+      const sortedRows = sortActivityRows(activityRows)
+      sortedRows.forEach((row, index) => {
+        // 取得選中的學習目標文字
+        const selectedObjectives = row.selectedLearningObjectives
+          .map(idx => {
+            const objIdx = parseInt(idx)
+            return learningObjectives[objIdx]?.content || ''
+          })
+          .filter(Boolean)
+          .join('、')
+        
+        const isLastRow = index === sortedRows.length - 1
+        
         table2Rows.push(
           new TableRow({
             children: [
               new TableCell({
                 children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.teachingContent || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
+                  children: [new TextRun({ text: row.sequenceNumber || (index + 1).toString(), ...textStyle })],
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 100, before: 100 },
                 })],
-                columnSpan: 2,
-                width: { size: 47, type: WidthType.PERCENTAGE },
-                borders: outerLeftBorderStyle, // 左側，使用外框
-                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
+                width: { size: 6, type: WidthType.PERCENTAGE },
+                borders: isLastRow ? outerCornerBottomLeftStyle : outerLeftBorderStyle, // 最後一行使用底部外框
+                verticalAlign: VerticalAlign.TOP,
               }),
               new TableCell({
                 children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.teachingTime || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
+                  children: [new TextRun({ text: selectedObjectives || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
                 })],
-                width: { size: 12, type: WidthType.PERCENTAGE },
-                ...contentCellStyle,
-                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
+                width: { size: 20, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
               }),
               new TableCell({
                 children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.teachingResources || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
+                  children: [new TextRun({ text: row.activityFlow || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
                 })],
-                width: { size: 12, type: WidthType.PERCENTAGE },
-                ...contentCellStyle,
-                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
+                width: { size: 35, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
               }),
               new TableCell({
                 children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.assessmentMethods || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 }, // 減少間距，讓行高根據內容自動調整
+                  children: [new TextRun({ text: row.time || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
                 })],
-                width: { size: 29, type: WidthType.PERCENTAGE },
-                borders: outerRightBorderStyle, // 右側，使用外框
-                verticalAlign: VerticalAlign.TOP, // 內容靠上對齊
+                width: { size: 8, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
+              }),
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: row.assessmentMethod || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 18, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
+              }),
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: row.notes || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 13, type: WidthType.PERCENTAGE },
+                borders: isLastRow ? outerCornerBottomRightStyle : outerRightBorderStyle, // 最後一行使用底部外框
+                verticalAlign: VerticalAlign.TOP,
               }),
             ],
           })
@@ -3050,49 +3200,6 @@ export default function CourseObjectives({
       )
     }
 
-    // Row 3: 評量工具（第1欄標籤，第2-5欄合併）
-    table2Rows.push(
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '評量工具', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: assessmentTools || '', ...textStyle })],
-              spacing: { after: 200, before: 200 }, // 增加上下間距，提高欄位高度
-            })],
-            columnSpan: 4,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      })
-    )
-
-    // Row 4: 參考資料（第1欄標籤，第2-5欄合併）- 最後一行，使用外框樣式
-    table2Rows.push(
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '參考資料', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerCornerBottomLeftStyle, // 左下角，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: references || '', ...textStyle })],
-              spacing: { after: 200, before: 200 }, // 增加上下間距，提高欄位高度
-            })],
-            columnSpan: 4,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerCornerBottomRightStyle, // 右下角，使用外框
-          }),
-        ],
-      })
-    )
 
     // 表格二 - 使用百分比寬度，確保適應頁面寬度
     children.push(
@@ -3185,7 +3292,7 @@ export default function CourseObjectives({
       teachingTimeMinutes,
       materialSource,
       teachingEquipment,
-      learningObjectives,
+      learningObjectives: learningObjectives.map(obj => obj.content).join('\n'), // 將陣列轉換為字串
       addedCoreCompetencies,
       addedLearningPerformances,
       addedLearningContents,
@@ -6681,13 +6788,54 @@ export default function CourseObjectives({
                   <label className="block text-gray-700 font-medium mb-2">
                     學習目標
                   </label>
-                  <textarea
-                    value={learningObjectives}
-                    onChange={(e) => setLearningObjectives(e.target.value)}
-                    placeholder="輸入學習目標"
-                    rows={4}
-                    className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                  />
+                  <div className="flex gap-2 mb-2">
+                    <textarea
+                      value={learningObjectiveInput}
+                      onChange={(e) => setLearningObjectiveInput(e.target.value)}
+                      placeholder="輸入學習目標"
+                      rows={4}
+                      className="flex-1 px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
+                    />
+                    <button
+                      onClick={() => {
+                        if (learningObjectiveInput.trim()) {
+                          setLearningObjectives([
+                            ...learningObjectives,
+                            {
+                              content: learningObjectiveInput.trim()
+                            }
+                          ])
+                          setLearningObjectiveInput('')
+                        }
+                      }}
+                      className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors self-start"
+                    >
+                      新增
+                    </button>
+                  </div>
+                  {/* 顯示已加入的學習目標 */}
+                  {learningObjectives.length > 0 && (
+                    <div className="mt-4 space-y-3">
+                      <label className="block text-gray-700 font-medium text-sm">
+                        已加入的學習目標：
+                      </label>
+                      {learningObjectives.map((item, idx) => (
+                        <div key={idx} className="border border-gray-300 rounded-lg p-4 bg-white relative">
+                          <button
+                            onClick={() => {
+                              setLearningObjectives(learningObjectives.filter((_, i) => i !== idx))
+                            }}
+                            className="absolute top-2 right-2 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
+                          >
+                            刪除
+                          </button>
+                          <div className="pr-20 text-gray-800 whitespace-pre-wrap">
+                            {item.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                   {/* 儲存按鈕 */}
@@ -6705,266 +6853,272 @@ export default function CourseObjectives({
               {/* 活動與評量設計 */}
               {activeTab === 'activity' && (
                 <div className="space-y-6">
-                  {/* 第一列：教學內容及實施方式、教學時間、教學資源、學習評量方式 */}
-                  <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                    <div className="flex gap-2 min-w-max sm:min-w-0">
-                      {/* 教學內容及實施方式 - 最寬 */}
-                      <div className="flex-[4] sm:flex-[3] min-w-[200px] sm:min-w-0">
-                        <label className="block text-gray-700 font-medium mb-2 text-center">
-                          <span className="block">教學內容及</span>
-                          <span className="block">實施方式</span>
-                        </label>
-                        <textarea
-                          value={teachingContent}
-                          onChange={(e) => setTeachingContent(e.target.value)}
-                          placeholder="輸入教學內容及實施方式"
-                          rows={8}
-                          className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                        />
-                      </div>
-
-                      {/* 教學時間 - 最窄 */}
-                      <div className="w-12 sm:w-16 flex-shrink-0">
-                        <label className="block text-gray-700 font-medium mb-2 text-center">
-                          <span className="block">教學</span>
-                          <span className="block">時間</span>
-                        </label>
-                        <textarea
-                          value={teachingTime}
-                          onChange={(e) => setTeachingTime(e.target.value)}
-                          placeholder="輸入教學時間"
-                          rows={8}
-                          className="w-full px-1 sm:px-2 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                        />
-                      </div>
-
-                      {/* 教學資源 - 第二窄 */}
-                      <div className="w-12 sm:w-24 flex-shrink-0">
-                        <label className="block text-gray-700 font-medium mb-2 text-center">
-                          <span className="block">教學</span>
-                          <span className="block">資源</span>
-                        </label>
-                        <textarea
-                          value={teachingResources}
-                          onChange={(e) => setTeachingResources(e.target.value)}
-                          placeholder="輸入教學資源"
-                          rows={8}
-                          className="w-full px-1 sm:px-2 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                        />
-                      </div>
-
-                      {/* 學習評量方式 */}
-                      <div className="flex-[2] min-w-[150px] sm:min-w-0">
-                        <label className="block text-gray-700 font-medium mb-2 text-center">
-                          <span className="block">學習評量</span>
-                          <span className="block">方式</span>
-                        </label>
-                        <textarea
-                          value={assessmentMethods}
-                          onChange={(e) => setAssessmentMethods(e.target.value)}
-                          placeholder="輸入學習評量方式"
-                          rows={8}
-                          className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 加入按鈕 */}
+                  {/* 新增活動按鈕 */}
                   <div className="flex justify-end">
                     <button
                       onClick={() => {
-                        if (teachingContent.trim() || teachingTime.trim() || teachingResources.trim() || assessmentMethods.trim()) {
-                          setActivityRows([
-                            ...activityRows,
-                            {
-                              id: Date.now().toString(),
-                              teachingContent,
-                              teachingTime,
-                              teachingResources,
-                              assessmentMethods,
-                            }
-                          ])
-                          // 清空欄位
-                          setTeachingContent('')
-                          setTeachingTime('')
-                          setTeachingResources('')
-                          setAssessmentMethods('')
-                        }
+                        setNewActivityData({
+                          sequenceNumber: '',
+                          selectedLearningObjectives: [],
+                          activityFlow: '',
+                          time: '',
+                          assessmentMethod: '',
+                          notes: '',
+                        })
+                        setIsAddActivityModalOpen(true)
                       }}
-                      className="px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
                     >
-                      加入
+                      新增活動
                     </button>
                   </div>
 
                   {/* 表格樣式 */}
                   {activityRows.length > 0 && (
-                    <div className="border border-gray-300">
-                      {/* 表頭行 */}
-                      <div className="flex border-b border-gray-300">
-                        <div className="flex-[5] sm:flex-[3] bg-gray-100 font-medium text-gray-700 flex items-center" style={{ borderRight: '1px solid #d1d5db' }}>
-                          <div className="px-4 py-2 w-full">教學內容及實施方式</div>
-                        </div>
-                        <div className="w-10 sm:w-16 flex-shrink-0 bg-gray-100 font-medium text-gray-700 flex items-center justify-center" style={{ borderRight: '1px solid #d1d5db' }}>
-                          <div className="px-1 py-2 w-full text-center" style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
-                            教學時間
+                    <div className="border border-gray-300 rounded-lg overflow-x-auto">
+                      <div className="min-w-[800px] sm:min-w-[900px]">
+                        {/* 表頭行 */}
+                        <div className="flex border-b border-gray-300 bg-gray-100">
+                          <div className="w-10 flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center justify-center px-2 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                            #
                           </div>
-                        </div>
-                        <div className="w-10 sm:w-24 flex-shrink-0 bg-gray-100 font-medium text-gray-700 flex items-center justify-center" style={{ borderRight: '1px solid #d1d5db' }}>
-                          <div className="px-1 py-2 w-full text-center" style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
-                            教學資源
+                          <div className="w-[150px] flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center px-4 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                            活動目標
                           </div>
+                          <div className="w-[300px] flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center px-4 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                            活動流程
+                          </div>
+                          <div className="w-16 flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center justify-center px-2 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                            時間
+                          </div>
+                          <div className="w-[150px] flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center px-4 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                            評量方式
+                          </div>
+                          <div className="w-16 flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center justify-center px-2 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                            備註
+                          </div>
+                          {/* 桌面版編輯和刪除按鈕欄位（表頭） */}
+                          <div className="hidden sm:flex w-16 flex-shrink-0 bg-gray-100"></div>
                         </div>
-                        <div className="flex-[2] bg-gray-100 font-medium text-gray-700 flex items-center" style={{ borderRight: '1px solid #d1d5db' }}>
-                          <div className="px-4 py-2 w-full">學習評量方式</div>
-                        </div>
-                        {/* 桌面版刪除按鈕欄位（表頭） */}
-                        <div className="hidden sm:flex w-20 flex-shrink-0 bg-gray-100"></div>
+
+                        {/* 已加入的列 - 表格樣式 */}
+                        {sortActivityRows(activityRows).map((row, index) => (
+                          <div key={row.id} className="flex" style={{ borderTop: index > 0 ? '1px solid #d1d5db' : 'none' }}>
+                            {/* 序號欄位 */}
+                            <div className="w-10 flex-shrink-0 flex items-center justify-center px-2 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                              <div className="text-gray-800 font-medium text-sm">
+                                {row.sequenceNumber || (index + 1)}
+                              </div>
+                            </div>
+
+                            {/* 活動目標欄位 */}
+                            <div className="w-[150px] flex-shrink-0 flex items-start px-4 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                              {learningObjectives.length > 0 ? (
+                                (() => {
+                                  // 只顯示被選中的學習目標
+                                  const selectedObjs = row.selectedLearningObjectives
+                                    .map(idx => {
+                                      const objIdx = parseInt(idx)
+                                      return learningObjectives[objIdx]
+                                    })
+                                    .filter(Boolean)
+                                  
+                                  if (selectedObjs.length === 0) {
+                                    return (
+                                      <div className="text-sm text-gray-400 italic">未選擇活動目標</div>
+                                    )
+                                  }
+                                  
+                                  return (
+                                    <div className="w-full space-y-2">
+                                      {selectedObjs.map((obj, idx) => (
+                                        <div 
+                                          key={idx} 
+                                          className="text-sm text-gray-700"
+                                          style={{ 
+                                            wordBreak: 'break-word',
+                                            overflowWrap: 'break-word',
+                                            wordWrap: 'break-word'
+                                          }}
+                                        >
+                                          {obj.content}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )
+                                })()
+                              ) : (
+                                <div className="text-sm text-gray-400 italic">請先在「課程目標」中新增學習目標</div>
+                              )}
+                            </div>
+
+                            {/* 活動流程欄位 */}
+                            <div className="w-[300px] flex-shrink-0 flex items-start px-4 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                              <div className="w-full px-0 py-0">
+                                <textarea
+                                  data-row-id={`activity-row-${index}`}
+                                  value={row.activityFlow}
+                                  onChange={(e) => {
+                                    const newRows = [...activityRows]
+                                    newRows[index].activityFlow = e.target.value
+                                    setActivityRows(newRows)
+                                    autoResizeTextarea(e.target)
+                                    syncRowHeight(index)
+                                  }}
+                                  onInput={(e) => {
+                                    autoResizeTextarea(e.target as HTMLTextAreaElement)
+                                    syncRowHeight(index)
+                                  }}
+                                  placeholder="請輸入活動流程"
+                                  rows={6}
+                                  className="w-full border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[120px]"
+                                  style={{ height: 'auto', padding: '0' }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* 時間欄位 */}
+                            <div className="w-16 flex-shrink-0 flex items-start px-2 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                              <div className="w-full px-0 py-0">
+                                <textarea
+                                  data-row-id={`activity-row-${index}`}
+                                  value={row.time}
+                                  onChange={(e) => {
+                                    const newRows = [...activityRows]
+                                    newRows[index].time = e.target.value
+                                    setActivityRows(newRows)
+                                    autoResizeTextarea(e.target)
+                                    syncRowHeight(index)
+                                  }}
+                                  onInput={(e) => {
+                                    autoResizeTextarea(e.target as HTMLTextAreaElement)
+                                    syncRowHeight(index)
+                                  }}
+                                  placeholder="輸入時間"
+                                  className="w-full border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
+                                  style={{ height: 'auto', padding: '0' }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* 評量方式欄位 */}
+                            <div className="w-[150px] flex-shrink-0 flex items-start px-4 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                              <div className="w-full px-0 py-0">
+                                <textarea
+                                  data-row-id={`activity-row-${index}`}
+                                  value={row.assessmentMethod}
+                                  onChange={(e) => {
+                                    const newRows = [...activityRows]
+                                    newRows[index].assessmentMethod = e.target.value
+                                    setActivityRows(newRows)
+                                    autoResizeTextarea(e.target)
+                                    syncRowHeight(index)
+                                  }}
+                                  onInput={(e) => {
+                                    autoResizeTextarea(e.target as HTMLTextAreaElement)
+                                    syncRowHeight(index)
+                                  }}
+                                  placeholder="輸入評量方式"
+                                  className="w-full border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
+                                  style={{ height: 'auto', padding: '0' }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* 備註欄位 */}
+                            <div className="w-16 flex-shrink-0 flex flex-col items-start px-2 py-2">
+                              <div className="w-full px-0 py-0">
+                                <textarea
+                                  data-row-id={`activity-row-${index}`}
+                                  value={row.notes}
+                                  onChange={(e) => {
+                                    const newRows = [...activityRows]
+                                    newRows[index].notes = e.target.value
+                                    setActivityRows(newRows)
+                                    autoResizeTextarea(e.target)
+                                    syncRowHeight(index)
+                                  }}
+                                  onInput={(e) => {
+                                    autoResizeTextarea(e.target as HTMLTextAreaElement)
+                                    syncRowHeight(index)
+                                  }}
+                                  placeholder="輸入備註"
+                                  className="w-full border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
+                                  style={{ height: 'auto', padding: '0' }}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1 mt-2 self-center sm:hidden">
+                                <button
+                                  onClick={() => {
+                                    // 編輯功能：打開 modal 並載入該行的資料
+                                    // 計算排序後的索引，用於確定序號預設值
+                                    const sortedRows = sortActivityRows(activityRows)
+                                    const sortedIndex = sortedRows.findIndex(r => r.id === row.id)
+                                    setNewActivityData({
+                                      sequenceNumber: row.sequenceNumber || (sortedIndex >= 0 ? (sortedIndex + 1).toString() : ''),
+                                      selectedLearningObjectives: row.selectedLearningObjectives,
+                                      activityFlow: row.activityFlow,
+                                      time: row.time,
+                                      assessmentMethod: row.assessmentMethod,
+                                      notes: row.notes,
+                                    })
+                                    // 設置編輯模式，不刪除該行
+                                    setEditingActivityId(row.id)
+                                    setIsAddActivityModalOpen(true)
+                                  }}
+                                  className="px-2 py-1 bg-[rgba(138,99,210,0.9)] text-white text-xs rounded hover:bg-[rgba(138,99,210,1)] transition-colors"
+                                >
+                                  編輯
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setActivityRows(activityRows.filter((_, i) => i !== index))
+                                  }}
+                                  className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+                                >
+                                  刪除
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* 桌面版編輯和刪除按鈕欄位 */}
+                            <div className="hidden sm:flex w-16 flex-shrink-0 items-center justify-center flex-col gap-1">
+                              <button
+                                onClick={() => {
+                                  // 編輯功能：打開 modal 並載入該行的資料
+                                  // 計算排序後的索引，用於確定序號預設值
+                                  const sortedRows = sortActivityRows(activityRows)
+                                  const sortedIndex = sortedRows.findIndex(r => r.id === row.id)
+                                  setNewActivityData({
+                                    sequenceNumber: row.sequenceNumber || (sortedIndex >= 0 ? (sortedIndex + 1).toString() : ''),
+                                    selectedLearningObjectives: row.selectedLearningObjectives,
+                                    activityFlow: row.activityFlow,
+                                    time: row.time,
+                                    assessmentMethod: row.assessmentMethod,
+                                    notes: row.notes,
+                                  })
+                                  // 設置編輯模式，不刪除該行
+                                  setEditingActivityId(row.id)
+                                  setIsAddActivityModalOpen(true)
+                                }}
+                                className="px-2 py-1 bg-[rgba(138,99,210,0.9)] text-white text-xs rounded hover:bg-[rgba(138,99,210,1)] transition-colors"
+                              >
+                                編輯
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setActivityRows(activityRows.filter((_, i) => i !== index))
+                                }}
+                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+                              >
+                                刪除
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-
-                      {/* 已加入的列 - 表格樣式 */}
-                      {activityRows.map((row, index) => (
-                        <div key={row.id} className="flex" style={{ borderTop: index > 0 ? '1px solid #d1d5db' : 'none' }}>
-                          {/* 教學內容及實施方式 */}
-                          <div className="flex-[5] sm:flex-[3] flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
-                            <textarea
-                              data-row-id={`activity-row-${index}`}
-                              value={row.teachingContent}
-                              onChange={(e) => {
-                                const newRows = [...activityRows]
-                                newRows[index].teachingContent = e.target.value
-                                setActivityRows(newRows)
-                                autoResizeTextarea(e.target)
-                                syncRowHeight(index)
-                              }}
-                              onInput={(e) => {
-                                autoResizeTextarea(e.target as HTMLTextAreaElement)
-                                syncRowHeight(index)
-                              }}
-                              placeholder="輸入教學內容及實施方式"
-                              className="w-full px-4 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
-                              style={{ height: 'auto' }}
-                            />
-                          </div>
-
-                          {/* 教學時間 */}
-                          <div className="w-10 sm:w-16 flex-shrink-0 flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
-                            <textarea
-                              data-row-id={`activity-row-${index}`}
-                              value={row.teachingTime}
-                              onChange={(e) => {
-                                const newRows = [...activityRows]
-                                newRows[index].teachingTime = e.target.value
-                                setActivityRows(newRows)
-                                autoResizeTextarea(e.target)
-                                syncRowHeight(index)
-                              }}
-                              onInput={(e) => {
-                                autoResizeTextarea(e.target as HTMLTextAreaElement)
-                                syncRowHeight(index)
-                              }}
-                              placeholder="輸入教學時間"
-                              className="w-full px-1 sm:px-2 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden vertical-text sm:horizontal-text"
-                              style={{ height: 'auto' }}
-                            />
-                          </div>
-
-                          {/* 教學資源 */}
-                          <div className="w-10 sm:w-24 flex-shrink-0 flex items-start" style={{ borderRight: '1px solid #d1d5db' }}>
-                            <textarea
-                              data-row-id={`activity-row-${index}`}
-                              value={row.teachingResources}
-                              onChange={(e) => {
-                                const newRows = [...activityRows]
-                                newRows[index].teachingResources = e.target.value
-                                setActivityRows(newRows)
-                                autoResizeTextarea(e.target)
-                                syncRowHeight(index)
-                              }}
-                              onInput={(e) => {
-                                autoResizeTextarea(e.target as HTMLTextAreaElement)
-                                syncRowHeight(index)
-                              }}
-                              placeholder="輸入教學資源"
-                              className="w-full px-1 sm:px-2 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden vertical-text sm:horizontal-text"
-                              style={{ height: 'auto' }}
-                            />
-                          </div>
-
-                          {/* 學習評量方式 */}
-                          <div className="flex-[2] flex flex-col items-start">
-                            <textarea
-                              data-row-id={`activity-row-${index}`}
-                              value={row.assessmentMethods}
-                              onChange={(e) => {
-                                const newRows = [...activityRows]
-                                newRows[index].assessmentMethods = e.target.value
-                                setActivityRows(newRows)
-                                autoResizeTextarea(e.target)
-                                syncRowHeight(index)
-                              }}
-                              onInput={(e) => {
-                                autoResizeTextarea(e.target as HTMLTextAreaElement)
-                                syncRowHeight(index)
-                              }}
-                              placeholder="輸入學習評量方式"
-                              className="w-full px-4 py-2 border-0 rounded-none focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none min-h-[40px] overflow-hidden"
-                              style={{ height: 'auto' }}
-                            />
-                            <button
-                              onClick={() => {
-                                setActivityRows(activityRows.filter((_, i) => i !== index))
-                              }}
-                              className="mt-2 px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors self-center sm:hidden"
-                            >
-                              刪除
-                            </button>
-                          </div>
-
-                          {/* 桌面版刪除按鈕欄位 */}
-                          <div className="hidden sm:flex w-20 flex-shrink-0 items-center justify-center">
-                            <button
-                              onClick={() => {
-                                setActivityRows(activityRows.filter((_, i) => i !== index))
-                              }}
-                              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
-                            >
-                              刪除
-                            </button>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   )}
-
-                  {/* 評量工具 */}
-                  <div>
-                    <label className="block text-gray-700 font-medium mb-2">
-                      評量工具
-                    </label>
-                    <textarea
-                      value={assessmentTools}
-                      onChange={(e) => setAssessmentTools(e.target.value)}
-                      placeholder="輸入評量工具"
-                      rows={3}
-                      className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                    />
-                  </div>
-
-                  {/* 參考資料 */}
-                  <div>
-                    <label className="block text-gray-700 font-medium mb-2">
-                      參考資料
-                    </label>
-                    <textarea
-                      value={references}
-                      onChange={(e) => setReferences(e.target.value)}
-                      placeholder="輸入參考資料"
-                      rows={3}
-                      className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
-                    />
-                  </div>
 
                   {/* 儲存按鈕 */}
                   <div className="flex justify-end pt-4">
@@ -6989,7 +7143,7 @@ export default function CourseObjectives({
                         {addedLearningPerformances.flatMap((performance, perfIndex) =>
                           performance.content.map((perf, perfContentIndex) => (
                             <div key={`${perfIndex}-${perfContentIndex}`}>
-                              {activityRows.map((activity, actIndex) => {
+                              {sortActivityRows(activityRows).map((activity, actIndex) => {
                                 const checkId = `perf-${perfIndex}-${perfContentIndex}-${actIndex}`
                                 const isChecked = checkedPerformances.has(checkId)
                                 
@@ -7010,11 +7164,22 @@ export default function CourseObjectives({
                                       <div className="flex-1 px-4 py-3 text-gray-800" style={{ borderRight: '1px solid #d1d5db' }}>
                                         <div className="mb-2">
                                           <span className="font-bold text-gray-700">活動：</span>
-                                          <div className="mt-1">{activity.teachingContent}</div>
+                                          <div className="mt-1">{activity.activityFlow}</div>
                                         </div>
                                         <div>
                                           <span className="font-bold text-gray-700">學習目標：</span>
-                                          <div className="mt-1">{learningObjectives}</div>
+                                          <div className="mt-1">
+                                            {activity.selectedLearningObjectives.length > 0
+                                              ? activity.selectedLearningObjectives.map((idx) => {
+                                                  const objIdx = parseInt(idx)
+                                                  const obj = learningObjectives[objIdx]
+                                                  return obj ? (
+                                                    <div key={idx} className="mb-1">{obj.content}</div>
+                                                  ) : null
+                                                })
+                                              : '未選擇學習目標'
+                                            }
+                                          </div>
                                         </div>
                                       </div>
                                       <div 
@@ -7054,7 +7219,7 @@ export default function CourseObjectives({
                         {addedLearningContents.flatMap((contentGroup, contIndex) =>
                           contentGroup.content.map((cont, contContentIndex) => (
                             <div key={`${contIndex}-${contContentIndex}`}>
-                              {activityRows.map((activity, actIndex) => {
+                              {sortActivityRows(activityRows).map((activity, actIndex) => {
                                 const checkId = `cont-${contIndex}-${contContentIndex}-${actIndex}`
                                 const isChecked = checkedContents.has(checkId)
                                 
@@ -7075,11 +7240,22 @@ export default function CourseObjectives({
                                       <div className="flex-1 px-4 py-3 text-gray-800" style={{ borderRight: '1px solid #d1d5db' }}>
                                         <div className="mb-2">
                                           <span className="font-bold text-gray-700">活動：</span>
-                                          <div className="mt-1">{activity.teachingContent}</div>
+                                          <div className="mt-1">{activity.activityFlow}</div>
                                         </div>
                                         <div>
                                           <span className="font-bold text-gray-700">學習目標：</span>
-                                          <div className="mt-1">{learningObjectives}</div>
+                                          <div className="mt-1">
+                                            {activity.selectedLearningObjectives.length > 0
+                                              ? activity.selectedLearningObjectives.map((idx) => {
+                                                  const objIdx = parseInt(idx)
+                                                  const obj = learningObjectives[objIdx]
+                                                  return obj ? (
+                                                    <div key={idx} className="mb-1">{obj.content}</div>
+                                                  ) : null
+                                                })
+                                              : '未選擇學習目標'
+                                            }
+                                          </div>
                                         </div>
                                       </div>
                                       <div 
@@ -7262,7 +7438,10 @@ export default function CourseObjectives({
                         學習目標
                       </div>
                       <div className="flex-1 px-2 py-1.5 text-gray-800 whitespace-pre-wrap text-xs" style={{ minHeight: '60px', wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0 }}>
-                        {learningObjectives || ''}
+                        {learningObjectives.length > 0 
+                          ? learningObjectives.map(obj => obj.content).join('\n')
+                          : ''
+                        }
                       </div>
                     </div>
 
@@ -7281,84 +7460,79 @@ export default function CourseObjectives({
                     <div style={{ borderBottom: '1px solid #9ca3af' }}>
                       {/* 表頭行 */}
                       <div className="flex bg-gray-100">
-                        <div className="flex-[3] px-2 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
-                          教學內容及實施方式
+                        <div className="w-8 px-2 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
+                          #
                         </div>
-                        <div className="w-16 px-1 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
-                          教學時間
+                        <div className="flex-[2] px-2 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
+                          活動目標
                         </div>
-                        <div className="w-20 px-1 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
-                          教學資源
+                        <div className="flex-[6] px-2 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
+                          活動流程
                         </div>
-                        <div className="flex-[2] px-2 py-1.5 font-medium text-gray-700 text-center text-xs">
-                          學習評量方式
+                        <div className="w-12 px-1 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
+                          時間
+                        </div>
+                        <div className="flex-[2] px-2 py-1.5 font-medium text-gray-700 text-center text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
+                          評量方式
+                        </div>
+                        <div className="w-12 px-1 py-1.5 font-medium text-gray-700 text-center text-xs">
+                          備註
                         </div>
                       </div>
                       {/* 活動內容行 */}
                       {activityRows.length > 0 ? (
-                        activityRows.map((activity, index) => {
+                        sortActivityRows(activityRows).map((activity, index) => {
+                          // 取得選中的學習目標文字
+                          const selectedObjectives = activity.selectedLearningObjectives
+                            .map(idx => {
+                              const objIdx = parseInt(idx)
+                              return learningObjectives[objIdx]?.content || ''
+                            })
+                            .filter(Boolean)
+                            .join('、')
+                          
                           // 計算這一行的最大高度
                           const getRowHeight = () => {
-                            const content = activity.teachingContent || ''
-                            const time = activity.teachingTime || ''
-                            const resources = activity.teachingResources || ''
-                            const assessment = activity.assessmentMethods || ''
-                            
-                            // 簡單估算：每行約 20px，加上 padding
-                            const contentLines = content.split('\n').length || 1
-                            const timeLines = time.split('\n').length || 1
-                            const resourcesLines = resources.split('\n').length || 1
-                            const assessmentLines = assessment.split('\n').length || 1
-                            
-                            const maxLines = Math.max(contentLines, timeLines, resourcesLines, assessmentLines)
+                            const flowLines = (activity.activityFlow || '').split('\n').length || 1
+                            const timeLines = (activity.time || '').split('\n').length || 1
+                            const assessmentLines = (activity.assessmentMethod || '').split('\n').length || 1
+                            const notesLines = (activity.notes || '').split('\n').length || 1
+                            const maxLines = Math.max(flowLines, timeLines, assessmentLines, notesLines)
                             return Math.max(40, maxLines * 20 + 12)
                           }
                           
                           const rowHeight = getRowHeight()
                           
                           return (
-                            <div key={activity.id} className="flex" style={{ borderTop: '1px solid #9ca3af' }}>
-                              <div className="flex-[3] px-2 py-1.5 text-gray-800 whitespace-pre-wrap text-xs border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0, borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
-                                {activity.teachingContent || ''}
+                            <div key={activity.id} className="flex">
+                              <div className="w-8 px-2 py-1.5 text-gray-800 text-xs text-center border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
+                                {activity.sequenceNumber || (index + 1)}
                               </div>
-                              <div className="w-16 flex-shrink-0 px-1 py-1.5 text-gray-800 text-xs whitespace-pre-wrap border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
-                                {activity.teachingTime || ''}
+                              <div className="flex-[2] px-2 py-1.5 text-gray-800 text-xs whitespace-pre-wrap border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0, borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
+                                {selectedObjectives || ''}
                               </div>
-                              <div className="w-20 flex-shrink-0 px-1 py-1.5 text-gray-800 text-xs whitespace-pre-wrap border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
-                                {activity.teachingResources || ''}
+                              <div className="flex-[6] px-2 py-1.5 text-gray-800 text-xs whitespace-pre-wrap border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0, borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
+                                {activity.activityFlow || ''}
                               </div>
-                              <div className="flex-[2] px-2 py-1.5 text-gray-800 whitespace-pre-wrap text-xs" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0 }}>
-                                {activity.assessmentMethods || ''}
+                              <div className="w-12 flex-shrink-0 px-1 py-1.5 text-gray-800 text-xs whitespace-pre-wrap border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
+                                {activity.time || ''}
+                              </div>
+                              <div className="flex-[2] px-2 py-1.5 text-gray-800 text-xs whitespace-pre-wrap border-r border-gray-400" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0, borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: '#9ca3af' }}>
+                                {activity.assessmentMethod || ''}
+                              </div>
+                              <div className="w-12 flex-shrink-0 px-1 py-1.5 text-gray-800 text-xs whitespace-pre-wrap" style={{ minHeight: `${rowHeight}px`, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                                {activity.notes || ''}
                               </div>
                             </div>
                           )
                         })
                       ) : (
-                        <div className="flex" style={{ borderTop: '1px solid #9ca3af' }}>
+                        <div className="flex">
                           <div className="flex-1 px-2 py-1.5 text-gray-800 min-h-[36px] text-xs"></div>
                         </div>
                       )}
                     </div>
 
-                    {/* 評量工具 */}
-                    <div className="flex" style={{ borderBottom: '1px solid #9ca3af' }}>
-                      <div className="w-24 px-2 py-1.5 bg-gray-100 font-medium text-gray-700 text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
-                        評量工具
-                      </div>
-                      <div className="flex-1 px-2 py-1.5 text-gray-800 whitespace-pre-wrap text-xs" style={{ minHeight: '50px', wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0 }}>
-                        {assessmentTools || ''}
-                      </div>
-                    </div>
-
-                    {/* 參考資料 */}
-                    <div className="flex">
-                      <div className="w-24 px-2 py-1.5 bg-gray-100 font-medium text-gray-700 text-xs" style={{ borderRight: '1px solid #9ca3af' }}>
-                        參考資料
-                      </div>
-                      <div className="flex-1 px-2 py-1.5 text-gray-800 whitespace-pre-wrap text-xs" style={{ minHeight: '50px', wordBreak: 'break-word', overflowWrap: 'break-word', minWidth: 0 }}>
-                        {references || ''}
-                      </div>
-                    </div>
                   </div>
 
                   {/* 底部按鈕 */}
@@ -7386,7 +7560,7 @@ export default function CourseObjectives({
             </div>
             {/* 右側區域 - 想法收斂結果（僅在課程目標和活動與評量設計標籤頁顯示） */}
             {(activeTab === 'objectives' || activeTab === 'activity') && (
-              <div className="w-96 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="w-64 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200">
                 {/* 標題欄 */}
                 <div className="bg-gradient-to-r from-purple-400 to-purple-600 px-6 py-4 rounded-t-lg">
                   <h2 className="text-white font-semibold text-lg">想法收斂結果</h2>
@@ -7418,6 +7592,254 @@ export default function CourseObjectives({
                   )}
                 </div>
               </div>
+            )}
+
+            {/* 新增活動 Modal */}
+            {isAddActivityModalOpen && (
+              <>
+                {/* 背景遮罩 */}
+                <div
+                  className="fixed inset-0 z-40"
+                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                  onClick={() => {
+                    // 關閉時重置編輯狀態和表單數據
+                    setEditingActivityId(null)
+                    setNewActivityData({
+                      sequenceNumber: '',
+                      selectedLearningObjectives: [],
+                      activityFlow: '',
+                      time: '',
+                      assessmentMethod: '',
+                      notes: '',
+                    })
+                    setIsAddActivityModalOpen(false)
+                  }}
+                />
+                {/* 模態框內容 */}
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 pointer-events-none overflow-y-auto">
+                  <div
+                    className="bg-white rounded-lg shadow-xl w-full max-w-3xl flex flex-col pointer-events-auto"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      maxHeight: 'calc(100vh - 1rem - 80px)',
+                    }}
+                  >
+                  {/* 標題列 */}
+                  <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <h2 className="text-xl font-semibold text-gray-800">{editingActivityId ? '編輯活動' : '新增活動'}</h2>
+                    <button
+                      onClick={() => {
+                        // 關閉時重置編輯狀態和表單數據
+                        setEditingActivityId(null)
+                        setNewActivityData({
+                          sequenceNumber: '',
+                          selectedLearningObjectives: [],
+                          activityFlow: '',
+                          time: '',
+                          assessmentMethod: '',
+                          notes: '',
+                        })
+                        setIsAddActivityModalOpen(false)
+                      }}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* 內容區域 */}
+                  <div className="flex-1 overflow-y-auto px-6 py-4">
+                    <div className="space-y-6">
+                      {/* 序號 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          #
+                        </label>
+                        <input
+                          type="text"
+                          value={newActivityData.sequenceNumber}
+                          onChange={(e) => setNewActivityData({ ...newActivityData, sequenceNumber: e.target.value })}
+                          placeholder="請輸入活動序號"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                        />
+                      </div>
+
+                      {/* 學習目標 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          學習目標
+                        </label>
+                        {learningObjectives.length > 0 ? (
+                          <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto bg-gray-50">
+                            <div className="space-y-2">
+                              {learningObjectives.map((obj, objIdx) => {
+                                const isSelected = newActivityData.selectedLearningObjectives.includes(objIdx.toString())
+                                return (
+                                  <label
+                                    key={objIdx}
+                                    className="flex items-start space-x-3 p-3 hover:bg-white rounded cursor-pointer transition-colors"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setNewActivityData({
+                                            ...newActivityData,
+                                            selectedLearningObjectives: [
+                                              ...newActivityData.selectedLearningObjectives,
+                                              objIdx.toString()
+                                            ]
+                                          })
+                                        } else {
+                                          setNewActivityData({
+                                            ...newActivityData,
+                                            selectedLearningObjectives: newActivityData.selectedLearningObjectives.filter(
+                                              (idx) => idx !== objIdx.toString()
+                                            )
+                                          })
+                                        }
+                                      }}
+                                      className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500 flex-shrink-0"
+                                    />
+                                    <span className="text-sm text-gray-700 flex-1">{obj.content}</span>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-400 italic border border-gray-300 rounded-lg p-4 bg-gray-50">
+                            請先在「課程目標」中新增學習目標
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 活動流程 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          活動流程
+                        </label>
+                        <textarea
+                          value={newActivityData.activityFlow}
+                          onChange={(e) => setNewActivityData({ ...newActivityData, activityFlow: e.target.value })}
+                          placeholder="請輸入活動流程"
+                          rows={8}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 resize-none"
+                        />
+                      </div>
+
+                      {/* 時間 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          時間
+                        </label>
+                        <input
+                          type="text"
+                          value={newActivityData.time}
+                          onChange={(e) => setNewActivityData({ ...newActivityData, time: e.target.value })}
+                          placeholder="輸入時間"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                        />
+                      </div>
+
+                      {/* 評量方式 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          評量方式
+                        </label>
+                        <textarea
+                          value={newActivityData.assessmentMethod}
+                          onChange={(e) => setNewActivityData({ ...newActivityData, assessmentMethod: e.target.value })}
+                          placeholder="輸入評量方式"
+                          rows={3}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 resize-none"
+                        />
+                      </div>
+
+                      {/* 備註 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          備註
+                        </label>
+                        <textarea
+                          value={newActivityData.notes}
+                          onChange={(e) => setNewActivityData({ ...newActivityData, notes: e.target.value })}
+                          placeholder="輸入備註"
+                          rows={3}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 resize-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 底部按鈕 */}
+                  <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // 取消時重置編輯狀態和表單數據
+                        setEditingActivityId(null)
+                        setNewActivityData({
+                          sequenceNumber: '',
+                          selectedLearningObjectives: [],
+                          activityFlow: '',
+                          time: '',
+                          assessmentMethod: '',
+                          notes: '',
+                        })
+                        setIsAddActivityModalOpen(false)
+                      }}
+                      className="px-6 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newActivityData.activityFlow.trim() || newActivityData.time.trim() || newActivityData.notes.trim() || newActivityData.assessmentMethod.trim() || newActivityData.selectedLearningObjectives.length > 0 || newActivityData.sequenceNumber.trim()) {
+                          if (editingActivityId) {
+                            // 編輯模式：更新現有活動
+                            setActivityRows(activityRows.map(row => 
+                              row.id === editingActivityId 
+                                ? { ...row, ...newActivityData }
+                                : row
+                            ))
+                          } else {
+                            // 新增模式：添加新活動
+                            setActivityRows([
+                              ...activityRows,
+                              {
+                                id: Date.now().toString(),
+                                ...newActivityData,
+                              }
+                            ])
+                          }
+                          // 重置表單數據和編輯狀態
+                          setNewActivityData({
+                            sequenceNumber: '',
+                            selectedLearningObjectives: [],
+                            activityFlow: '',
+                            time: '',
+                            assessmentMethod: '',
+                            notes: '',
+                          })
+                          setEditingActivityId(null)
+                          setIsAddActivityModalOpen(false)
+                        } else {
+                          alert('請至少填寫一個欄位')
+                        }
+                      }}
+                      className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
+                    >
+                      {editingActivityId ? '確認' : '新增'}
+                    </button>
+                  </div>
+                </div>
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -8,3 +8,4 @@ USE teacher_collaboration_system;
 ALTER TABLE notifications
 MODIFY COLUMN type ENUM('file', 'task', 'idea', 'lesson_plan', 'convergence') NOT NULL COMMENT '通知類型';
 
+
