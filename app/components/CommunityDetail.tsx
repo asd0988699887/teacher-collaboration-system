@@ -1866,12 +1866,18 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
   // 獲取成員信息（根據使用者ID）
   const getMemberInfo = (userId: string) => {
+    // 先從 fullCommunityMembers 查找（包含 account）
+    const fullMember = fullCommunityMembers.find((m) => m.userId === userId)
+    if (fullMember) {
+      return { name: fullMember.nickname, account: fullMember.account }
+    }
+    // 再從 communityMembers 查找
     const member = communityMembers.find((m) => m.id === userId)
     if (member) {
-      return member
+      return { name: member.name, account: member.id } // 使用 id 作為 account 的備用值
     }
     // 如果找不到，返回預設值
-    return { id: userId, name: '未知', avatar: '' }
+    return { name: '未知', account: userId }
   }
 
   // 定義一組色調差異明顯的顏色（用於區分不同使用者）
