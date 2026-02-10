@@ -18,10 +18,10 @@ function generateUUID(): string {
 // GET: 讀取活動的所有版本
 export async function GET(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: { params: Promise<{ activityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { activityId } = resolvedParams
 
     if (!activityId) {

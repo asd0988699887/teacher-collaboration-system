@@ -20,10 +20,10 @@ function generateUUID(): string {
 // GET: 讀取教案資料
 export async function GET(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: { params: Promise<{ activityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { activityId } = resolvedParams
 
     if (!activityId) {
@@ -236,10 +236,10 @@ export async function GET(
 // POST: 儲存教案資料
 export async function POST(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: { params: Promise<{ activityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { activityId } = resolvedParams
     const body = await request.json()
     const userId = body.userId // 從請求中取得使用者 ID

@@ -8,10 +8,10 @@ import { v4 as uuidv4 } from 'uuid'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: { params: Promise<{ activityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { activityId } = resolvedParams
     const body = await request.json()
     const { versionId, userId } = body
