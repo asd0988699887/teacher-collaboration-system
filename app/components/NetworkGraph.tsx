@@ -118,6 +118,15 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
   // 保存視圖狀態的函數
   const saveViewState = useCallback(async (zoom: number, panX: number, panY: number) => {
     try {
+      // 驗證並限制縮放比例（0.1 到 3 之間，避免太大導致跑版）
+      const validZoom = Math.max(0.1, Math.min(3, zoom))
+      
+      // 如果縮放比例異常，不保存
+      if (isNaN(zoom) || zoom < 0.1 || zoom > 3) {
+        console.warn('縮放比例異常，跳過保存:', zoom)
+        return
+      }
+      
       const response = await fetch(
         `/api/communities/${communityId}/network-graph/view-state`,
         {
@@ -125,7 +134,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ zoom, panX, panY }),
+          body: JSON.stringify({ zoom: validZoom, panX, panY }),
         }
       )
 
@@ -328,45 +337,66 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
         }
       }, 100)
       
-      // 如果有保存的視圖狀態，恢復它；否則自動縮放和居中
+      // 強制自動縮放，確保所有節點都在畫面內（避免跑版）
+      // 無論是否有保存的視圖狀態，都先執行 zoomToFit 確保節點可見
       const restoreViewStateTimeout = setTimeout(() => {
         if (fgRef.current) {
           try {
+            // 先執行自動縮放，確保所有節點都在畫面內
+            // 使用較大的邊距（200, 200）確保節點不會貼邊
+            fgRef.current.zoomToFit(200, 200)
+            console.log('✅ 已執行自動縮放，確保所有節點在畫面內')
+            
+            // 如果有保存的視圖狀態（不是默認值），在自動縮放後再恢復縮放比例
+            // 但只恢復縮放，不恢復平移（因為平移可能導致節點跑出畫面）
             const savedZoom = viewStateRef.current.zoom
             const savedPanX = viewStateRef.current.panX
             const savedPanY = viewStateRef.current.panY
             
-            // 如果有保存的視圖狀態（不是默認值），恢復它
             if (savedZoom !== 1.0 || savedPanX !== 0 || savedPanY !== 0) {
-              fgRef.current.zoom(savedZoom)
-              fgRef.current.center(savedPanX, savedPanY)
-              console.log('✅ 已恢復視圖狀態:', { zoom: savedZoom, panX: savedPanX, panY: savedPanY })
-            } else {
-              // 否則自動縮放和居中
-              fgRef.current.zoomToFit(400, 100)
+              // 驗證縮放比例是否合理（限制在 0.1 到 2 之間，避免太大導致跑版）
+              if (savedZoom >= 0.1 && savedZoom <= 2 && !isNaN(savedZoom)) {
+                // 延遲一點再恢復縮放，確保 zoomToFit 已完成
+                setTimeout(() => {
+                  if (fgRef.current) {
+                    try {
+                      fgRef.current.zoom(savedZoom)
+                      console.log('✅ 已恢復縮放比例:', savedZoom)
+                    } catch (e) {
+                      console.warn('恢復縮放比例失敗:', e)
+                    }
+                  }
+                }, 100)
+              } else {
+                console.warn('保存的縮放比例異常，跳過恢復:', savedZoom)
+              }
             }
           } catch (e) {
             console.error('恢復視圖狀態失敗:', e)
-            // 如果恢復失敗，嘗試自動縮放
+            // 如果恢復失敗，再次嘗試自動縮放
             try {
-              fgRef.current.zoomToFit(400, 100)
+              if (fgRef.current) {
+                fgRef.current.zoomToFit(200, 200)
+              }
             } catch (e2) {
               console.error('自動縮放失敗:', e2)
             }
           }
         }
-      }, 1000) // 等待 1 秒
+      }, 1000) // 等待 1 秒，確保圖表已初始化
       
-      // 備用自動縮放（如果沒有保存的視圖狀態）
+      // 備用自動縮放，確保節點在畫面內（雙重保險）
       const autoFitTimeout2 = setTimeout(() => {
-        if (fgRef.current && viewStateRef.current.zoom === 1.0 && viewStateRef.current.panX === 0 && viewStateRef.current.panY === 0) {
+        if (fgRef.current) {
           try {
-            fgRef.current.zoomToFit(400, 100) // 第二次嘗試，確保成功
+            // 再次執行自動縮放，確保所有節點都在畫面內
+            fgRef.current.zoomToFit(200, 200)
+            console.log('✅ 備用自動縮放已執行')
           } catch (e) {
-            console.error('自動縮放失敗:', e)
+            console.error('備用自動縮放失敗:', e)
           }
         }
-      }, 2000) // 等待 2 秒
+      }, 2000) // 等待 2 秒，作為備用方案
       
       return () => {
         clearTimeout(restoreViewStateTimeout)
@@ -759,10 +789,10 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                   const centerForce = fgRef.current.d3Force('center')
                   if (centerForce) centerForce.strength(0.6)
                   
-                  // 自動縮放和居中
+                  // 自動縮放和居中，確保所有節點都在畫面內
                   setTimeout(() => {
                     if (fgRef.current) {
-                      fgRef.current.zoomToFit(400, 100)
+                      fgRef.current.zoomToFit(200, 200)
                     }
                   }, 100)
                 } catch (e) {
