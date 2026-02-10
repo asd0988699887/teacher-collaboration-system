@@ -8,10 +8,10 @@ import { query } from '@/lib/db'
 // GET: 讀取單一活動資訊
 export async function GET(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: { params: Promise<{ activityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { activityId } = resolvedParams
 
     // 查詢活動資訊
@@ -74,10 +74,10 @@ export async function GET(
 // PUT: 更新活動資訊
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: { params: Promise<{ activityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { activityId } = resolvedParams
     const body = await request.json()
     const { name, introduction, isPublic, password, userId } = body
@@ -194,10 +194,10 @@ export async function PUT(
 // DELETE: 刪除活動
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: { params: Promise<{ activityId: string }> }
 ) {
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const { activityId } = resolvedParams
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')
