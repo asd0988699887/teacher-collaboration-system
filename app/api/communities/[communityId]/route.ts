@@ -202,8 +202,6 @@ export async function DELETE(
   try {
     const resolvedParams = await params
     const { communityId } = resolvedParams
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { communityId } = resolvedParams
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')
 

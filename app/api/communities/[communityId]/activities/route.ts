@@ -72,8 +72,6 @@ export async function POST(
   try {
     const resolvedParams = await params
     const { communityId } = resolvedParams
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { communityId } = resolvedParams
     
     // 驗證 communityId
     if (!communityId || communityId === 'null' || communityId === 'undefined') {
