@@ -5187,7 +5187,7 @@ export default function CourseObjectives({
                 {/* 第三個欄位：選擇代碼（選擇「其他」時不顯示） */}
                 {learningPerformanceSubItem && learningPerformanceCategory && learningPerformanceCategory !== '其他' && (() => {
                   const category = learningPerformanceData[learningPerformanceCategory as keyof typeof learningPerformanceData]
-                  const subItem = category.subItems[learningPerformanceSubItem as keyof typeof category.subItems]
+                  const subItem = category.subItems[learningPerformanceSubItem as keyof typeof category.subItems] as any
                   const allOptions: { code: string; description: string }[] = [
                     ...(subItem.stage2 || []),
                     ...(subItem.stage3 || [])
