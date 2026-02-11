@@ -6326,10 +6326,13 @@ export default function CourseObjectives({
 
                       {/* 第二層：選擇主題 */}
                       {naturalMHContentSubject && (() => {
-                        const selectedSubject = naturalMiddleHighContents.find(
+                        const selectedSubjectThemes = naturalMiddleHighContents.filter(
                           c => c.subjectCode === naturalMHContentSubject
                         )
-                        return selectedSubject && selectedSubject.themes.length > 0 ? (
+                        const uniqueThemes = Array.from(
+                          new Map(selectedSubjectThemes.map(t => [t.themeCode, t])).values()
+                        )
+                        return uniqueThemes.length > 0 ? (
                           <div className="flex gap-2">
                             <select
                               value={naturalMHContentTheme}
@@ -6341,7 +6344,7 @@ export default function CourseObjectives({
                               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
                             >
                               <option value="">請選擇主題</option>
-                              {selectedSubject.themes.map((theme) => (
+                              {uniqueThemes.map((theme) => (
                                 <option key={theme.themeCode} value={theme.themeCode}>
                                   {theme.themeName}
                                 </option>
@@ -6353,11 +6356,8 @@ export default function CourseObjectives({
 
                       {/* 第三層：選擇次主題 */}
                       {naturalMHContentSubject && naturalMHContentTheme && (() => {
-                        const selectedSubject = naturalMiddleHighContents.find(
-                          c => c.subjectCode === naturalMHContentSubject
-                        )
-                        const selectedTheme = selectedSubject?.themes.find(
-                          t => t.themeCode === naturalMHContentTheme
+                        const selectedTheme = naturalMiddleHighContents.find(
+                          c => c.subjectCode === naturalMHContentSubject && c.themeCode === naturalMHContentTheme
                         )
                         return selectedTheme && selectedTheme.subThemes.length > 0 ? (
                           <div className="flex gap-2">
@@ -6382,11 +6382,8 @@ export default function CourseObjectives({
 
                       {/* 第四層：選擇學習內容 */}
                       {naturalMHContentSubject && naturalMHContentTheme && naturalMHContentSubTheme && (() => {
-                        const selectedSubject = naturalMiddleHighContents.find(
-                          c => c.subjectCode === naturalMHContentSubject
-                        )
-                        const selectedTheme = selectedSubject?.themes.find(
-                          t => t.themeCode === naturalMHContentTheme
+                        const selectedTheme = naturalMiddleHighContents.find(
+                          c => c.subjectCode === naturalMHContentSubject && c.themeCode === naturalMHContentTheme
                         )
                         const selectedSubTheme = selectedTheme?.subThemes.find(
                           st => st.subThemeCode === naturalMHContentSubTheme
@@ -6425,11 +6422,8 @@ export default function CourseObjectives({
                         <div className="flex justify-end">
                           <button
                             onClick={() => {
-                              const selectedSubject = naturalMiddleHighContents.find(
-                                c => c.subjectCode === naturalMHContentSubject
-                              )
-                              const selectedTheme = selectedSubject?.themes.find(
-                                t => t.themeCode === naturalMHContentTheme
+                              const selectedTheme = naturalMiddleHighContents.find(
+                                c => c.subjectCode === naturalMHContentSubject && c.themeCode === naturalMHContentTheme
                               )
                               const selectedSubTheme = selectedTheme?.subThemes.find(
                                 st => st.subThemeCode === naturalMHContentSubTheme
