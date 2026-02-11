@@ -579,6 +579,8 @@ export default function CourseObjectives({
 
   // 當前版本號
   const [currentVersion, setCurrentVersion] = useState<string>('')
+  // 使用 ref 存儲 activityId，確保事件處理函數能訪問最新值
+  const activityIdRef = useRef(activityId)
 
   // 學習內容數據
   const learningContentData = {
@@ -1981,53 +1983,112 @@ export default function CourseObjectives({
     }
   }, [coreCompetencyCategory, coreCompetencyItem, courseDomain, schoolLevel, coreCompetencyData])
 
+  // 更新 activityIdRef
+  useEffect(() => {
+    activityIdRef.current = activityId
+  }, [activityId])
+
   // 載入當前版本號
   useEffect(() => {
     const loadCurrentVersion = async () => {
-      if (!activityId) return
+      const currentActivityId = activityIdRef.current
+      if (!currentActivityId) {
+        console.log('⚠️ CourseObjectives: activityId 為空，跳過載入版本號')
+        return
+      }
 
-      try {
-        // 優先從 API 讀取最新版本（確保版本號一致）
-        const response = await fetch(`/api/activity-versions/${activityId}`)
-        const data = await response.json()
-
-        if (response.ok && data.versions && data.versions.length > 0) {
-          // 取得最新版本（版本號最大的）
-          const latestVersion = data.versions[0]
-          const versionNumber = `v${latestVersion.versionNumber}`
-          setCurrentVersion(versionNumber)
-          // 更新 localStorage（同步到本地快取）
-          const storageKey = `currentVersion_${activityId}`
-          localStorage.setItem(storageKey, versionNumber)
-        } else {
-          // 如果 API 沒有版本，嘗試從 localStorage 讀取（作為備用）
-          const storageKey = `currentVersion_${activityId}`
-          const storedVersion = localStorage.getItem(storageKey)
-          if (storedVersion) {
-            setCurrentVersion(storedVersion)
-          } else {
-            setCurrentVersion('')
-          }
-        }
-      } catch (error) {
-        console.error('載入版本號錯誤:', error)
-        // API 失敗時，嘗試從 localStorage 讀取（作為備用）
+      console.log('🔄 CourseObjectives: 開始載入版本號，activityId:', currentActivityId)
+      
+      // 優先從 localStorage 讀取（因為回復版本時會更新 localStorage）
+      const storageKey = `currentVersion_${currentActivityId}`
+      const storedVersion = localStorage.getItem(storageKey)
+      
+      if (storedVersion) {
+        console.log('✅ CourseObjectives: 從 localStorage 讀取到版本號:', storedVersion)
+        setCurrentVersion(storedVersion)
+        // 仍然從 API 驗證，但不覆蓋 localStorage 的值（除非 API 返回的版本號更新）
         try {
-          const storageKey = `currentVersion_${activityId}`
-          const storedVersion = localStorage.getItem(storageKey)
-          if (storedVersion) {
-            setCurrentVersion(storedVersion)
+          const response = await fetch(`/api/activity-versions/${currentActivityId}`)
+          const data = await response.json()
+          
+          if (response.ok && data.versions && data.versions.length > 0) {
+            const latestVersion = data.versions[0]
+            const apiVersionNumber = `v${latestVersion.versionNumber}`
+            console.log('📡 CourseObjectives: API 回應版本號:', apiVersionNumber)
+            
+            // 如果 localStorage 的版本號和 API 的版本號不同，可能是回復版本的情況
+            // 在這種情況下，優先使用 localStorage 的值（回復的版本號）
+            if (storedVersion !== apiVersionNumber) {
+              console.log('⚠️ CourseObjectives: localStorage 版本號與 API 不同，使用 localStorage（可能是回復版本）')
+              console.log('   localStorage:', storedVersion, 'API:', apiVersionNumber)
+            }
+          }
+        } catch (error) {
+          console.error('❌ CourseObjectives: API 驗證失敗，繼續使用 localStorage:', error)
+        }
+      } else {
+        // 如果 localStorage 沒有版本號，從 API 讀取
+        console.log('⚠️ CourseObjectives: localStorage 沒有版本號，從 API 讀取')
+        try {
+          const response = await fetch(`/api/activity-versions/${currentActivityId}`)
+          const data = await response.json()
+
+          console.log('📡 CourseObjectives: API 回應:', data)
+
+          if (response.ok && data.versions && data.versions.length > 0) {
+            // 取得最新版本（版本號最大的）
+            const latestVersion = data.versions[0]
+            const versionNumber = `v${latestVersion.versionNumber}`
+            console.log('✅ CourseObjectives: 從 API 讀取到版本號:', versionNumber)
+            setCurrentVersion(versionNumber)
+            // 更新 localStorage（同步到本地快取）
+            localStorage.setItem(storageKey, versionNumber)
+            console.log('✅ CourseObjectives: 已更新版本號到 state 和 localStorage:', versionNumber)
           } else {
+            console.log('⚠️ CourseObjectives: API 沒有版本號')
             setCurrentVersion('')
           }
-        } catch (storageError) {
-          console.error('讀取 localStorage 錯誤:', storageError)
+        } catch (error) {
+          console.error('❌ CourseObjectives: 載入版本號錯誤:', error)
           setCurrentVersion('')
         }
       }
     }
 
     loadCurrentVersion()
+
+    // 監聽版本回復事件，重新載入版本號
+    const handleVersionRestored = (event: Event) => {
+      const currentActivityId = activityIdRef.current
+      const customEvent = event as CustomEvent<{ activityId: string; versionNumber: string } | undefined>
+      const eventData = customEvent.detail
+      
+      console.log('✅ CourseObjectives: 收到版本回復事件，activityId:', currentActivityId, '事件資料:', eventData)
+      
+      // 如果事件中包含版本號，直接使用它（優先）
+      if (eventData && eventData.versionNumber && eventData.activityId === currentActivityId) {
+        console.log('✅ CourseObjectives: 使用事件中的版本號:', eventData.versionNumber)
+        setCurrentVersion(eventData.versionNumber)
+        // 同步更新 localStorage
+        const storageKey = `currentVersion_${currentActivityId}`
+        localStorage.setItem(storageKey, eventData.versionNumber)
+        console.log('✅ CourseObjectives: 已更新版本號到 state 和 localStorage:', eventData.versionNumber)
+      } else {
+        // 如果事件中沒有版本號，延遲後重新從 localStorage 讀取（因為回復版本時會更新 localStorage）
+        console.log('⚠️ CourseObjectives: 事件中沒有版本號，將從 localStorage 重新讀取')
+        setTimeout(() => {
+          console.log('✅ CourseObjectives: 開始重新載入版本號（延遲後）')
+          loadCurrentVersion()
+        }, 500) // 縮短延遲時間，因為 localStorage 已經更新
+      }
+    }
+    window.addEventListener('versionRestored', handleVersionRestored)
+    console.log('✅ CourseObjectives: 已註冊 versionRestored 事件監聽器')
+
+    return () => {
+      window.removeEventListener('versionRestored', handleVersionRestored)
+      console.log('✅ CourseObjectives: 已移除 versionRestored 事件監聽器')
+    }
   }, [activityId])
 
   // 載入教案資料
