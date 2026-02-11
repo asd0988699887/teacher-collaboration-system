@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, ShadingType, PageOrientation, VerticalAlign } from 'docx'
@@ -476,6 +476,9 @@ export default function CourseObjectives({
   // 雙向細目表勾選狀態
   const [checkedPerformances, setCheckedPerformances] = useState<Set<string>>(new Set())
   const [checkedContents, setCheckedContents] = useState<Set<string>>(new Set())
+  
+  // 自動保存勾選狀態的節流計時器
+  const saveSpecificationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // 標籤頁狀態
   const [activeTab, setActiveTab] = useState('objectives')
@@ -3427,6 +3430,79 @@ export default function CourseObjectives({
       alert(`儲存失敗：${error.message || '未知錯誤'}`)
     }
   }
+
+  // 自動保存雙向細目表勾選狀態（不建立新版本）
+  const autoSaveSpecification = useCallback(async () => {
+    if (!activityId) return
+
+    // 獲取當前使用者資訊
+    const userData = localStorage.getItem('user')
+    let userId = ''
+    if (userData) {
+      try {
+        const user = JSON.parse(userData)
+        userId = user.id || user.account || ''
+      } catch (e) {
+        // 忽略解析錯誤
+      }
+    }
+
+    if (!userId) return
+
+    // 收集勾選狀態資料（需要包含必要的關聯資料以便 API 正確處理）
+    const formData = {
+      userId,
+      // 只傳遞勾選狀態相關的資料，其他使用現有值
+      checkedPerformances: Array.from(checkedPerformances),
+      checkedContents: Array.from(checkedContents),
+      // API 需要這些資料來正確映射 ID
+      addedLearningPerformances,
+      addedLearningContents,
+      activityRows,
+    }
+
+    try {
+      // 呼叫 API 儲存勾選狀態（API 會處理只更新勾選狀態的部分）
+      const response = await fetch(`/api/lesson-plans/${activityId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('自動保存勾選狀態失敗:', errorData)
+        // 不顯示錯誤訊息，避免打擾用戶
+      } else {
+        console.log('✅ 雙向細目表勾選狀態已自動保存')
+      }
+    } catch (error: any) {
+      console.error('自動保存勾選狀態錯誤:', error)
+      // 不顯示錯誤訊息，避免打擾用戶
+    }
+  }, [activityId, checkedPerformances, checkedContents, addedLearningPerformances, addedLearningContents, activityRows])
+
+  // 當勾選狀態改變時，自動保存（使用節流，500ms 後保存）
+  useEffect(() => {
+    // 清除之前的計時器
+    if (saveSpecificationTimeoutRef.current) {
+      clearTimeout(saveSpecificationTimeoutRef.current)
+    }
+
+    // 設置新的計時器
+    saveSpecificationTimeoutRef.current = setTimeout(() => {
+      autoSaveSpecification()
+    }, 500) // 500ms 後保存，避免頻繁請求
+
+    // 清理函數
+    return () => {
+      if (saveSpecificationTimeoutRef.current) {
+        clearTimeout(saveSpecificationTimeoutRef.current)
+      }
+    }
+  }, [checkedPerformances, checkedContents, autoSaveSpecification])
 
   const tabs = [
     { id: 'objectives', label: '課程目標' },

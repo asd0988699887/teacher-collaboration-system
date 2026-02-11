@@ -348,23 +348,35 @@ export async function POST(
         console.log('教案主表插入成功')
       }
 
-      // 2. 刪除舊的關聯資料
-      await connection.execute(
-        'DELETE FROM lesson_plan_core_competencies WHERE lesson_plan_id = ?',
-        [lessonPlanId]
-      )
-      await connection.execute(
-        'DELETE FROM lesson_plan_learning_performances WHERE lesson_plan_id = ?',
-        [lessonPlanId]
-      )
-      await connection.execute(
-        'DELETE FROM lesson_plan_learning_contents WHERE lesson_plan_id = ?',
-        [lessonPlanId]
-      )
-      await connection.execute(
-        'DELETE FROM lesson_plan_activity_rows WHERE lesson_plan_id = ?',
-        [lessonPlanId]
-      )
+      // 2. 刪除舊的關聯資料（只在有對應的新資料時才刪除，避免只更新勾選狀態時誤刪其他資料）
+      // 檢查是否有完整的教案資料（用於判斷是否為完整更新）
+      const isFullUpdate = body.lessonPlanTitle !== undefined || body.learningObjectives !== undefined || 
+                          (body.addedCoreCompetencies !== undefined && body.addedCoreCompetencies.length > 0) ||
+                          (body.addedLearningPerformances !== undefined && body.addedLearningPerformances.length > 0) ||
+                          (body.addedLearningContents !== undefined && body.addedLearningContents.length > 0) ||
+                          (body.activityRows !== undefined && body.activityRows.length > 0)
+      
+      if (isFullUpdate) {
+        // 完整更新：刪除所有舊資料
+        await connection.execute(
+          'DELETE FROM lesson_plan_core_competencies WHERE lesson_plan_id = ?',
+          [lessonPlanId]
+        )
+        await connection.execute(
+          'DELETE FROM lesson_plan_learning_performances WHERE lesson_plan_id = ?',
+          [lessonPlanId]
+        )
+        await connection.execute(
+          'DELETE FROM lesson_plan_learning_contents WHERE lesson_plan_id = ?',
+          [lessonPlanId]
+        )
+        await connection.execute(
+          'DELETE FROM lesson_plan_activity_rows WHERE lesson_plan_id = ?',
+          [lessonPlanId]
+        )
+      }
+      
+      // 勾選狀態總是刪除舊的（因為可能會有取消勾選的情況）
       await connection.execute(
         'DELETE FROM lesson_plan_specification_performances WHERE lesson_plan_id = ?',
         [lessonPlanId]
