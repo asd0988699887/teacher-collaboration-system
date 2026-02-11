@@ -2116,9 +2116,20 @@ export default function CourseObjectives({
           setMaterialSource(data.lessonPlan.materialSource || '')
           setTeachingEquipment(data.lessonPlan.teachingEquipment || '')
           // 載入學習目標：將字串轉換為陣列
+          // 使用 '|||' 作為分隔符來區分不同的學習目標項目
+          // 這樣可以保留單個學習目標內容中的換行符，不會被誤拆分
           const learningObjectivesStr = data.lessonPlan.learningObjectives || ''
           if (learningObjectivesStr) {
-            const objectivesArray = learningObjectivesStr.split('\n').filter((line: string) => line.trim())
+            let objectivesArray: string[] = []
+            // 優先使用 '|||' 分隔符（新格式）
+            if (learningObjectivesStr.includes('|||')) {
+              objectivesArray = learningObjectivesStr.split('|||').filter((item: string) => item.trim())
+            } else {
+              // 舊資料格式處理：如果沒有 '|||' 分隔符，可能是舊格式
+              // 為了避免誤拆分包含換行的單一學習目標，我們將整個字串視為一個學習目標
+              // 這樣可以確保舊資料不會被誤拆分
+              objectivesArray = [learningObjectivesStr]
+            }
             setLearningObjectives(objectivesArray.map((content: string) => ({ content: content.trim() })))
           } else {
             setLearningObjectives([])
@@ -3367,7 +3378,7 @@ export default function CourseObjectives({
       teachingTimeMinutes,
       materialSource,
       teachingEquipment,
-      learningObjectives: learningObjectives.map(obj => obj.content).join('\n'), // 將陣列轉換為字串
+      learningObjectives: learningObjectives.map(obj => obj.content).join('|||'), // 將陣列轉換為字串，使用 '|||' 分隔不同項目，避免與內容中的換行符混淆
       addedCoreCompetencies,
       addedLearningPerformances,
       addedLearningContents,
