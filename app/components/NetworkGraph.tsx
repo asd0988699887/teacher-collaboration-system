@@ -662,7 +662,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             linkDirectionalArrowColor={() => '#333333'}
             linkWidth={1.5}
             linkColor={() => '#999999'}
-            linkDistance={80} // 增加距離，讓有連接的節點之間有足夠空間顯示箭頭（節點半徑約15-25px，兩個節點半徑之和約30-50px，80px確保箭頭清晰可見）
+            {...({ linkDistance: 80 } as any)} // 增加距離，讓有連接的節點之間有足夠空間顯示箭頭（節點半徑約15-25px，兩個節點半徑之和約30-50px，80px確保箭頭清晰可見）
             d3AlphaDecay={graphData.nodes.some((node: any) => node.savedPosition) ? 0 : 0.03} // 如果有保存位置，設置為 0 立即停止
             d3VelocityDecay={0.4} // 更快停止
             warmupTicks={50}
