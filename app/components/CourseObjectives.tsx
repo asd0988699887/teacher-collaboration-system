@@ -2044,7 +2044,7 @@ export default function CourseObjectives({
           const learningObjectivesStr = data.lessonPlan.learningObjectives || ''
           if (learningObjectivesStr) {
             const objectivesArray = learningObjectivesStr.split('\n').filter((line: string) => line.trim())
-            setLearningObjectives(objectivesArray.map(content => ({ content: content.trim() })))
+            setLearningObjectives(objectivesArray.map((content: string) => ({ content: content.trim() })))
           } else {
             setLearningObjectives([])
           }
