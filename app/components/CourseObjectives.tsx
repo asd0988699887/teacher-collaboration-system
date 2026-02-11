@@ -3355,6 +3355,8 @@ export default function CourseObjectives({
     // 收集所有表單資料
     const formData = {
       userId,
+      // 明確標記為手動儲存，需要建立版本記錄
+      isAutoSave: false,
       lessonPlanTitle,
       courseDomain,
       designer,
@@ -3452,6 +3454,8 @@ export default function CourseObjectives({
     // 收集勾選狀態資料（需要包含必要的關聯資料以便 API 正確處理）
     const formData = {
       userId,
+      // 明確標記為自動保存，不建立版本記錄
+      isAutoSave: true,
       // 只傳遞勾選狀態相關的資料，其他使用現有值
       checkedPerformances: Array.from(checkedPerformances),
       checkedContents: Array.from(checkedContents),
@@ -3473,10 +3477,15 @@ export default function CourseObjectives({
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.error('自動保存勾選狀態失敗:', errorData)
+        // 如果是教案不存在的錯誤，靜默處理（教案尚未建立）
+        if (errorData.error && errorData.error.includes('無法建立新教案')) {
+          console.log('⚠️ 教案尚未建立，跳過自動保存勾選狀態')
+        } else {
+          console.error('自動保存勾選狀態失敗:', errorData)
+        }
         // 不顯示錯誤訊息，避免打擾用戶
       } else {
-        console.log('✅ 雙向細目表勾選狀態已自動保存')
+        console.log('✅ 雙向細目表勾選狀態已自動保存（不建立版本）')
       }
     } catch (error: any) {
       console.error('自動保存勾選狀態錯誤:', error)
@@ -3485,7 +3494,13 @@ export default function CourseObjectives({
   }, [activityId, checkedPerformances, checkedContents, addedLearningPerformances, addedLearningContents, activityRows])
 
   // 當勾選狀態改變時，自動保存（使用節流，500ms 後保存）
+  // 注意：只在勾選狀態改變時觸發，不依賴其他資料變化
   useEffect(() => {
+    // 如果沒有勾選任何項目，不觸發自動保存
+    if (checkedPerformances.size === 0 && checkedContents.size === 0) {
+      return
+    }
+
     // 清除之前的計時器
     if (saveSpecificationTimeoutRef.current) {
       clearTimeout(saveSpecificationTimeoutRef.current)

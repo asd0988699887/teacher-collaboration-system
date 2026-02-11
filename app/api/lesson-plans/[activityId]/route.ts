@@ -276,41 +276,98 @@ export async function POST(
         // 更新現有教案
         lessonPlanId = existingRows[0].id
         console.log('更新現有教案:', { lessonPlanId })
-        await connection.execute(
-          `UPDATE lesson_plans SET
-            lesson_plan_title = ?,
-            course_domain = ?,
-            designer = ?,
-            unit_name = ?,
-            school_level = ?,
-            implementation_grade = ?,
-            teaching_time_lessons = ?,
-            teaching_time_minutes = ?,
-            material_source = ?,
-            teaching_equipment = ?,
-            learning_objectives = ?,
-            assessment_tools = ?,
-            \`references\` = ?,
-            updated_at = NOW()
-          WHERE id = ?`,
-          [
-            body.lessonPlanTitle || null,
-            body.courseDomain || null,
-            body.designer || null,
-            body.unitName || null,
-            body.schoolLevel || null,
-            body.implementationGrade || null,
-            body.teachingTimeLessons ? parseInt(body.teachingTimeLessons) : null,
-            body.teachingTimeMinutes ? parseInt(body.teachingTimeMinutes) : null,
-            body.materialSource || null,
-            body.teachingEquipment || null,
-            body.learningObjectives || null,
-            body.assessmentTools || null,
-            body.references || null,
-            lessonPlanId,
-          ]
-        )
+        
+        // 檢查是否為只更新勾選狀態的請求（不包含教案基本資料）
+        const isSpecificationOnlyUpdate = body.checkedPerformances !== undefined || body.checkedContents !== undefined
+        
+        // 如果只是更新勾選狀態，跳過教案主表的更新
+        if (!isSpecificationOnlyUpdate || body.lessonPlanTitle !== undefined || body.learningObjectives !== undefined) {
+          // 構建動態更新語句，只更新提供的欄位
+          const updateFields: string[] = []
+          const updateValues: any[] = []
+          
+          if (body.lessonPlanTitle !== undefined) {
+            updateFields.push('lesson_plan_title = ?')
+            updateValues.push(body.lessonPlanTitle || null)
+          }
+          if (body.courseDomain !== undefined) {
+            updateFields.push('course_domain = ?')
+            updateValues.push(body.courseDomain || null)
+          }
+          if (body.designer !== undefined) {
+            updateFields.push('designer = ?')
+            updateValues.push(body.designer || null)
+          }
+          if (body.unitName !== undefined) {
+            updateFields.push('unit_name = ?')
+            updateValues.push(body.unitName || null)
+          }
+          if (body.schoolLevel !== undefined) {
+            updateFields.push('school_level = ?')
+            updateValues.push(body.schoolLevel || null)
+          }
+          if (body.implementationGrade !== undefined) {
+            updateFields.push('implementation_grade = ?')
+            updateValues.push(body.implementationGrade || null)
+          }
+          if (body.teachingTimeLessons !== undefined) {
+            updateFields.push('teaching_time_lessons = ?')
+            updateValues.push(body.teachingTimeLessons ? parseInt(body.teachingTimeLessons) : null)
+          }
+          if (body.teachingTimeMinutes !== undefined) {
+            updateFields.push('teaching_time_minutes = ?')
+            updateValues.push(body.teachingTimeMinutes ? parseInt(body.teachingTimeMinutes) : null)
+          }
+          if (body.materialSource !== undefined) {
+            updateFields.push('material_source = ?')
+            updateValues.push(body.materialSource || null)
+          }
+          if (body.teachingEquipment !== undefined) {
+            updateFields.push('teaching_equipment = ?')
+            updateValues.push(body.teachingEquipment || null)
+          }
+          if (body.learningObjectives !== undefined) {
+            updateFields.push('learning_objectives = ?')
+            updateValues.push(body.learningObjectives || null)
+          }
+          if (body.assessmentTools !== undefined) {
+            updateFields.push('assessment_tools = ?')
+            updateValues.push(body.assessmentTools || null)
+          }
+          if (body.references !== undefined) {
+            updateFields.push('`references` = ?')
+            updateValues.push(body.references || null)
+          }
+          
+          // 如果有欄位需要更新，執行更新
+          if (updateFields.length > 0) {
+            updateFields.push('updated_at = NOW()')
+            updateValues.push(lessonPlanId)
+            
+            await connection.execute(
+              `UPDATE lesson_plans SET ${updateFields.join(', ')} WHERE id = ?`,
+              updateValues
+            )
+            console.log('教案主表更新成功，更新欄位數:', updateFields.length - 1)
+          } else {
+            console.log('跳過教案主表更新（沒有提供基本資料欄位）')
+          }
+        } else {
+          console.log('跳過教案主表更新（只更新勾選狀態）')
+        }
       } else {
+        // 檢查是否為只更新勾選狀態的請求（不包含教案基本資料）
+        const isSpecificationOnlyUpdate = (body.checkedPerformances !== undefined || body.checkedContents !== undefined) &&
+                                         body.lessonPlanTitle === undefined && 
+                                         body.learningObjectives === undefined &&
+                                         body.courseDomain === undefined
+        
+        // 如果只是更新勾選狀態但教案不存在，無法建立教案（需要基本資料）
+        if (isSpecificationOnlyUpdate) {
+          console.log('無法建立新教案：只提供勾選狀態，缺少教案基本資料')
+          throw new Error('無法建立新教案：只提供勾選狀態，缺少教案基本資料。請先建立教案基本資料。')
+        }
+        
         // 建立新教案
         lessonPlanId = generateUUID()
         console.log('建立新教案:', { lessonPlanId, activityId })
@@ -656,71 +713,106 @@ export async function POST(
         }
       }
 
-      // 8. 建立新版本記錄
-      const [versions] = await connection.execute(
-        'SELECT MAX(version_number) as max_version FROM activity_versions WHERE activity_id = ?',
-        [activityId]
-      ) as any[]
-
-      const nextVersionNumber = versions[0]?.max_version ? versions[0].max_version + 1 : 1
+      // 8. 建立新版本記錄（只在完整更新時建立，不包含只更新勾選狀態的情況）
+      // 判斷是否為只更新勾選狀態：
+      // 1. 明確標記為自動保存（isAutoSave: true）
+      // 2. 或者：只有勾選狀態，且沒有任何教案基本資料
+      const hasBasicLessonPlanData = body.lessonPlanTitle !== undefined || 
+                                     body.courseDomain !== undefined ||
+                                     body.designer !== undefined ||
+                                     body.unitName !== undefined ||
+                                     body.schoolLevel !== undefined ||
+                                     body.implementationGrade !== undefined ||
+                                     body.learningObjectives !== undefined ||
+                                     body.assessmentTools !== undefined ||
+                                     body.references !== undefined ||
+                                     body.materialSource !== undefined ||
+                                     body.teachingEquipment !== undefined ||
+                                     body.teachingTimeLessons !== undefined ||
+                                     body.teachingTimeMinutes !== undefined ||
+                                     isFullUpdate
       
-      console.log('建立版本記錄:', { activityId, nextVersionNumber, lessonPlanId })
+      const isSpecificationOnlyUpdate = body.isAutoSave === true || 
+                                        ((body.checkedPerformances !== undefined || body.checkedContents !== undefined) &&
+                                         !hasBasicLessonPlanData)
+      
+      let nextVersionNumber = 0
+      
+      if (!isSpecificationOnlyUpdate) {
+        // 只在完整更新時建立版本記錄
+        const [versions] = await connection.execute(
+          'SELECT MAX(version_number) as max_version FROM activity_versions WHERE activity_id = ?',
+          [activityId]
+        ) as any[]
 
-      const versionData = {
-        lessonPlanTitle: body.lessonPlanTitle,
-        courseDomain: body.courseDomain,
-        designer: body.designer,
-        unitName: body.unitName,
-        implementationGrade: body.implementationGrade,
-        teachingTimeLessons: body.teachingTimeLessons,
-        teachingTimeMinutes: body.teachingTimeMinutes,
-        materialSource: body.materialSource,
-        teachingEquipment: body.teachingEquipment,
-        learningObjectives: body.learningObjectives,
-        assessmentTools: body.assessmentTools,
-        references: body.references,
-        addedCoreCompetencies: body.addedCoreCompetencies,
-        addedLearningPerformances: body.addedLearningPerformances,
-        addedLearningContents: body.addedLearningContents,
-        activityRows: body.activityRows,
-      }
+        nextVersionNumber = versions[0]?.max_version ? versions[0].max_version + 1 : 1
+        
+        console.log('建立版本記錄:', { activityId, nextVersionNumber, lessonPlanId })
 
-      // 嘗試插入版本記錄（包含 lesson_plan_id 如果欄位存在）
-      try {
-        await connection.execute(
-          `INSERT INTO activity_versions (
-            id, activity_id, version_number, modified_by, lesson_plan_data, lesson_plan_id, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-          [
-            generateUUID(),
-            activityId,
-            nextVersionNumber,
-            userId,
-            JSON.stringify(versionData),
-            lessonPlanId,
-          ]
-        )
-        console.log('版本記錄插入成功（包含 lesson_plan_id）')
-      } catch (error: any) {
-        // 如果 lesson_plan_id 欄位不存在，使用舊的格式
-        if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage?.includes('lesson_plan_id')) {
-          console.log('lesson_plan_id 欄位不存在，使用舊格式')
+        const versionData = {
+          lessonPlanTitle: body.lessonPlanTitle,
+          courseDomain: body.courseDomain,
+          designer: body.designer,
+          unitName: body.unitName,
+          implementationGrade: body.implementationGrade,
+          teachingTimeLessons: body.teachingTimeLessons,
+          teachingTimeMinutes: body.teachingTimeMinutes,
+          materialSource: body.materialSource,
+          teachingEquipment: body.teachingEquipment,
+          learningObjectives: body.learningObjectives,
+          assessmentTools: body.assessmentTools,
+          references: body.references,
+          addedCoreCompetencies: body.addedCoreCompetencies,
+          addedLearningPerformances: body.addedLearningPerformances,
+          addedLearningContents: body.addedLearningContents,
+          activityRows: body.activityRows,
+        }
+
+        // 嘗試插入版本記錄（包含 lesson_plan_id 如果欄位存在）
+        try {
           await connection.execute(
             `INSERT INTO activity_versions (
-              id, activity_id, version_number, modified_by, lesson_plan_data, created_at
-            ) VALUES (?, ?, ?, ?, ?, NOW())`,
+              id, activity_id, version_number, modified_by, lesson_plan_data, lesson_plan_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
             [
               generateUUID(),
               activityId,
               nextVersionNumber,
               userId,
               JSON.stringify(versionData),
+              lessonPlanId,
             ]
           )
-          console.log('版本記錄插入成功（不含 lesson_plan_id）')
-        } else {
-          throw error
+          console.log('版本記錄插入成功（包含 lesson_plan_id）')
+        } catch (error: any) {
+          // 如果 lesson_plan_id 欄位不存在，使用舊的格式
+          if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage?.includes('lesson_plan_id')) {
+            console.log('lesson_plan_id 欄位不存在，使用舊格式')
+            await connection.execute(
+              `INSERT INTO activity_versions (
+                id, activity_id, version_number, modified_by, lesson_plan_data, created_at
+              ) VALUES (?, ?, ?, ?, ?, NOW())`,
+              [
+                generateUUID(),
+                activityId,
+                nextVersionNumber,
+                userId,
+                JSON.stringify(versionData),
+              ]
+            )
+            console.log('版本記錄插入成功（不含 lesson_plan_id）')
+          } else {
+            throw error
+          }
         }
+      } else {
+        console.log('跳過版本記錄建立（只更新勾選狀態）')
+        // 獲取當前版本號（不建立新版本）
+        const [versions] = await connection.execute(
+          'SELECT MAX(version_number) as max_version FROM activity_versions WHERE activity_id = ?',
+          [activityId]
+        ) as any[]
+        nextVersionNumber = versions[0]?.max_version || 0
       }
 
       // 驗證資料是否真的寫入
