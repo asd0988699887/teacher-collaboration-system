@@ -609,10 +609,9 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                 .map(node => {
                   const totalActivity = (node.createdCount || 0) + (node.replyCount || 0) + (node.receivedReplyCount || 0)
                   const nodeWithActivity = {
-                    id: node.id,
+                    ...node,
                     name: node.label,
                     totalActivity,
-                    ...node,
                   }
                   
                   // 如果有保存的位置，設置固定位置
