@@ -5238,7 +5238,7 @@ export default function CourseObjectives({
                           setNaturalPerformanceOther('')
                         } else {
                           const category = learningPerformanceData[learningPerformanceCategory as keyof typeof learningPerformanceData]
-                          const subItem = category.subItems[learningPerformanceSubItem as keyof typeof category.subItems]
+                          const subItem = category.subItems[learningPerformanceSubItem as keyof typeof category.subItems] as any
                           const allOptions: { code: string; description: string }[] = [
                             ...(subItem.stage2 || []),
                             ...(subItem.stage3 || [])
