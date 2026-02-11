@@ -2567,8 +2567,6 @@ export default function CourseObjectives({
           2: { cellWidth: 60 }, // 活動流程
           3: { cellWidth: 20 }, // 時間
           4: { cellWidth: 30 }, // 備註
-          2: { cellWidth: 30 },
-          3: { cellWidth: 50 }
         },
         margin: { left: margin, right: margin },
         styles: { cellPadding: 2, overflow: 'linebreak' }
