@@ -1987,16 +1987,7 @@ export default function CourseObjectives({
       if (!activityId) return
 
       try {
-        // 先從 localStorage 讀取當前版本號
-        const storageKey = `currentVersion_${activityId}`
-        const storedVersion = localStorage.getItem(storageKey)
-        
-        if (storedVersion) {
-          setCurrentVersion(storedVersion)
-          return
-        }
-
-        // 如果 localStorage 沒有，從 API 讀取最新版本
+        // 優先從 API 讀取最新版本（確保版本號一致）
         const response = await fetch(`/api/activity-versions/${activityId}`)
         const data = await response.json()
 
@@ -2005,14 +1996,34 @@ export default function CourseObjectives({
           const latestVersion = data.versions[0]
           const versionNumber = `v${latestVersion.versionNumber}`
           setCurrentVersion(versionNumber)
-          // 儲存到 localStorage
+          // 更新 localStorage（同步到本地快取）
+          const storageKey = `currentVersion_${activityId}`
           localStorage.setItem(storageKey, versionNumber)
         } else {
-          setCurrentVersion('')
+          // 如果 API 沒有版本，嘗試從 localStorage 讀取（作為備用）
+          const storageKey = `currentVersion_${activityId}`
+          const storedVersion = localStorage.getItem(storageKey)
+          if (storedVersion) {
+            setCurrentVersion(storedVersion)
+          } else {
+            setCurrentVersion('')
+          }
         }
       } catch (error) {
         console.error('載入版本號錯誤:', error)
-        setCurrentVersion('')
+        // API 失敗時，嘗試從 localStorage 讀取（作為備用）
+        try {
+          const storageKey = `currentVersion_${activityId}`
+          const storedVersion = localStorage.getItem(storageKey)
+          if (storedVersion) {
+            setCurrentVersion(storedVersion)
+          } else {
+            setCurrentVersion('')
+          }
+        } catch (storageError) {
+          console.error('讀取 localStorage 錯誤:', storageError)
+          setCurrentVersion('')
+        }
       }
     }
 
