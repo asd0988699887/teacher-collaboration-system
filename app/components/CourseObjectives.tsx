@@ -3719,7 +3719,7 @@ export default function CourseObjectives({
 
         {/* 主要內容區 */}
         <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-6 md:px-12 py-4 md:py-8 overflow-y-auto">
-          <div className="flex gap-8">
+          <div className="flex flex-col md:flex-row gap-8">
             {/* 左側表單區域 */}
             <div className="flex-1 max-w-3xl">
               {/* 標題 */}
@@ -7624,21 +7624,21 @@ export default function CourseObjectives({
             </div>
             {/* 右側區域 - 想法收斂結果（僅在課程目標和活動與評量設計標籤頁顯示） */}
             {(activeTab === 'objectives' || activeTab === 'activity') && (
-              <div className="w-64 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="w-full md:w-64 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200">
                 {/* 標題欄 */}
                 <div className="bg-gradient-to-r from-purple-400 to-purple-600 px-6 py-4 rounded-t-lg">
                   <h2 className="text-white font-semibold text-lg">想法收斂結果</h2>
                 </div>
-                {/* 內容區域 */}
-                <div className="flex-1 p-6 overflow-y-auto max-h-[600px]">
+                {/* 內容區域 - 手機版水平滾動，桌面版垂直滾動 */}
+                <div className="flex-1 p-6 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden max-h-[600px]">
                   {convergenceResults.length === 0 ? (
                     <p className="text-gray-500 text-center py-8">尚無收斂結果</p>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="flex flex-row md:flex-col gap-3 md:space-y-0">
                       {convergenceResults.map((result) => (
                         <div
                           key={result.id}
-                          className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                          className="min-w-[280px] md:min-w-0 w-[280px] md:w-full flex-shrink-0 md:flex-shrink border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
                         >
                           {/* 收斂標籤 */}
                           <div className="mb-1.5">
@@ -7647,7 +7647,7 @@ export default function CourseObjectives({
                             </span>
                           </div>
                           {/* 收斂內容 */}
-                          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap break-words">
                             {result.content}
                           </p>
                         </div>

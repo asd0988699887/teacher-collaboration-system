@@ -1330,6 +1330,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   }
 
   const handleSaveIdea = async (ideaData: {
+    activityId?: string
     stage: string
     title: string
     content: string
@@ -1346,7 +1347,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          activityId: editingIdea.activityId || null,
+          activityId: ideaData.activityId ?? editingIdea.activityId ?? null,
           stage: ideaData.stage,
           title: ideaData.title,
           content: ideaData.content,
