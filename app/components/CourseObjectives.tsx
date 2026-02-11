@@ -3898,7 +3898,7 @@ export default function CourseObjectives({
                     {coreCompetencyCategory &&
                       Object.entries(
                         coreCompetencyData[coreCompetencyCategory as keyof typeof coreCompetencyData].items
-                      ).map(([key, item]) => (
+                      ).map(([key, item]: [string, any]) => (
                         <option key={key} value={key}>
                           {key} {item.name}
                         </option>
