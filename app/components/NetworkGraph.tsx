@@ -648,10 +648,9 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                   }
                 }),
               links: graphData.edges.map(edge => ({
+                ...edge,
                 source: edge.from,
                 target: edge.to,
-                value: edge.value,
-                ...edge,
               })),
             }}
             nodeCanvasObject={nodeCanvasObject}
