@@ -1568,10 +1568,10 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     const idea = ideas.find((i) => i.id === ideaId)
     if (!idea) return
 
-    // 限制卡片不能移動到邊界線上方（y 不能小於 0）
+    // 允許卡片自由移動，包括往上移動到負數位置
     const constrainedPosition = {
       x: position.x,
-      y: Math.max(0, position.y)
+      y: position.y
     }
 
     // 在更新狀態前，先保存當前滾動位置（防止拖動時重置）

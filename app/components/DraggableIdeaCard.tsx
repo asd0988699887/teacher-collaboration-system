@@ -166,11 +166,7 @@ export default function DraggableIdeaCard({
       let newX = worldX - dragOffset.x
       let newY = worldY - dragOffset.y
 
-      // 限制卡片不能移動到邊界線上方（y 不能小於 0）
-      if (newY < 0) {
-        newY = 0
-      }
-
+      // 允許卡片自由移動，包括往上移動到負數位置
       onPositionChange(id, { x: newX, y: newY })
     }
 
@@ -234,11 +230,7 @@ export default function DraggableIdeaCard({
       let newX = worldX - dragOffset.x
       let newY = worldY - dragOffset.y
 
-      // 限制卡片不能移動到邊界線上方
-      if (newY < 0) {
-        newY = 0
-      }
-
+      // 允許卡片自由移動，包括往上移動到負數位置
       onPositionChange(id, { x: newX, y: newY })
     }
 
