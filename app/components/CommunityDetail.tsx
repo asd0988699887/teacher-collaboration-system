@@ -887,6 +887,34 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         throw new Error(data.error || '回覆版本失敗')
       }
 
+      // 回復版本成功後，使用 API 返回的版本號更新 localStorage
+      const storageKey = `currentVersion_${versionControlActivityId}`
+      if (data.currentVersionNumber) {
+        const versionNumber = `v${data.currentVersionNumber}`
+        localStorage.setItem(storageKey, versionNumber)
+        console.log('✅ CommunityDetail: 已更新版本號到 localStorage:', versionNumber)
+        
+        // 觸發自定義事件，並傳遞回復的版本號，通知 CourseObjectives 更新版本號
+        console.log('✅ CommunityDetail: 準備觸發 versionRestored 事件，版本號:', versionNumber)
+        const event = new CustomEvent('versionRestored', {
+          detail: {
+            activityId: versionControlActivityId,
+            versionNumber: versionNumber,
+          },
+        })
+        window.dispatchEvent(event)
+        console.log('✅ CommunityDetail: 已觸發 versionRestored 事件')
+      } else {
+        // 如果 API 沒有返回版本號，清除 localStorage，強制重新從 API 讀取
+        localStorage.removeItem(storageKey)
+        console.log('⚠️ CommunityDetail: API 沒有返回版本號，已清除 localStorage')
+        
+        // 仍然觸發事件，讓 CourseObjectives 重新從 API 讀取
+        console.log('✅ CommunityDetail: 準備觸發 versionRestored 事件（無版本號）')
+        window.dispatchEvent(new Event('versionRestored'))
+        console.log('✅ CommunityDetail: 已觸發 versionRestored 事件')
+      }
+
       alert('版本已回覆！')
       setIsVersionControlModalOpen(false)
       // 重新載入活動列表以顯示更新後的資料
