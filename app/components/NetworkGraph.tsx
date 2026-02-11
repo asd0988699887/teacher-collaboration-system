@@ -608,7 +608,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
               nodes: graphData.nodes
                 .map(node => {
                   const totalActivity = (node.createdCount || 0) + (node.replyCount || 0) + (node.receivedReplyCount || 0)
-                  const nodeWithActivity = {
+                  const nodeWithActivity: any = {
                     ...node,
                     name: node.label,
                     totalActivity,
