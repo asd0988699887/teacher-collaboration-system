@@ -100,10 +100,13 @@ export default function VersionControlModal({
       // 找到對應的版本號
       const version = versions.find(v => v.id === versionId)
       if (version) {
-        // 儲存當前版本號到 localStorage
+        // 清除 localStorage 中的版本號，讓 CourseObjectives 重新從 API 讀取最新版本
         const storageKey = `currentVersion_${activityId}`
-        localStorage.setItem(storageKey, version.versionNumber)
+        localStorage.removeItem(storageKey)
         setCurrentVersionNumber(version.versionNumber)
+        
+        // 觸發自定義事件，通知 CourseObjectives 重新載入版本號
+        window.dispatchEvent(new Event('versionRestored'))
       }
       
       onRestore?.(versionId)

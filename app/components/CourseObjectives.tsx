@@ -584,6 +584,10 @@ export default function CourseObjectives({
   const [currentVersion, setCurrentVersion] = useState<string>('')
   // 使用 ref 存儲 activityId，確保事件處理函數能訪問最新值
   const activityIdRef = useRef(activityId)
+  // 追蹤使用者是否手動修改過分鐘數
+  const isMinutesManuallyEditedRef = useRef(false)
+  // 追蹤前一個學段值，用於判斷學段是否改變
+  const prevSchoolLevelRef = useRef<string>('')
 
   // 學習內容數據
   const learningContentData = {
@@ -2109,10 +2113,15 @@ export default function CourseObjectives({
           setCourseDomain(data.lessonPlan.courseDomain || '')
           setDesigner(data.lessonPlan.designer || '')
           setUnitName(data.lessonPlan.unitName || '')
-          setSchoolLevel(data.lessonPlan.schoolLevel || data.lessonPlan.school_level || '')
+          const loadedSchoolLevel = data.lessonPlan.schoolLevel || data.lessonPlan.school_level || ''
+          setSchoolLevel(loadedSchoolLevel)
+          // 初始化前一個學段值
+          prevSchoolLevelRef.current = loadedSchoolLevel
           setImplementationGrade(data.lessonPlan.implementationGrade || '')
           setTeachingTimeLessons(data.lessonPlan.teachingTimeLessons?.toString() || '')
           setTeachingTimeMinutes(data.lessonPlan.teachingTimeMinutes?.toString() || '')
+          // 載入資料時重置手動修改標記（因為這是從資料庫載入的，不是使用者手動修改的）
+          isMinutesManuallyEditedRef.current = false
           setMaterialSource(data.lessonPlan.materialSource || '')
           setTeachingEquipment(data.lessonPlan.teachingEquipment || '')
           // 載入學習目標：將字串轉換為陣列
@@ -2289,18 +2298,46 @@ export default function CourseObjectives({
     loadLessonPlan()
   }, [activityId])
 
-  // 當節數改變時，自動計算分鐘數（1 節課 = 40 分鐘）
+  // 當節數或學段改變時，根據學段自動計算分鐘數
+  // 國小：1 節課 = 40 分鐘
+  // 國中：1 節課 = 45 分鐘
+  // 高中（高職）：1 節課 = 50 分鐘
   useEffect(() => {
+    // 如果學段為空，不自動計算
+    if (!schoolLevel) {
+      prevSchoolLevelRef.current = schoolLevel
+      return
+    }
+    
+    // 如果使用者手動修改過分鐘數，且只是節課數改變（學段沒變），不自動覆蓋
+    // 但如果學段改變了，要清除手動修改標記並重新計算
+    if (prevSchoolLevelRef.current !== schoolLevel) {
+      // 學段改變了，清除手動修改標記
+      isMinutesManuallyEditedRef.current = false
+      prevSchoolLevelRef.current = schoolLevel
+    } else if (isMinutesManuallyEditedRef.current) {
+      // 學段沒變，但使用者手動修改過分鐘數，不自動覆蓋
+      return
+    }
+    
     if (teachingTimeLessons) {
       const lessons = parseFloat(teachingTimeLessons)
       if (!isNaN(lessons) && lessons > 0) {
-        const minutes = Math.round(lessons * 40)
+        // 根據學段決定每節課的分鐘數
+        let minutesPerLesson = 40 // 預設值（國小）
+        if (schoolLevel === '國中') {
+          minutesPerLesson = 45
+        } else if (schoolLevel === '高中（高職）') {
+          minutesPerLesson = 50
+        }
+        
+        const minutes = Math.round(lessons * minutesPerLesson)
         setTeachingTimeMinutes(minutes.toString())
       } else if (teachingTimeLessons === '') {
         setTeachingTimeMinutes('')
       }
     }
-  }, [teachingTimeLessons])
+  }, [teachingTimeLessons, schoolLevel])
 
   // 自動調整 textarea 高度（每個欄位獨立調整）
   const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
@@ -3985,7 +4022,11 @@ export default function CourseObjectives({
                 <input
                   type="text"
                   value={teachingTimeMinutes}
-                  onChange={(e) => setTeachingTimeMinutes(e.target.value)}
+                  onChange={(e) => {
+                    setTeachingTimeMinutes(e.target.value)
+                    // 標記使用者已手動修改分鐘數
+                    isMinutesManuallyEditedRef.current = true
+                  }}
                   placeholder="分鐘"
                   className="w-24 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
                 />
