@@ -16,3 +16,4 @@ CREATE TABLE IF NOT EXISTS idea_wall_view_state (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='想法牆視圖狀態表';
 
 
+

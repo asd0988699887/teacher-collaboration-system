@@ -2054,8 +2054,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
   return (
     <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
-      {/* 左側導航欄 - 手機版隱藏，桌面版顯示 */}
-      <div className="hidden md:flex w-[80px] bg-[#FAFAFA] flex-col items-center py-8 gap-6 flex-shrink-0">
+      {/* 左側導航欄 - 固定，捲動時不跟著動；手機版隱藏，桌面版顯示 */}
+      <div className="hidden md:flex fixed left-0 top-0 h-screen w-[80px] bg-[#FAFAFA] flex-col items-center py-8 gap-6 z-10">
         {/* 導航選項 */}
         {tabs.map((tab) => (
           <button
@@ -2293,8 +2293,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         ))}
       </div>
 
-      {/* 主要內容區 */}
-      <div className="flex-1 flex flex-col pb-16 md:pb-0">
+      {/* 主要內容區（左留空給固定導航欄） */}
+      <div className="flex-1 flex flex-col pb-16 md:pb-0 md:ml-[80px]">
         {/* Header */}
         <div className="bg-[#FAFAFA] px-4 sm:px-6 md:px-8 py-3 flex items-center justify-between">
           {/* 左側：社群圖標和名稱（可點擊返回） */}
@@ -2472,7 +2472,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                 <p className="text-lg">目前沒有活動</p>
               </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {activities.map((activity) => (
                         <ActivityCard
                           key={activity.id}
@@ -2825,7 +2825,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
           {/* 想法牆（獨立容器，無白色背景） */}
           {activeTab === 'ideas' && (
-            <div className="flex-1 relative overflow-x-auto overflow-y-auto -mt-6" style={{
+            <div className="flex-1 relative overflow-x-auto overflow-y-auto m-2" style={{
               // 手機版：為底部導航欄留出空間，確保底部卷軸可見
               paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 80px)',
             }}>
@@ -3029,6 +3029,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         }}
         onSubmit={handleAddIdea}
         communityId={communityId || undefined}
+        existingStages={[...new Set(ideas.map((i) => i.stage).filter(Boolean))]}
       />
 
       {/* 編輯想法模態框 */}

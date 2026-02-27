@@ -66,53 +66,81 @@ export default function DraggableIdeaCard({
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return // 只處理左鍵
+    if (e.button !== 0) return
     
     e.preventDefault()
     e.stopPropagation()
     
-    // 獲取當前的縮放比例
     const container = document.getElementById('ideas-container')
-    let currentScale = 1
-    if (container) {
-      const zoomableContainer = container.querySelector('div[style*="transform"]') as HTMLElement
-      if (zoomableContainer) {
-        const transform = zoomableContainer.style.transform
-        const scaleMatch = transform.match(/scale\(([^)]+)\)/)
-        currentScale = scaleMatch ? parseFloat(scaleMatch[1]) : 1
+    if (!container) return
+    const containerRect = container.getBoundingClientRect()
+    const zoomableContainer = container.querySelector('div[style*="transform"]') as HTMLElement
+    if (!zoomableContainer) return
+    const transform = zoomableContainer.style.transform
+    const scaleMatch = transform.match(/scale\(([^)]+)\)/)
+    const translateMatch = transform.match(/translate\(([^)]+)\)/)
+    const currentScale = scaleMatch ? parseFloat(scaleMatch[1]) : 1
+    const translateValues = translateMatch ? translateMatch[1].split(',').map(v => parseFloat(v.trim())) : [0, 0]
+    const translateX = translateValues[0] || 0
+    const translateY = translateValues[1] || 0
+    
+    let wrapperOffsetX = 0
+    let wrapperOffsetY = 0
+    const wrapper = zoomableContainer.firstElementChild as HTMLElement | null
+    if (wrapper?.style?.transform) {
+      const wMatch = wrapper.style.transform.match(/translate\(([^,]+),\s*([^)]+)\)/)
+      if (wMatch) {
+        wrapperOffsetX = -(parseFloat(wMatch[1].replace('px', '').trim()) || 0)
+        wrapperOffsetY = -(parseFloat(wMatch[2].replace('px', '').trim()) || 0)
       }
     }
     
-    const rect = cardRef.current?.getBoundingClientRect()
-    if (rect) {
-      // dragOffset 需要考慮縮放，因為卡片位置是基於縮放前的座標系
-      setDragOffset({
-        x: (e.clientX - rect.left) / currentScale,
-        y: (e.clientY - rect.top) / currentScale,
-      })
-    }
+    const mouseXInContainer = e.clientX - containerRect.left
+    const mouseYInContainer = e.clientY - containerRect.top
+    const worldX = (mouseXInContainer - translateX) / currentScale + wrapperOffsetX
+    const worldY = (mouseYInContainer - translateY) / currentScale + wrapperOffsetY
+    setDragOffset({ x: worldX - position.x, y: worldY - position.y })
     
     setMouseDownPos({ x: e.clientX, y: e.clientY })
     setMouseDownTime(Date.now())
   }
 
-  // 處理觸控開始
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return // 只處理單指觸控
+    if (e.touches.length !== 1) return
     
     e.preventDefault()
     e.stopPropagation()
     
     const touch = e.touches[0]
-    const currentScale = getCurrentScale()
+    const container = document.getElementById('ideas-container')
+    if (!container) return
+    const containerRect = container.getBoundingClientRect()
+    const zoomableContainer = container.querySelector('div[style*="transform"]') as HTMLElement
+    if (!zoomableContainer) return
+    const transform = zoomableContainer.style.transform
+    const scaleMatch = transform.match(/scale\(([^)]+)\)/)
+    const translateMatch = transform.match(/translate\(([^)]+)\)/)
+    const currentScale = scaleMatch ? parseFloat(scaleMatch[1]) : 1
+    const translateValues = translateMatch ? translateMatch[1].split(',').map(v => parseFloat(v.trim())) : [0, 0]
+    const translateX = translateValues[0] || 0
+    const translateY = translateValues[1] || 0
     
-    const rect = cardRef.current?.getBoundingClientRect()
-    if (rect) {
-      setDragOffset({
-        x: (touch.clientX - rect.left) / currentScale,
-        y: (touch.clientY - rect.top) / currentScale,
-      })
+    let wrapperOffsetX = 0
+    let wrapperOffsetY = 0
+    const wrapper = zoomableContainer.firstElementChild as HTMLElement | null
+    if (wrapper?.style?.transform) {
+      const wMatch = wrapper.style.transform.match(/translate\(([^,]+),\s*([^)]+)\)/)
+      if (wMatch) {
+        wrapperOffsetX = -(parseFloat(wMatch[1].replace('px', '').trim()) || 0)
+        wrapperOffsetY = -(parseFloat(wMatch[2].replace('px', '').trim()) || 0)
+      }
     }
+    
+    const mouseXInContainer = touch.clientX - containerRect.left
+    const mouseYInContainer = touch.clientY - containerRect.top
+    const worldX = (mouseXInContainer - translateX) / currentScale + wrapperOffsetX
+    const worldY = (mouseYInContainer - translateY) / currentScale + wrapperOffsetY
+    setDragOffset({ x: worldX - position.x, y: worldY - position.y })
     
     setTouchDownPos({ x: touch.clientX, y: touch.clientY })
     setTouchDownTime(Date.now())
@@ -153,18 +181,27 @@ export default function DraggableIdeaCard({
       const translateX = translateValues[0] || 0
       const translateY = translateValues[1] || 0
       
-      // 計算滑鼠在容器內的座標（考慮縮放和平移）
-      // 滑鼠在視窗中的位置 -> 容器內的座標 -> 縮放前的座標
+      // 若有 offset wrapper（負座標可捲動），滑鼠換算出的座標要加上 wrapper 的反向偏移才是卡片座標系
+      let wrapperOffsetX = 0
+      let wrapperOffsetY = 0
+      const wrapper = zoomableContainer.firstElementChild as HTMLElement | null
+      if (wrapper?.style?.transform) {
+        const wMatch = wrapper.style.transform.match(/translate\(([^,]+),\s*([^)]+)\)/)
+        if (wMatch) {
+          wrapperOffsetX = -(parseFloat(wMatch[1].replace('px', '').trim()) || 0)
+          wrapperOffsetY = -(parseFloat(wMatch[2].replace('px', '').trim()) || 0)
+        }
+      }
+      
       const mouseXInContainer = e.clientX - containerRect.left
       const mouseYInContainer = e.clientY - containerRect.top
+      const innerDivX = (mouseXInContainer - translateX) / currentScale
+      const innerDivY = (mouseYInContainer - translateY) / currentScale
+      const worldX = innerDivX + wrapperOffsetX
+      const worldY = innerDivY + wrapperOffsetY
       
-      // 轉換為縮放前的座標系
-      const worldX = (mouseXInContainer - translateX) / currentScale
-      const worldY = (mouseYInContainer - translateY) / currentScale
-      
-      // 計算新位置（減去拖曳偏移量，dragOffset 已經是縮放前的座標）
-      let newX = worldX - dragOffset.x
-      let newY = worldY - dragOffset.y
+      const newX = worldX - dragOffset.x
+      const newY = worldY - dragOffset.y
 
       // 允許卡片自由移動，包括往上移動到負數位置
       onPositionChange(id, { x: newX, y: newY })
@@ -208,27 +245,34 @@ export default function DraggableIdeaCard({
       const zoomableContainer = container.querySelector('div[style*="transform"]') as HTMLElement
       if (!zoomableContainer) return
       
-      // 獲取當前的縮放比例和平移
       const transform = zoomableContainer.style.transform
       const scaleMatch = transform.match(/scale\(([^)]+)\)/)
       const translateMatch = transform.match(/translate\(([^)]+)\)/)
-      
       const currentScale = scaleMatch ? parseFloat(scaleMatch[1]) : 1
       const translateValues = translateMatch ? translateMatch[1].split(',').map(v => parseFloat(v.trim())) : [0, 0]
       const translateX = translateValues[0] || 0
       const translateY = translateValues[1] || 0
       
-      // 計算觸控點在容器內的座標
+      let wrapperOffsetX = 0
+      let wrapperOffsetY = 0
+      const wrapper = zoomableContainer.firstElementChild as HTMLElement | null
+      if (wrapper?.style?.transform) {
+        const wMatch = wrapper.style.transform.match(/translate\(([^,]+),\s*([^)]+)\)/)
+        if (wMatch) {
+          wrapperOffsetX = -(parseFloat(wMatch[1].replace('px', '').trim()) || 0)
+          wrapperOffsetY = -(parseFloat(wMatch[2].replace('px', '').trim()) || 0)
+        }
+      }
+      
       const touchXInContainer = touch.clientX - containerRect.left
       const touchYInContainer = touch.clientY - containerRect.top
+      const innerDivX = (touchXInContainer - translateX) / currentScale
+      const innerDivY = (touchYInContainer - translateY) / currentScale
+      const worldX = innerDivX + wrapperOffsetX
+      const worldY = innerDivY + wrapperOffsetY
       
-      // 轉換為縮放前的座標系
-      const worldX = (touchXInContainer - translateX) / currentScale
-      const worldY = (touchYInContainer - translateY) / currentScale
-      
-      // 計算新位置
-      let newX = worldX - dragOffset.x
-      let newY = worldY - dragOffset.y
+      const newX = worldX - dragOffset.x
+      const newY = worldY - dragOffset.y
 
       // 允許卡片自由移動，包括往上移動到負數位置
       onPositionChange(id, { x: newX, y: newY })

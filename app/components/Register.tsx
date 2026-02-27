@@ -101,15 +101,15 @@ export default function Register({
 
   return (
     <div className="min-h-screen flex">
-      {/* 左側插圖區域 */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-purple-50 to-purple-100 items-center justify-center p-12">
+      {/* 左側插圖區域：標題與插圖往上對齊，不貼底 */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-purple-50 to-purple-100 items-start justify-center p-12 pt-20 lg:pt-24">
         <div className="max-w-md">
           <h1 className="text-4xl font-bold text-gray-800 mb-4">
             教師共同備課系統
           </h1>
           
           {/* 多位教師協作備課插圖 */}
-          <div className="mt-8">
+          <div className="mt-6">
             <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
               {/* 陰影 */}
               <ellipse cx="130" cy="380" rx="80" ry="15" fill="#E9D5FF" opacity="0.3"/>

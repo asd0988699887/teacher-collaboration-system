@@ -12,6 +12,8 @@ interface AddIdeaModalProps {
     content: string
   }) => void
   communityId?: string
+  /** 目前已有的階段名稱，用於自動建議（可選） */
+  existingStages?: string[]
 }
 
 /**
@@ -28,6 +30,7 @@ export default function AddIdeaModal({
   onClose,
   onSubmit,
   communityId,
+  existingStages = [],
 }: AddIdeaModalProps) {
   const [selectedActivityId, setSelectedActivityId] = useState<string>('')
   const [stage, setStage] = useState('')
@@ -35,7 +38,9 @@ export default function AddIdeaModal({
   const [content, setContent] = useState('')
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
+  const [showStageDropdown, setShowStageDropdown] = useState(false)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const stageDropdownRef = useRef<HTMLDivElement>(null)
   
   // 拖移相關狀態
   const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -90,10 +95,30 @@ export default function AddIdeaModal({
       setStage('')
       setTitle('')
       setContent('')
+      setShowStageDropdown(false)
       // 重置位置到中心（但允許用戶拖移）
       setPosition({ x: 0, y: 0 })
     }
   }, [isOpen])
+
+  // 點擊外部關閉階段下拉
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (stageDropdownRef.current && !stageDropdownRef.current.contains(e.target as Node)) {
+        setShowStageDropdown(false)
+      }
+    }
+    if (showStageDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showStageDropdown])
+
+  // 依輸入篩選的階段建議（不重複、含目前輸入）
+  const uniqueStages = [...new Set(existingStages.filter(Boolean))]
+  const filteredStages = uniqueStages.filter((s) =>
+    s.toLowerCase().includes(stage.trim().toLowerCase())
+  )
 
   // 處理拖移開始
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -225,18 +250,41 @@ export default function AddIdeaModal({
                 </select>
               </div>
 
-              {/* 階段 */}
-              <div>
+              {/* 階段（可輸入或從既有階段選擇） */}
+              <div ref={stageDropdownRef}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   階段
                 </label>
-                <input
-                  type="text"
-                  value={stage}
-                  onChange={(e) => setStage(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="請輸入階段"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={stage}
+                    onChange={(e) => {
+                      setStage(e.target.value)
+                      setShowStageDropdown(true)
+                    }}
+                    onFocus={() => setShowStageDropdown(true)}
+                    placeholder="請輸入階段或選擇既有階段"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-400"
+                  />
+                  {showStageDropdown && filteredStages.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredStages.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            setStage(s)
+                            setShowStageDropdown(false)
+                          }}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-800"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 標題 */}

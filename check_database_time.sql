@@ -5,3 +5,4 @@ SELECT NOW() AS `current_time`, @@session.time_zone AS timezone;
 SELECT @@global.time_zone AS global_timezone, @@session.time_zone AS session_timezone;
 
 
+

@@ -396,9 +396,10 @@ export default function ZoomableIdeasContainer({ children, containerId, communit
     isPanningRef.current = false
   }
 
-  // 計算內容區域的實際邊界
-  const [contentBounds, setContentBounds] = useState({ width: 0, height: 0 })
+  // 計算內容區域的實際邊界（含 minX/minY 用於偏移，讓負座標節點可捲動）
+  const [contentBounds, setContentBounds] = useState({ width: 0, height: 0, minX: 0, minY: 0 })
   const contentRef = useRef<HTMLDivElement>(null)
+  const PADDING = 200
 
   // 檢測是否有卡片超出邊界
   const checkOverflow = useCallback(() => {
@@ -460,7 +461,7 @@ export default function ZoomableIdeasContainer({ children, containerId, communit
 
   // 使用 ref 來追蹤上一次的狀態，避免不必要的更新
   const prevOverflowRef = useRef(false)
-  const prevBoundsRef = useRef({ width: 0, height: 0 })
+  const prevBoundsRef = useRef({ width: 0, height: 0, minX: 0, minY: 0 })
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 計算所有想法卡片的邊界（基於 position 屬性，而非 DOM 位置）
@@ -475,34 +476,33 @@ export default function ZoomableIdeasContainer({ children, containerId, communit
       if (cards.length === 0) {
         // 如果沒有卡片，使用預設尺寸
         if (prevOverflowRef.current !== false || prevBoundsRef.current.width !== 0 || prevBoundsRef.current.height !== 0) {
-          setContentBounds({ width: 0, height: 0 })
+          setContentBounds({ width: 0, height: 0, minX: 0, minY: 0 })
           setHasOverflow(false)
           prevOverflowRef.current = false
-          prevBoundsRef.current = { width: 0, height: 0 }
+          prevBoundsRef.current = { width: 0, height: 0, minX: 0, minY: 0 }
         }
         return
       }
 
-      // 檢測是否有溢出（使用防抖，避免頻繁計算）
+      // 有卡片時：僅在「目前有卡片超出視窗」時設為 true；不依 getBoundingClientRect 設為 false，
+      // 避免拖動後暫時全在視窗內就關閉 overflow，導致畫面被壓成左上角。
       let overflow = false
       try {
         overflow = checkOverflow()
       } catch (e) {
-        // 如果計算出錯，保持當前狀態
         overflow = prevOverflowRef.current
       }
-      
-      // 只在狀態改變時才更新
-      if (prevOverflowRef.current !== overflow) {
-        setHasOverflow(overflow)
-        prevOverflowRef.current = overflow
+      const keepOverflowWhenHasCards = prevOverflowRef.current && cards.length > 0
+      const nextOverflow = cards.length === 0 ? false : (overflow || keepOverflowWhenHasCards)
+      if (prevOverflowRef.current !== nextOverflow) {
+        setHasOverflow(nextOverflow)
+        prevOverflowRef.current = nextOverflow
       }
 
-      // 只有在有溢出時才計算內容區域尺寸
-      if (!overflow) {
+      if (!nextOverflow) {
         if (prevBoundsRef.current.width !== 0 || prevBoundsRef.current.height !== 0) {
-          setContentBounds({ width: 0, height: 0 })
-          prevBoundsRef.current = { width: 0, height: 0 }
+          setContentBounds({ width: 0, height: 0, minX: 0, minY: 0 })
+          prevBoundsRef.current = { width: 0, height: 0, minX: 0, minY: 0 }
         }
         return
       }
@@ -542,7 +542,7 @@ export default function ZoomableIdeasContainer({ children, containerId, communit
       })
 
       // 添加邊距，確保滾動時有足夠空間
-      const padding = 200
+      const padding = PADDING
       
       // 確保包含負數位置（卡片可能在左邊或上方）
       const actualMinX = minX !== Infinity ? minX : 0
@@ -570,11 +570,18 @@ export default function ZoomableIdeasContainer({ children, containerId, communit
       const calculatedWidth = Math.max(contentWidth, minContentWidth)
       const calculatedHeight = Math.max(contentHeight, minContentHeight)
 
-      // 只在尺寸改變時才更新
-      const newBounds = { width: calculatedWidth, height: calculatedHeight }
+      // 只在尺寸或偏移改變時才更新（含 minX/minY 讓負座標可捲動）
+      const newBounds = {
+        width: calculatedWidth,
+        height: calculatedHeight,
+        minX: actualMinX,
+        minY: actualMinY,
+      }
       if (
         Math.abs(prevBoundsRef.current.width - newBounds.width) > 1 ||
-        Math.abs(prevBoundsRef.current.height - newBounds.height) > 1
+        Math.abs(prevBoundsRef.current.height - newBounds.height) > 1 ||
+        Math.abs(prevBoundsRef.current.minX - newBounds.minX) > 1 ||
+        Math.abs(prevBoundsRef.current.minY - newBounds.minY) > 1
       ) {
         setContentBounds(newBounds)
         prevBoundsRef.current = newBounds
@@ -753,12 +760,28 @@ export default function ZoomableIdeasContainer({ children, containerId, communit
           minWidth: hasOverflow ? 'auto' : '100%',
           minHeight: hasOverflow ? 'auto' : '100%',
           position: 'relative',
-          // 確保內容可以從負數位置開始
           left: 0,
           top: 0,
         }}
       >
-        {children}
+        {/* 偏移 wrapper：讓負座標的節點落在可捲動區域內，往上拖的節點可捲回來 */}
+        {hasOverflow && contentBounds.width > 0 ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '100%',
+              height: '100%',
+              transform: `translate(${-contentBounds.minX + PADDING}px, ${-contentBounds.minY + PADDING}px)`,
+              transformOrigin: '0 0',
+            }}
+          >
+            {children}
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </div>
   )
