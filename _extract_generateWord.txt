@@ -1,0 +1,655 @@
+﻿              top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '閮剛???, ...headerTextStyle })] })],
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' }, // 閮剛??椰??扳?
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: designer || '', ...textStyle })] })],
+            width: { size: 25, type: WidthType.PERCENTAGE },
+            borders: outerCornerTopRightStyle, // ?喃?閫?雿輻憭?
+          }),
+        ],
+      }),
+      // Row 1: 隤脩??? + ?玨??嚗?甈?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '隤脩???', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: courseDomain || '', ...textStyle })] })],
+            width: { size: 42, type: WidthType.PERCENTAGE },
+            ...contentCellStyle,
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '?玨??', ...headerTextStyle })] })],
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            ...labelCellStyle,
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: teachingTimeText, ...textStyle })] })],
+            width: { size: 25, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 2: ?桀??迂嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '?桀??迂', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: unitName || '', ...textStyle })] })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 3: 撖行撟渡?嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?憿舐內摮豢挾 + 撟渡?嚗?      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '撖行撟渡?', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ 
+                text: schoolLevel && implementationGrade 
+                  ? `${schoolLevel} ${implementationGrade}撟渡?` 
+                  : (schoolLevel || (implementationGrade ? `${implementationGrade}撟渡?` : '')), 
+                ...textStyle 
+              })] 
+            })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 4: ?詨?蝝?嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '?詨?蝝?', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: coreCompetencyText, ...textStyle })],
+              spacing: { after: 300, before: 300 }, // 憓?銝???嚗?擃?雿?摨佗?1.5??
+            })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 5: 摮貊?銵函嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '摮貊?銵函', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: learningPerformanceText, ...textStyle })],
+              spacing: { after: 300, before: 300 }, // 憓?銝???嚗?擃?雿?摨佗?1.5??
+            })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 6: 摮貊??批捆嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '摮貊??批捆', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: learningContentText, ...textStyle })],
+              spacing: { after: 300, before: 300 }, // 憓?銝???嚗?擃?雿?摨佗?1.5??
+            })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 7: ??靘?嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '??靘?', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: materialSource || '', ...textStyle })] })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 8: ?飛閮剖?/鞈?嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '?飛閮剖?/鞈?', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: teachingEquipment || '', ...textStyle })],
+              spacing: { after: 200, before: 200 }, // 憓?銝???嚗?擃?雿?摨?            })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?          }),
+        ],
+      }),
+      // Row 9: 摮貊??格?嚗洵1甈?蝐歹?蝚?-4甈?雿蛛?- ?敺?銵?雿輻憭?璅??
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: '摮貊??格?', ...headerTextStyle })] })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: outerCornerBottomLeftStyle, // 撌虫?閫?雿輻憭?
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ 
+                text: learningObjectives.length > 0 
+                  ? learningObjectives.map(obj => obj.content).join('\n')
+                  : '', 
+                ...textStyle 
+              })],
+              spacing: { after: 300, before: 300 }, // 憓?銝???嚗?擃?雿?摨佗?1.5??
+            })],
+            columnSpan: 3,
+            width: { size: 82, type: WidthType.PERCENTAGE },
+            borders: outerCornerBottomRightStyle, // ?喃?閫?雿輻憭?
+          }),
+        ],
+      }),
+    ]
+
+    // 銵冽銝 - 雿輻?曉?瘥祝摨佗?蝣箔??拇??撖砍漲
+    children.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: table1Rows,
+      })
+    )
+
+    // ??暺征??    children.push(
+      new Paragraph({
+        text: '',
+        spacing: { after: 200 },
+      })
+    )
+
+    // ========================
+    // ?”?潔?嚗飛蝧暑?身閮?    // ========================
+    // 5??甈?甈祝瘥?嚗洵1-2甈?閮?7%嚗洵1甈?撖穿?蝚?甈?蝒?嚗洵3甈?2%嚗洵4甈?2%嚗洵5甈?9%
+    
+    const activityTableHeaderStyle = {
+      borders: outerBorderStyle,
+      // 蝘駁 shading 閮剖?嚗?璅?甈?靽??質?
+    }
+
+    // 撱箇?銵冽鈭? 5 ??    const table2Rows: TableRow[] = [
+      // Row 0: 摮貊?瘣餃?閮剛?嚗?甈?雿菜?1?潘?蝵桐葉嚗?      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '摮貊?瘣餃?閮剛?', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            columnSpan: 6,
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' }, // 摮貊?瘣餃?閮剛?銝?臬獢?              left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
+            },
+            // 蝘駁 shading 閮剖?嚗?璅?甈?靽??質?
+          }),
+        ],
+      }),
+      // Row 1: 璅???#?飛蝧璅暑??蝔????撘?閮鳴?
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '#', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 6, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '瘣餃??格?', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '瘣餃?瘚?', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 40, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '??', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 8, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '閰??孵?', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 18, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+            },
+          }),
+          new TableCell({
+            children: [new Paragraph({ 
+              children: [new TextRun({ text: '?酉', ...headerTextStyle })],
+              alignment: AlignmentType.CENTER,
+            })],
+            width: { size: 13, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
+            },
+          }),
+        ],
+      }),
+    ]
+
+    // Row 2: 瘣餃?鞈???    if (activityRows.length > 0) {
+      // 憒??暑?????箸??暑?遣蝡?銵?      const sortedRows = sortActivityRows(activityRows)
+      sortedRows.forEach((row, index) => {
+        // ???訾葉?飛蝧璅?摮?        const selectedObjectives = row.selectedLearningObjectives
+          .map(idx => {
+            const objIdx = parseInt(idx)
+            return learningObjectives[objIdx]?.content || ''
+          })
+          .filter(Boolean)
+          .join('??)
+        
+        const isLastRow = index === sortedRows.length - 1
+        
+        table2Rows.push(
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: row.sequenceNumber || (index + 1).toString(), ...textStyle })],
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 6, type: WidthType.PERCENTAGE },
+                borders: isLastRow ? outerCornerBottomLeftStyle : outerLeftBorderStyle, // ?敺?銵蝙?典??典?獢?                verticalAlign: VerticalAlign.TOP,
+              }),
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: selectedObjectives || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 20, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
+              }),
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: row.activityFlow || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 35, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
+              }),
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: row.time || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 8, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
+              }),
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: row.assessmentMethod || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 18, type: WidthType.PERCENTAGE },
+                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
+                verticalAlign: VerticalAlign.TOP,
+              }),
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text: row.notes || '', ...textStyle })],
+                  spacing: { after: 100, before: 100 },
+                })],
+                width: { size: 13, type: WidthType.PERCENTAGE },
+                borders: isLastRow ? outerCornerBottomRightStyle : outerRightBorderStyle, // ?敺?銵蝙?典??典?獢?                verticalAlign: VerticalAlign.TOP,
+              }),
+            ],
+          })
+        )
+      })
+    } else {
+      // 憒?瘝?瘣餃?鞈?嚗＊蝷箔?銵征?踝??撠?摨佗?
+      table2Rows.push(
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({ 
+                text: '',
+                spacing: { after: 200, before: 200 }, // ?撠?頝??踹?銵??之
+              })],
+              columnSpan: 2,
+              width: { size: 47, type: WidthType.PERCENTAGE },
+              borders: outerLeftBorderStyle, // 撌血嚗蝙?典?獢?              verticalAlign: VerticalAlign.TOP,
+            }),
+            new TableCell({
+              children: [new Paragraph({ 
+                text: '',
+                spacing: { after: 200, before: 200 }, // ?撠?頝??踹?銵??之
+              })],
+              width: { size: 12, type: WidthType.PERCENTAGE },
+              ...contentCellStyle,
+              verticalAlign: VerticalAlign.TOP,
+            }),
+            new TableCell({
+              children: [new Paragraph({ 
+                text: '',
+                spacing: { after: 200, before: 200 }, // ?撠?頝??踹?銵??之
+              })],
+              width: { size: 12, type: WidthType.PERCENTAGE },
+              ...contentCellStyle,
+              verticalAlign: VerticalAlign.TOP,
+            }),
+            new TableCell({
+              children: [new Paragraph({ 
+                text: '',
+                spacing: { after: 200, before: 200 }, // ?撠?頝??踹?銵??之
+              })],
+              width: { size: 29, type: WidthType.PERCENTAGE },
+              borders: outerRightBorderStyle, // ?喳嚗蝙?典?獢?              verticalAlign: VerticalAlign.TOP,
+            }),
+          ],
+        })
+      )
+    }
+
+
+    // 銵冽鈭?- 雿輻?曉?瘥祝摨佗?蝣箔??拇??撖砍漲
+    children.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: table2Rows,
+      })
+    )
+
+    const doc = new Document({
+      sections: [
+        {
+          properties: {
+            page: {
+              size: {
+                orientation: PageOrientation.PORTRAIT,
+                width: 12240, // A4 撖砍漲 (21cm = 11906 twips, 雿蝙??12240 隞亦Ⅱ靽雲憭?
+                height: 15840, // A4 擃漲 (29.7cm = 16838 twips, 雿蝙??15840 隞亦Ⅱ靽雲憭?
+              },
+              margin: {
+                top: 720, // 皜?銝?頝?(蝝?1.27cm嚗??祉? 2.54cm)
+                right: 720, // 皜??喲?頝?(蝝?1.27cm嚗??祉? 2.54cm)
+                bottom: 720, // 皜?銝?頝?(蝝?1.27cm嚗??祉? 2.54cm)
+                left: 720, // 皜?撌阡?頝?(蝝?1.27cm嚗??祉? 2.54cm)
+              },
+            },
+          },
+          children,
+        },
+      ],
+    })
+
+    return doc
+  }
+
+  // 雿輻 File System Access API ?脣? PDF
+  const generateAndSavePDF = async (fileHandle: FileSystemFileHandle) => {
+    const pdf = generatePDF()
+    const pdfBlob = pdf.output('blob')
+    const writable = await fileHandle.createWritable()
+    await writable.write(pdfBlob)
+    await writable.close()
+  }
+
+  // 雿輻 File System Access API ?脣? Word
+  const generateAndSaveWord = async (fileHandle: FileSystemFileHandle) => {
+    const doc = await generateWord()
+    const blob = await Packer.toBlob(doc)
+    const writable = await fileHandle.createWritable()
+    await writable.write(blob)
+    await writable.close()
+  }
+
+  // ?脣?銵典鞈?銝行憓??祈???  const handleSave = async () => {
+    if (!activityId) {
+      alert('?⊥??脣?嚗撩撠暑??ID')
+      return
+    }
+
+    // ?脣??嗅?雿輻??閮?    const userData = localStorage.getItem('user')
+    let userId = ''
+    let userNickname = '雿輻??
+    if (userData) {
+      try {
+        const user = JSON.parse(userData)
+        userId = user.id || user.account || ''
+        userNickname = user.nickname || '雿輻??
+      } catch (e) {
+        // 敹賜閫???航炊
+      }
+    }
+
+    if (!userId) {
+      alert('?⊥??脣?嚗????)
+      return
+    }
+
+    // ?園???”?株???    const formData = {
+      userId,
+      // ?Ⅱ璅??箸??摮??閬遣蝡??祈???      isAutoSave: false,
+      lessonPlanTitle,
+      courseDomain,
+      designer,
+      unitName,
+      schoolLevel,
+      implementationGrade,
+      teachingTimeLessons,
+      teachingTimeMinutes,
+      materialSource,
+      teachingEquipment,
+      learningObjectives: learningObjectives.map(obj => obj.content).join('|||'), // 撠???摮葡嚗蝙??'|||' ??銝??嚗???批捆銝剔???蝚行毽瘛?      addedCoreCompetencies,
+      addedLearningPerformances,
+      addedLearningContents,
+      activityRows,
+      assessmentTools,
+      references,
+      checkedPerformances: Array.from(checkedPerformances),
+      checkedContents: Array.from(checkedContents),
+    }
+
+    try {
+      // ?澆 API ?脣???鞈?
+      const response = await fetch(`/api/lesson-plans/${activityId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        const errorMessage = errorData.details 
+          ? `${errorData.error}: ${errorData.details}` 
+          : errorData.error || '?脣?憭望?'
+        console.error('API ?航炊??:', errorData)
+        throw new Error(errorMessage)
+      }
+
+      const result = await response.json()
+      
+      // ?湔?嗅????      if (result.data && result.data.versionNumber) {
+        const versionNumber = `v${result.data.versionNumber}`
+        setCurrentVersion(versionNumber)
+        // ???湔??localStorage
+        const storageKey = `currentVersion_${activityId}`
+        localStorage.setItem(storageKey, versionNumber)
+      }
+      
+      // 憿舐內??閮
+      alert('??鞈??脣???嚗?)
+      
+      // ??嗥?隞嗥??砍歇撱箇?嚗???閬?閰梧?
+      if (onVersionCreated) {
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        const hours = String(now.getHours()).padStart(2, '0')
+        const minutes = String(now.getMinutes()).padStart(2, '0')
+        
+        onVersionCreated(activityId, {
+          versionNumber: `v${result.data.versionNumber}`,
+          lastModifiedDate: `${year}/${month}/${day}`,
+          lastModifiedTime: `${hours}:${minutes}`,
+          lastModifiedUser: userNickname,
+        })
+      }
+    } catch (error: any) {
+      console.error('?脣???鞈??航炊:', error)
+      alert(`?脣?憭望?嚗?{error.message || '?芰?航炊'}`)
+    }
+  }
+
+  // ?芸?靽???蝝啁銵典?貊???銝遣蝡?嚗?  const autoSaveSpecification = useCallback(async () => {
+    if (!activityId) return
+
+    // ?脣??嗅?雿輻??閮?    const userData = localStorage.getItem('user')
+    let userId = ''
+    if (userData) {
+      try {
+        const user = JSON.parse(userData)
+        userId = user.id || user.account || ''
+      } catch (e) {
+        // 敹賜閫???航炊
+      }
+    }
+
+    if (!userId) return
+
+    // ?園??暸??????閬??怠?閬??鞈?隞乩噶 API 甇?Ⅱ??嚗?    const formData = {
+      userId,
+      // ?Ⅱ璅??箄??摮?銝遣蝡??祈???      isAutoSave: true,
+      // ?芸??貊????鞈?嚗隞蝙?函??      checkedPerformances: Array.from(checkedPerformances),
+      checkedContents: Array.from(checkedContents),
+      // API ?閬?鞈?靘迤蝣箸?撠?ID
+      addedLearningPerformances,
+      addedLearningContents,
+      activityRows,
+    }
+
+    try {
+      // ?澆 API ?脣??暸???API ????湔?暸????典?嚗?      const response = await fetch(`/api/lesson-plans/${activityId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        // 憒??舀?獢?摮?隤歹?????嚗?獢??芸遣蝡?
+        if (errorData.error && errorData.error.includes('?⊥?撱箇??唳?獢?)) {
+          console.log('?? ??撠撱箇?嚗歲???摮?貊???)
+        } else {
+          console.error('?芸?靽??暸??仃??', errorData)
+        }
+        // 銝＊蝷粹隤方??荔??踹???冽
+      } else {
+        console.log('????蝝啁銵典?貊??歇?芸?靽?嚗?撱箇??嚗?)
+      }
+    } catch (error: any) {
+      console.error('?芸?靽??暸??隤?', error)
+      // 銝＊蝷粹隤方??荔??踹???冽
+    }
+  }, [activityId, checkedPerformances, checkedContents, addedLearningPerformances, addedLearningContents, activityRows])
+
+  // ?嗅?貊??霈?嚗??摮?雿輻蝭瘚?500ms 敺?摮?
+  // 瘜冽?嚗?典?貊??霈?閫貊嚗?靘陷?嗡?鞈?霈?
+  useEffect(() => {
+    // 憒?瘝??暸隞颱??嚗?閫貊?芸?靽?
+    if (checkedPerformances.size === 0 && checkedContents.size === 0) {
+      return
+    }
+
+    // 皜銋????
+    if (saveSpecificationTimeoutRef.current) {
+      clearTimeout(saveSpecificationTimeoutRef.current)
+    }
+
+    // 閮剔蔭?啁?閮???    saveSpecificationTimeoutRef.current = setTimeout(() => {
+      autoSaveSpecification()

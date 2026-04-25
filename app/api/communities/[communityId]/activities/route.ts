@@ -6,6 +6,107 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
 
+type ActivitySelectVariant = 'full' | 'no_school_level' | 'no_completed_at' | 'minimal'
+
+function buildActivitySelectSql(
+  variant: ActivitySelectVariant,
+  baseFrom: string,
+  includeOrder: boolean
+): string {
+  const schoolLevelExpr =
+    variant === 'full' || variant === 'no_completed_at'
+      ? 'lp.school_level AS schoolLevel'
+      : 'CAST(NULL AS CHAR(255)) AS schoolLevel'
+  const completedAtExpr =
+    variant === 'full' || variant === 'no_school_level'
+      ? 'a.completed_at AS completedAt'
+      : 'CAST(NULL AS DATETIME) AS completedAt'
+  const orderClause =
+    !includeOrder
+      ? ''
+      : variant === 'full' || variant === 'no_school_level'
+        ? 'ORDER BY (a.completed_at IS NULL) DESC, COALESCE(lp.updated_at, a.created_at) DESC'
+        : 'ORDER BY COALESCE(lp.updated_at, a.created_at) DESC'
+
+  return `SELECT 
+        a.id,
+        a.name,
+        a.introduction,
+        a.is_public AS isPublic,
+        a.password,
+        a.creator_id AS creatorId,
+        a.created_at AS createdDate,
+        DATE_FORMAT(a.created_at, '%H:%i') AS createdTime,
+        u.nickname AS creatorName,
+        lp.lesson_plan_title AS lessonPlanTitle,
+        lp.course_domain AS courseDomain,
+        lp.designer AS designer,
+        lp.unit_name AS unitName,
+        lp.implementation_grade AS implementationGrade,
+        ${schoolLevelExpr},
+        COALESCE(lp.updated_at, a.created_at) AS lastModifiedAt,
+        ${completedAtExpr}
+      ${baseFrom}
+      ${orderClause}`.trim()
+}
+
+const ACTIVITY_QUERY_VARIANTS: ActivitySelectVariant[] = [
+  'full',
+  'no_school_level',
+  'no_completed_at',
+  'minimal',
+]
+
+/** 僅在疑似「缺欄位」時換下一組 SQL，連線錯誤等不重試 */
+function isRetryableSchemaError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /unknown column/i.test(msg) || /doesn't exist/i.test(msg) || /不存在/i.test(msg)
+}
+
+/**
+ * 讀取活動列表（含教案摘要）：依序嘗試欄位組合，相容未跑 migrations 的資料庫
+ */
+async function fetchActivitiesForCommunity(communityId: string): Promise<any[]> {
+  const baseFrom = `
+      FROM activities a
+      INNER JOIN users u ON a.creator_id = u.id
+      LEFT JOIN lesson_plans lp ON lp.activity_id = a.id
+      WHERE a.community_id = ?`
+
+  let lastErr: unknown
+  for (const variant of ACTIVITY_QUERY_VARIANTS) {
+    try {
+      const sql = buildActivitySelectSql(variant, baseFrom, true)
+      return (await query(sql, [communityId])) as any[]
+    } catch (err) {
+      lastErr = err
+      if (!isRetryableSchemaError(err)) throw err
+    }
+  }
+  console.error('[activities] 所有相容查詢皆失敗，請檢查資料表 activities / lesson_plans / users 是否存在且可 JOIN。')
+  throw lastErr
+}
+
+async function fetchActivityRowById(activityId: string): Promise<any[]> {
+  const baseFrom = `
+      FROM activities a
+      INNER JOIN users u ON a.creator_id = u.id
+      LEFT JOIN lesson_plans lp ON lp.activity_id = a.id
+      WHERE a.id = ?`
+
+  let lastErr: unknown
+  for (const variant of ACTIVITY_QUERY_VARIANTS) {
+    try {
+      const sql = buildActivitySelectSql(variant, baseFrom, false)
+      return (await query(sql, [activityId])) as any[]
+    } catch (err) {
+      lastErr = err
+      if (!isRetryableSchemaError(err)) throw err
+    }
+  }
+  throw lastErr
+}
+
 // GET: 讀取社群的所有活動列表
 export async function GET(
   request: NextRequest,
@@ -15,44 +116,53 @@ export async function GET(
     const resolvedParams = await params
     const { communityId } = resolvedParams
 
-    // 查詢社群的所有活動
-    const activities = await query(
-      `SELECT 
-        a.id,
-        a.name,
-        a.introduction,
-        a.is_public AS isPublic,
-        a.password,
-        a.creator_id AS creatorId,
-        a.created_at AS createdDate,
-        DATE_FORMAT(a.created_at, '%H:%i') AS createdTime,
-        u.nickname AS creatorName
-      FROM activities a
-      INNER JOIN users u ON a.creator_id = u.id
-      WHERE a.community_id = ?
-      ORDER BY a.created_at DESC`,
-      [communityId]
-    ) as any[]
+    const activities = await fetchActivitiesForCommunity(communityId)
 
-    const formattedActivities = activities.map((activity) => ({
-      id: activity.id,
-      name: activity.name,
-      introduction: activity.introduction || '',
-      isPublic: activity.isPublic === 1 || activity.isPublic === true,
-      password: activity.password || '',
-      createdDate: activity.createdDate
-        ? (() => {
-            const date = new Date(activity.createdDate)
-            const year = date.getFullYear()
-            const month = String(date.getMonth() + 1).padStart(2, '0')
-            const day = String(date.getDate()).padStart(2, '0')
-            return `${year}/${month}/${day}`
-          })()
-        : '',
-      createdTime: activity.createdTime || '',
-      creatorId: activity.creatorId || '',
-      creatorName: activity.creatorName || '',
-    }))
+    const formatDateTime = (raw: Date | string | null | undefined) => {
+      if (!raw) return { date: '', time: '' }
+      const d = new Date(raw)
+      if (Number.isNaN(d.getTime())) return { date: '', time: '' }
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      const hh = String(d.getHours()).padStart(2, '0')
+      const mm = String(d.getMinutes()).padStart(2, '0')
+      return { date: `${year}/${month}/${day}`, time: `${hh}:${mm}` }
+    }
+
+    const formattedActivities = activities.map((activity) => {
+      const { date: lastModifiedDate, time: lastModifiedTime } = formatDateTime(
+        activity.lastModifiedAt
+      )
+      return {
+        id: activity.id,
+        name: activity.name,
+        introduction: activity.introduction || '',
+        isPublic: activity.isPublic === 1 || activity.isPublic === true,
+        password: activity.password || '',
+        createdDate: activity.createdDate
+          ? (() => {
+              const date = new Date(activity.createdDate)
+              const year = date.getFullYear()
+              const month = String(date.getMonth() + 1).padStart(2, '0')
+              const day = String(date.getDate()).padStart(2, '0')
+              return `${year}/${month}/${day}`
+            })()
+          : '',
+        createdTime: activity.createdTime || '',
+        creatorId: activity.creatorId || '',
+        creatorName: activity.creatorName || '',
+        lessonPlanTitle: activity.lessonPlanTitle || '',
+        courseDomain: activity.courseDomain || '',
+        designer: activity.designer || '',
+        unitName: activity.unitName || '',
+        implementationGrade: activity.implementationGrade || '',
+        schoolLevel: activity.schoolLevel || '',
+        lastModifiedDate,
+        lastModifiedTime,
+        coPrepCompleted: !!(activity.completedAt),
+      }
+    })
 
     return NextResponse.json(formattedActivities)
   } catch (error: any) {
@@ -146,23 +256,7 @@ export async function POST(
       insertParams
     )
 
-    // 查詢新建立的活動
-    const newActivities = await query(
-      `SELECT 
-        a.id,
-        a.name,
-        a.introduction,
-        a.is_public AS isPublic,
-        a.password,
-        a.creator_id AS creatorId,
-        a.created_at AS createdDate,
-        DATE_FORMAT(a.created_at, '%H:%i') AS createdTime,
-        u.nickname AS creatorName
-      FROM activities a
-      INNER JOIN users u ON a.creator_id = u.id
-      WHERE a.id = ?`,
-      [activityId]
-    ) as any[]
+    const newActivities = await fetchActivityRowById(activityId)
 
     if (newActivities.length === 0) {
       return NextResponse.json(
@@ -171,24 +265,47 @@ export async function POST(
       )
     }
 
+    const na = newActivities[0]
+    const lm = na.lastModifiedAt
+      ? (() => {
+          const d = new Date(na.lastModifiedAt)
+          if (Number.isNaN(d.getTime())) return { date: '', time: '' }
+          const year = d.getFullYear()
+          const month = String(d.getMonth() + 1).padStart(2, '0')
+          const day = String(d.getDate()).padStart(2, '0')
+          const hh = String(d.getHours()).padStart(2, '0')
+          const mm = String(d.getMinutes()).padStart(2, '0')
+          return { date: `${year}/${month}/${day}`, time: `${hh}:${mm}` }
+        })()
+      : { date: '', time: '' }
+
     const formattedActivity = {
-      id: newActivities[0].id,
-      name: newActivities[0].name,
-      introduction: newActivities[0].introduction || '',
-      isPublic: newActivities[0].isPublic === 1 || newActivities[0].isPublic === true,
-      password: newActivities[0].password || '',
-      createdDate: newActivities[0].createdDate
+      id: na.id,
+      name: na.name,
+      introduction: na.introduction || '',
+      isPublic: na.isPublic === 1 || na.isPublic === true,
+      password: na.password || '',
+      createdDate: na.createdDate
         ? (() => {
-            const date = new Date(newActivities[0].createdDate)
+            const date = new Date(na.createdDate)
             const year = date.getFullYear()
             const month = String(date.getMonth() + 1).padStart(2, '0')
             const day = String(date.getDate()).padStart(2, '0')
             return `${year}/${month}/${day}`
           })()
         : '',
-      createdTime: newActivities[0].createdTime || '',
-      creatorId: newActivities[0].creatorId || '',
-      creatorName: newActivities[0].creatorName || '',
+      createdTime: na.createdTime || '',
+      creatorId: na.creatorId || '',
+      creatorName: na.creatorName || '',
+      lessonPlanTitle: na.lessonPlanTitle || '',
+      courseDomain: na.courseDomain || '',
+      designer: na.designer || '',
+      unitName: na.unitName || '',
+      implementationGrade: na.implementationGrade || '',
+      schoolLevel: na.schoolLevel || '',
+      lastModifiedDate: lm.date,
+      lastModifiedTime: lm.time,
+      coPrepCompleted: !!(na.completedAt),
     }
 
     return NextResponse.json(formattedActivity, { status: 201 })

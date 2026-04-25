@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 
 // 動態導入 ForceGraph2D，避免 SSR 問題
@@ -93,26 +93,65 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
     setIsTouchDevice(checkTouchDevice())
   }, [])
 
-  // 更新容器大小
-  useEffect(() => {
+  // 更新容器大小：用 ResizeObserver + 多次 polling 確保拿到真實尺寸
+  // 重要：只在尺寸實際改變時才呼叫 setState，避免無限更新迴圈
+  // 重要：尺寸為 0 時不更新 state（不要 fallback 到假值），等真實尺寸出現
+  // 用 useLayoutEffect 在 paint 前測量；用多個 setTimeout 重試避免首次量測為 0
+  useLayoutEffect(() => {
+    let cancelled = false
+
     const updateSize = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        const isMobile = window.innerWidth < 640 // sm breakpoint
-        // 手機上使用更大的寬度，減少被裁剪 - 使用接近全螢幕寬度
-        const calculatedWidth = isMobile 
-          ? Math.max(rect.width || 800, window.innerWidth * 0.98)
-          : (rect.width || 800)
-        setContainerSize({
-          width: calculatedWidth,
-          height: rect.height || 600,
-        })
-      }
+      if (cancelled) return
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const realWidth = rect.width
+      const realHeight = rect.height
+
+      // 容器尚未佈局完成（寬或高為 0），不更新 state
+      if (realWidth <= 0 || realHeight <= 0) return
+
+      const isMobile = window.innerWidth < 640
+      const calculatedWidth = isMobile
+        ? Math.max(realWidth, window.innerWidth * 0.98)
+        : realWidth
+
+      setContainerSize((prev) => {
+        if (prev.width === calculatedWidth && prev.height === realHeight) {
+          return prev
+        }
+        return { width: calculatedWidth, height: realHeight }
+      })
     }
 
+    // 立即測量一次
     updateSize()
+
+    // 多次重試：應對首次掛載時 layout 尚未完成的情況
+    // 之前必須使用者捲動觸發 ResizeObserver 才會更新，現在主動 polling 即可拿到尺寸
+    const t1 = setTimeout(updateSize, 50)
+    const t2 = setTimeout(updateSize, 150)
+    const t3 = setTimeout(updateSize, 400)
+    const t4 = setTimeout(updateSize, 1000)
+
     window.addEventListener('resize', updateSize)
-    return () => window.removeEventListener('resize', updateSize)
+
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(updateSize)
+      })
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => {
+      cancelled = true
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+      clearTimeout(t4)
+      window.removeEventListener('resize', updateSize)
+      if (resizeObserver) resizeObserver.disconnect()
+    }
   }, [])
 
   // 保存視圖狀態的函數
@@ -283,6 +322,33 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
     loadGraphData()
   }, [communityId])
 
+  // 手機版置中：graphData 載入後分多次重試 zoomToFit，確保最終一定置中
+  // containerSize.width 加入依賴：容器從隱藏→顯示（捲動至此）後尺寸更新，立即重新置中
+  useEffect(() => {
+    if (!isTouchDevice) return
+    if (!graphData || isLoading) return
+
+    const doCenter = () => {
+      if (fgRef.current) {
+        try {
+          fgRef.current.zoomToFit(0, 30)
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    const t1 = setTimeout(doCenter, 50)
+    const t2 = setTimeout(doCenter, 300)
+    const t3 = setTimeout(doCenter, 700)
+
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+    }
+  }, [isTouchDevice, graphData, isLoading, containerSize.width, containerSize.height])
+
   // 設置 d3 力參數和自動縮放
   useEffect(() => {
     if (fgRef.current && graphData) {
@@ -294,95 +360,49 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
       const dynamicChargeStrength = -40 // 固定小斥力
       
       // 延遲一點確保圖表已經初始化
-      setTimeout(() => {
-        if (fgRef.current) {
-          try {
-            // 設置連線距離（固定緊湊值）
-            const linkForce = fgRef.current.d3Force('link')
-            if (linkForce) {
-              linkForce.distance(dynamicLinkDistance)
-            }
-            
-            // 設置節點斥力（固定小斥力）
-            const chargeForce = fgRef.current.d3Force('charge')
-            if (chargeForce) {
-              chargeForce.strength(dynamicChargeStrength)
-            }
-            
-            // 添加中心力，讓節點聚集在中心（大幅增強中心力）
-            const centerForce = fgRef.current.d3Force('center')
-            if (centerForce) {
-              centerForce.strength(0.6) // 大幅增強中心力，讓節點更聚集
-            }
-            
-            // 如果有保存的位置，完全停止模擬（保持固定位置）
-            // 如果沒有保存的位置，重新加熱模擬計算初始位置
-            if (hasSavedPositions) {
-              // 完全停止模擬，防止節點漂移
-              try {
-                const simulation = fgRef.current.d3Force('simulation')
-                if (simulation) {
-                  simulation.stop()
-                  simulation.alpha(0) // 設置 alpha 為 0，確保模擬停止
-                }
-              } catch (e) {
-                console.warn('停止模擬失敗:', e)
+        setTimeout(() => {
+          if (fgRef.current) {
+            try {
+              // 設置連線距離（固定緊湊值）
+              const linkForce = fgRef.current.d3Force('link')
+              if (linkForce) {
+                linkForce.distance(dynamicLinkDistance)
               }
-            } else {
-              fgRef.current.d3ReheatSimulation()
+              
+              // 設置節點斥力（固定小斥力）
+              const chargeForce = fgRef.current.d3Force('charge')
+              if (chargeForce) {
+                chargeForce.strength(dynamicChargeStrength)
+              }
+              
+              // 添加中心力，讓節點聚集在中心（大幅增強中心力）
+              const centerForce = fgRef.current.d3Force('center')
+              if (centerForce) {
+                centerForce.strength(0.6) // 大幅增強中心力，讓節點更聚集
+              }
+              
+              // 如果有保存的位置，完全停止模擬（保持固定位置）
+              // 新鮮載入不再呼叫 d3ReheatSimulation，避免讓節點在可見動畫幀中飄移
+              if (hasSavedPositions) {
+                // 完全停止模擬，防止節點漂移
+                try {
+                  const simulation = fgRef.current.d3Force('simulation')
+                  if (simulation) {
+                    simulation.stop()
+                    simulation.alpha(0) // 設置 alpha 為 0，確保模擬停止
+                  }
+                } catch (e) {
+                  console.warn('停止模擬失敗:', e)
+                }
+              }
+              // 新鮮載入：warmupTicks 已同步跑完，不再 reheat
+            } catch (e) {
+              console.error('設置 d3 力失敗:', e)
             }
-          } catch (e) {
-            console.error('設置 d3 力失敗:', e)
           }
-        }
-      }, 100)
-      
-      // 強制自動縮放，確保所有節點都在畫面內（避免跑版）
-      // 無論是否有保存的視圖狀態，都先執行 zoomToFit 確保節點可見
-      // 使用更長的延遲，確保圖表完全初始化並且節點位置已穩定
-      const restoreViewStateTimeout = setTimeout(() => {
-        if (fgRef.current) {
-          try {
-            // 先執行自動縮放，確保所有節點都在畫面內
-            // 使用較大的邊距（200, 200）確保節點不會貼邊
-            fgRef.current.zoomToFit(200, 200)
-            console.log('✅ 已執行自動縮放，確保所有節點在畫面內')
-          } catch (e) {
-            console.error('自動縮放失敗:', e)
-          }
-        }
-      }, 1500) // 等待 1.5 秒，確保圖表已完全初始化
-      
-      // 備用自動縮放，確保節點在畫面內（雙重保險）
-      const autoFitTimeout2 = setTimeout(() => {
-        if (fgRef.current) {
-          try {
-            // 再次執行自動縮放，確保所有節點都在畫面內
-            fgRef.current.zoomToFit(200, 200)
-            console.log('✅ 備用自動縮放已執行')
-          } catch (e) {
-            console.error('備用自動縮放失敗:', e)
-          }
-        }
-      }, 2500) // 等待 2.5 秒，作為備用方案
-      
-      // 第三次自動縮放，確保節點在畫面內（三重保險）
-      const autoFitTimeout3 = setTimeout(() => {
-        if (fgRef.current) {
-          try {
-            // 最後一次執行自動縮放，確保所有節點都在畫面內
-            fgRef.current.zoomToFit(200, 200)
-            console.log('✅ 第三次自動縮放已執行（確保節點在畫面內）')
-          } catch (e) {
-            console.error('第三次自動縮放失敗:', e)
-          }
-        }
-      }, 3500) // 等待 3.5 秒，作為最後的保險
+        }, 100)
       
       return () => {
-        clearTimeout(restoreViewStateTimeout)
-        clearTimeout(autoFitTimeout2)
-        clearTimeout(autoFitTimeout3)
         if (positionSaveTimeoutRef.current) {
           clearTimeout(positionSaveTimeoutRef.current)
         }
@@ -400,18 +420,18 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
     }
   }
 
-  // 節點顏色（根據使用者ID生成固定顏色）
+  // 節點顏色（與社群管理「所有成員」頭像色彩組一致）
   const USER_COLORS = [
-    '#8B5CF6', // 紫色
+    '#8A63D2', // 紫色
     '#3B82F6', // 藍色
     '#10B981', // 綠色
-    '#FFC658', // 橙色
+    '#F59E0B', // 橙色
     '#EF4444', // 紅色
-    '#00C49F', // 青色
-    '#A28DFF', // 淺紫
-    '#FF6F61', // 粉色
-    '#66CC99', // 淺綠色
-    '#FF8042', // 橘色
+    '#0EA5E9', // 青色
+    '#A855F7', // 淺紫色
+    '#EC4899', // 粉色
+    '#22C55E', // 淺綠色
+    '#F97316', // 橘色
   ];
 
   const getNodeColor = (userId: string) => {
@@ -428,44 +448,10 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
     return USER_COLORS[index];
   };
 
-  // 計算節點大小（根據排名）
-  const calculateNodeRadius = (node: any) => {
-    // 計算文字需要的最小半徑（最後一名的基準大小）
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return 10
-    
-    ctx.font = '3px sans-serif'
-    const label = node.name || node.label || ''
-    const text = `${label}\n建立: ${node.createdCount || 0}\n回覆: ${node.replyCount || 0}\n被回覆: ${node.receivedReplyCount || 0}`
-    const lines = text.split('\n')
-    
-    // 計算每行文字的寬度
-    let maxWidth = 0
-    lines.forEach(line => {
-      const metrics = ctx.measureText(line)
-      maxWidth = Math.max(maxWidth, metrics.width)
-    })
-    
-    // 計算總高度（行數 × 行高）
-    const lineHeight = 5
-    const totalHeight = lines.length * lineHeight
-    
-    // 計算容納文字需要的最小半徑
-    const padding = 3
-    const baseRadius = Math.max(maxWidth / 2, totalHeight / 2) + padding
-    
-    // 使用節點的排名（rank 從 1 開始，1 = 第一名）
-    const rank = node.rank || 1
-    const totalNodes = graphData?.nodes?.length || 1
-    
-    // 每高一個名次，半徑增加 1.5（直徑增加 3）- 增強排名差異視覺效果
-    const radiusIncrement = 1.5
-    const rankBonus = (totalNodes - rank) * radiusIncrement
-    
-    // 最終半徑 = 基礎半徑（文字需要的） + 排名獎勵
-    return baseRadius + rankBonus
-  }
+  // 手機版使用較小的半徑
+  const FIXED_NODE_RADIUS = isTouchDevice ? 15 : 22
+
+  const calculateNodeRadius = (_node: any) => FIXED_NODE_RADIUS
 
   // 自定義節點繪製
   const nodeCanvasObject = (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -476,43 +462,24 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
       `回覆: ${node.replyCount || 0}`,
       `被回覆: ${node.receivedReplyCount || 0}`
     ]
-    
-    // 設置文字樣式 - 更小字體
-    const fontSize = 3
+
+    // 手機版縮小字體和行距，配合較小球體
+    const fontSize = isTouchDevice ? 4 : 5
+    const lineHeight = isTouchDevice ? 6 : 8
+    const totalTextHeight = lines.length * lineHeight
+
     ctx.font = `${fontSize}px Arial, sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    
-    // 計算每行文字的寬度
-    let maxWidth = 0
-    lines.forEach(line => {
-      const metrics = ctx.measureText(line)
-      if (metrics.width > maxWidth) {
-        maxWidth = metrics.width
-      }
-    })
-    
-    // 計算總高度 - 更小行高
-    const lineHeight = 5
-    const totalTextHeight = lines.length * lineHeight
-    
-    // 計算容納文字需要的最小半徑（最後一名的基準大小）
-    const padding = 3
-    const baseRadius = Math.max(maxWidth / 2, totalTextHeight / 2) + padding
-    
-    // 節點半徑 - 根據排名增加
-    const rank = node.rank || 1
-    const totalNodes = graphData?.nodes?.length || 1
-    const radiusIncrement = 1.5 // 每高一名次，半徑 +1.5（直徑 +3）- 增強排名差異視覺效果
-    const rankBonus = (totalNodes - rank) * radiusIncrement
-    const radius = baseRadius + rankBonus
+
+    // 所有節點固定半徑
+    const radius = FIXED_NODE_RADIUS
     
     // 1. 繪製圓形節點
     ctx.beginPath()
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false)
-    // 使用節點的 userId 或 id 來生成顏色，確保每個用戶有唯一顏色
-    const nodeIdForColor = node.userId || node.userAccount || node.id || ''
-    ctx.fillStyle = getNodeColor(nodeIdForColor)
+    // 使用 node.id（即資料庫 userId UUID），與社群管理頭像 hash 邏輯一致
+    ctx.fillStyle = getNodeColor(node.id || '')
     ctx.fill()
     ctx.strokeStyle = '#ffffff'
     ctx.lineWidth = 1
@@ -559,19 +526,15 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
   }
 
   return (
-    <div className="w-full h-full flex flex-col sm:flex-row overflow-x-visible overflow-y-hidden">
+    <div className="w-full h-full flex flex-col sm:flex-row overflow-hidden">
       {/* 左側：網絡圖 */}
       <div 
         ref={containerRef}
-        className="flex-1 overflow-x-visible overflow-y-hidden min-w-0 w-full"
+        className="flex-1 overflow-hidden min-w-0 w-full"
         style={{ 
           minHeight: '400px', 
           height: '400px',
-          touchAction: isTouchDevice ? 'pan-x pan-y pinch-zoom' : 'auto', // 手機上允許平移和縮放，桌面保持預設
-          position: 'relative', // 確保負 margin 生效
-          marginLeft: isTouchDevice ? '-2vw' : '0', // 手機上使用更大的負 margin 擴展顯示區域
-          marginRight: isTouchDevice ? '-2vw' : '0', // 手機上使用更大的負 margin 擴展顯示區域
-          width: isTouchDevice ? 'calc(100% + 4vw)' : '100%', // 手機上擴展寬度以容納負 margin
+          touchAction: 'auto', // 允許頁面在容器內外正常捲動
         }}
         onWheel={(e) => {
           // 監聽滾輪事件來追蹤縮放
@@ -601,30 +564,24 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
           }
         }}
       >
-        {ForceGraph2D && (
+        {ForceGraph2D && containerSize.width > 0 && containerSize.height > 0 && (
           <ForceGraph2D
             ref={fgRef}
-            graphData={{
-              nodes: graphData.nodes
+            graphData={(() => {
+              // 只顯示有建立或回覆過想法節點的成員
+              const activeNodes = graphData.nodes
+                .filter(node => (node.createdCount || 0) > 0 || (node.replyCount || 0) > 0)
                 .map(node => {
-                  const totalActivity = (node.createdCount || 0) + (node.replyCount || 0) + (node.receivedReplyCount || 0)
                   const nodeWithActivity: any = {
                     ...node,
                     name: node.label,
-                    totalActivity,
                   }
-                  
-                  // 如果有保存的位置，設置固定位置
                   if ((node as any).savedPosition) {
                     const savedPos = (node as any).savedPosition
-                    // 設置固定位置，防止力模擬移動
                     nodeWithActivity.fx = savedPos.x
                     nodeWithActivity.fy = savedPos.y
-                    // 同時設置初始位置
                     nodeWithActivity.x = savedPos.x
                     nodeWithActivity.y = savedPos.y
-                    
-                    // 初始化節點位置追蹤
                     nodesPositionRef.current.set(node.id, {
                       x: savedPos.x,
                       y: savedPos.y,
@@ -632,27 +589,22 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                       fy: savedPos.y,
                     })
                   }
-                  
                   return nodeWithActivity
                 })
-                .sort((a, b) => b.totalActivity - a.totalActivity) // 從高到低排序
-                .map((node, index, array) => {
-                  // 計算排名：相同活動量的節點應該有相同排名
-                  // 找到第一個活動量相同的節點的索引，作為排名
-                  const firstSameActivityIndex = array.findIndex(n => n.totalActivity === node.totalActivity)
-                  const rank = firstSameActivityIndex + 1 // 排名從 1 開始
-                  
-                  return {
-                    ...node,
-                    rank, // 相同活動量的節點有相同排名
-                  }
-                }),
-              links: graphData.edges.map(edge => ({
-                ...edge,
-                source: edge.from,
-                target: edge.to,
-              })),
-            }}
+
+              const activeNodeIds = new Set(activeNodes.map((n: any) => n.id))
+
+              // 只保留兩端都在活躍節點內的連線
+              const activeLinks = graphData.edges
+                .filter(edge => activeNodeIds.has(edge.from) && activeNodeIds.has(edge.to))
+                .map(edge => ({
+                  ...edge,
+                  source: edge.from,
+                  target: edge.to,
+                }))
+
+              return { nodes: activeNodes, links: activeLinks }
+            })()}
             nodeCanvasObject={nodeCanvasObject}
             nodeCanvasObjectMode={() => 'replace'}
             nodeVal={(node: any) => calculateNodeRadius(node)}
@@ -663,10 +615,10 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             linkWidth={1.5}
             linkColor={() => '#999999'}
             {...({ linkDistance: 80 } as any)} // 增加距離，讓有連接的節點之間有足夠空間顯示箭頭（節點半徑約15-25px，兩個節點半徑之和約30-50px，80px確保箭頭清晰可見）
-            d3AlphaDecay={graphData.nodes.some((node: any) => node.savedPosition) ? 0 : 0.03} // 如果有保存位置，設置為 0 立即停止
+            d3AlphaDecay={graphData.nodes.some((node: any) => node.savedPosition) ? 0 : 0.03}
             d3VelocityDecay={0.4} // 更快停止
-            warmupTicks={50}
-            cooldownTicks={graphData.nodes.some((node: any) => node.savedPosition) ? 0 : 100} // 如果有保存位置，不運行冷卻
+            warmupTicks={graphData.nodes.some((node: any) => node.savedPosition) ? 50 : 300}
+            cooldownTicks={0}
             onNodeClick={(node) => {
               handleNodeClick(node)
               // 點擊後不要重新啟動力模擬
@@ -756,7 +708,18 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                         }
                       }
                     })
-                    return // 不執行後續的力參數設置和自動縮放
+                    // 模擬停止後執行一次 zoomToFit，確保所有節點都在畫面內
+                    setTimeout(() => {
+                      if (fgRef.current) {
+                        try {
+                          fgRef.current.zoomToFit(0, 30)
+                          console.log('✅ 引擎停止（有固定節點）：已執行 zoomToFit')
+                        } catch (e) {
+                          console.error('zoomToFit 失敗:', e)
+                        }
+                      }
+                    }, 100)
+                    return // 不執行後續的力參數設置
                   }
                   
                   // 使用固定的距離
@@ -769,10 +732,35 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                   const centerForce = fgRef.current.d3Force('center')
                   if (centerForce) centerForce.strength(0.6)
                   
+                  // 引擎停止後，固定所有節點位置，防止拖動某節點時其他節點被力模擬推走
+                  try {
+                    const simForFix = fgRef.current.d3Force('simulation')
+                    if (simForFix) {
+                      const d3Nodes = simForFix.nodes()
+                      if (d3Nodes && d3Nodes.length > 0) {
+                        d3Nodes.forEach((n: any) => {
+                          if (typeof n.x === 'number' && typeof n.y === 'number') {
+                            n.fx = n.x
+                            n.fy = n.y
+                            if (n.id) {
+                              nodesPositionRef.current.set(n.id, {
+                                x: n.x, y: n.y, fx: n.x, fy: n.y,
+                              })
+                            }
+                          }
+                        })
+                      }
+                      simForFix.stop()
+                      simForFix.alpha(0)
+                    }
+                  } catch (e) {
+                    console.warn('固定節點位置失敗:', e)
+                  }
+                  
                   // 自動縮放和居中，確保所有節點都在畫面內
                   setTimeout(() => {
                     if (fgRef.current) {
-                      fgRef.current.zoomToFit(200, 200)
+                      fgRef.current.zoomToFit(0, 30)
                     }
                   }, 100)
                 } catch (e) {
@@ -780,11 +768,13 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                 }
               }
             }}
-            width={isTouchDevice ? Math.max(containerSize.width, window.innerWidth * 0.98) : containerSize.width}
+            width={containerSize.width}
             height={containerSize.height}
             enableNodeDrag={true}
             enableZoomInteraction={true}
-            enablePanInteraction={isTouchDevice} // 手機上啟用平移，桌面保持關閉
+            maxZoom={2.5}
+            minZoom={0.2}
+            enablePanInteraction={false}
             onBackgroundClick={() => {
               // 背景點擊時保存視圖狀態
               if (fgRef.current) {
@@ -804,24 +794,39 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
                 }
               }
             }}
+            onNodeDragStart={(node) => {
+              // 拖動開始：鎖定所有其他節點位置，確保只有被拖節點移動
+              // 不停止模擬（停止模擬會讓 node.x/y 無法更新，造成拖移時節點跳回舊位置）
+              if (fgRef.current) {
+                try {
+                  const sim = fgRef.current.d3Force('simulation')
+                  if (sim) {
+                    const d3Nodes = sim.nodes()
+                    if (d3Nodes && d3Nodes.length > 0) {
+                      d3Nodes.forEach((n: any) => {
+                        if (n.id !== node.id && typeof n.x === 'number' && typeof n.y === 'number') {
+                          n.fx = n.x
+                          n.fy = n.y
+                        }
+                      })
+                    }
+                  }
+                } catch (e) {
+                  console.warn('dragStart: 鎖定其他節點失敗:', e)
+                }
+              }
+            }}
             onNodeDrag={(node) => {
-              // 節點拖動時，固定該節點位置，防止力模擬移動它
-              // 直接更新，不使用 requestAnimationFrame，確保即時響應
-              const nodeX = typeof node.x === 'number' ? node.x : 0
-              const nodeY = typeof node.y === 'number' ? node.y : 0
-              
-              // 直接更新節點固定位置，這是最關鍵的操作，必須即時執行
-              node.fx = nodeX
-              node.fy = nodeY
-              
-              // 使用 requestAnimationFrame 節流更新 Map，減少頻繁操作
-              // 但保持節點位置更新即時，確保拖動流暢
+              // 只追蹤位置用於儲存，不覆寫 node.fx/fy
+              // react-force-graph 的 d3-drag 內部已正確處理 node.fx/fy（dragstarted 設為 node.x，dragged 加上 event.dx）
+              // 若我們在此覆寫 node.fx，等同於把 react-force-graph 正確更新的拖移位置覆蓋掉，造成跳位
               if (dragRafRef.current) {
                 cancelAnimationFrame(dragRafRef.current)
               }
               
               dragRafRef.current = requestAnimationFrame(() => {
-                // 只在動畫幀中更新位置追蹤，減少 Map 操作頻率
+                const nodeX = typeof node.fx === 'number' ? node.fx : (typeof node.x === 'number' ? node.x : 0)
+                const nodeY = typeof node.fy === 'number' ? node.fy : (typeof node.y === 'number' ? node.y : 0)
                 if (node.id) {
                   nodesPositionRef.current.set(node.id, {
                     x: nodeX,

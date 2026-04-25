@@ -51,6 +51,14 @@ export default function IdeaTrendChart({ communityId }: IdeaTrendChartProps) {
   const [trendData, setTrendData] = useState<IdeaTrendData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     const loadTrendData = async () => {
@@ -187,9 +195,14 @@ export default function IdeaTrendChart({ communityId }: IdeaTrendChartProps) {
 
   return (
     <div className="w-full">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">
-        社群想法貢獻數量變化圖表{trendData.dateRange?.isAllData ? '' : '（最近30天）'}
-      </h3>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4">
+        <h3 className="text-lg font-semibold text-gray-800 shrink-0">
+          社群想法貢獻數量變化圖表{trendData.dateRange?.isAllData ? '' : '（最近30天）'}
+        </h3>
+        <p className="text-sm text-gray-600">
+          顯示各成員想法節點數量的日期變化趨勢。
+        </p>
+      </div>
       
       <div style={{ width: '100%', height: Math.max(500, trendData.userStats.length * 60 + 200) }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -205,16 +218,17 @@ export default function IdeaTrendChart({ communityId }: IdeaTrendChartProps) {
               textAnchor="end"
               height={80}
               interval={(() => {
-                // 根據日期範圍長度動態調整X軸間隔
                 const days = trendData.dateRange?.days || chartData.length
+                // 手機版間隔放大 3 倍，避免日期擠在一起
+                const mobileMultiplier = isMobile ? 3 : 1
                 if (days <= 30) {
-                  return 2 // 30天以內：每2天顯示一個標籤
+                  return 2 * mobileMultiplier
                 } else if (days <= 90) {
-                  return Math.ceil(days / 18) // 31-90天：約每5天顯示一個標籤（18個標籤）
+                  return Math.ceil(days / 18) * mobileMultiplier
                 } else if (days <= 180) {
-                  return Math.ceil(days / 18) // 91-180天：約每10天顯示一個標籤（18個標籤）
+                  return Math.ceil(days / 18) * mobileMultiplier
                 } else {
-                  return Math.ceil(days / 12) // 181天以上：約每30天顯示一個標籤（12個標籤）
+                  return Math.ceil(days / 12) * mobileMultiplier
                 }
               })()}
             />

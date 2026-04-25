@@ -8,6 +8,11 @@ import JoinCommunityModal from './JoinCommunityModal'
 import CreateCommunityModal from './CreateCommunityModal'
 import CommunityCard from './CommunityCard'
 import CommunityDetail from './CommunityDetail'
+import CommunityOnboardingModal from './CommunityOnboardingModal'
+import {
+  hasSeenCommunityOnboarding,
+  markCommunityOnboardingSeen,
+} from '@/lib/communityOnboardingStorage'
 
 interface Community {
   id: string
@@ -23,7 +28,7 @@ interface CommunityOverviewProps {
 }
 
 /**
- * 社群總覽頁面組件
+ * 已加入社群列表頁面組件
  * 根據 Figma 設計 (nodeId: 1:2) 實現
  */
 export default function CommunityOverview({ onNavigateToLogin }: CommunityOverviewProps = {}) {
@@ -36,6 +41,7 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
+  const [showCommunityOnboarding, setShowCommunityOnboarding] = useState(false)
 
   // 從 localStorage 載入使用者ID
   useEffect(() => {
@@ -51,6 +57,14 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
       }
     }
   }, [])
+
+  // 登入後第一次進入「共備社群」列表頁：顯示引導（依帳號 localStorage）
+  useEffect(() => {
+    if (!userId) return
+    if (!hasSeenCommunityOnboarding(userId)) {
+      setShowCommunityOnboarding(true)
+    }
+  }, [userId])
 
   // 載入社群列表
   useEffect(() => {
@@ -324,6 +338,7 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
   if (selectedCommunity) {
     return (
       <CommunityDetail
+        key={selectedCommunity.id}
         communityName={selectedCommunity.name}
         communityId={selectedCommunity.id}
         onBack={handleBackToOverview}
@@ -331,7 +346,7 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
     )
   }
 
-  // 否則顯示社群總覽頁面
+  // 否則顯示已加入社群頁面
   return (
     <div className="w-full min-h-screen bg-[#F5F3FA]">
       {/* 畫布 */}
@@ -342,14 +357,19 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
         {/* 主要內容區 */}
         <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-8 md:px-16 pb-8 md:pb-16">
           {/* 標題與操作按鈕列 */}
-          <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-0 mb-6 md:mb-8 pt-6 md:pt-8">
-            {/* 標題 */}
-            <h1 className="text-xl md:text-[24px] font-bold text-[#6D28D9] leading-[32px] md:leading-[40px]">
-              社群總覽
-            </h1>
+          <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-4 mb-6 md:mb-8 pt-6 md:pt-8">
+            {/* 標題與說明（說明在標題右側，窄螢幕時可換行） */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 shrink-0 md:min-w-0 md:max-w-[min(100%,26rem)] lg:max-w-[min(100%,32rem)]">
+              <h1 className="text-xl md:text-[24px] font-bold text-[#6D28D9] leading-[32px] md:leading-[40px] shrink-0">
+                已加入社群
+              </h1>
+              <p className="text-sm text-gray-600 leading-relaxed sm:border-l sm:border-gray-200 sm:pl-4">
+                您可以建立備課社群，邀請其他老師們來共同備課
+              </p>
+            </div>
 
-            {/* 搜尋框 - 置中 */}
-            <div className="flex-1 flex justify-center px-0 md:px-8 order-3 md:order-2">
+            {/* 搜尋框 - 佔滿中間剩餘寬度並靠右，與右側按鈕相鄰 */}
+            <div className="flex-1 flex justify-end px-0 md:px-2 order-3 md:order-2 min-w-0">
               <SearchBar
                 placeholder="搜尋社群名稱"
                 value={searchQuery}
@@ -431,6 +451,14 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
               }
             : undefined
         }
+      />
+
+      <CommunityOnboardingModal
+        open={showCommunityOnboarding}
+        onDismiss={() => {
+          markCommunityOnboardingSeen(userId)
+          setShowCommunityOnboarding(false)
+        }}
       />
     </div>
   )

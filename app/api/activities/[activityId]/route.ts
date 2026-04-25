@@ -5,6 +5,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 
+function formatLastModified(raw: Date | string | null | undefined) {
+  if (!raw) return { date: '', time: '' }
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return { date: '', time: '' }
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return { date: `${year}/${month}/${day}`, time: `${hh}:${mm}` }
+}
+
 // GET: 讀取單一活動資訊
 export async function GET(
   request: NextRequest,
@@ -40,25 +52,37 @@ export async function GET(
       )
     }
 
+    const row = activities[0]
+    const { date: lastModifiedDate, time: lastModifiedTime } = formatLastModified(
+      row.lastModifiedAt
+    )
     const formattedActivity = {
-      id: activities[0].id,
-      communityId: activities[0].communityId,
-      name: activities[0].name,
-      introduction: activities[0].introduction || '',
-      isPublic: activities[0].isPublic === 1 || activities[0].isPublic === true,
-      password: activities[0].password || '',
-      createdDate: activities[0].createdDate
+      id: row.id,
+      communityId: row.communityId,
+      name: row.name,
+      introduction: row.introduction || '',
+      isPublic: row.isPublic === 1 || row.isPublic === true,
+      password: row.password || '',
+      createdDate: row.createdDate
         ? (() => {
-            const date = new Date(activities[0].createdDate)
+            const date = new Date(row.createdDate)
             const year = date.getFullYear()
             const month = String(date.getMonth() + 1).padStart(2, '0')
             const day = String(date.getDate()).padStart(2, '0')
             return `${year}/${month}/${day}`
           })()
         : '',
-      createdTime: activities[0].createdTime || '',
-      creatorId: activities[0].creatorId,
-      creatorName: activities[0].creatorName || '',
+      createdTime: row.createdTime || '',
+      creatorId: row.creatorId,
+      creatorName: row.creatorName || '',
+      lessonPlanTitle: row.lessonPlanTitle || '',
+      courseDomain: row.courseDomain || '',
+      designer: row.designer || '',
+      unitName: row.unitName || '',
+      implementationGrade: row.implementationGrade || '',
+      schoolLevel: row.schoolLevel || '',
+      lastModifiedDate,
+      lastModifiedTime,
     }
 
     return NextResponse.json(formattedActivity)
@@ -153,32 +177,54 @@ export async function PUT(
         a.introduction,
         a.is_public AS isPublic,
         a.password,
+        a.creator_id AS creatorId,
         a.created_at AS createdDate,
         DATE_FORMAT(a.created_at, '%H:%i') AS createdTime,
-        u.nickname AS creatorName
+        u.nickname AS creatorName,
+        lp.lesson_plan_title AS lessonPlanTitle,
+        lp.course_domain AS courseDomain,
+        lp.designer AS designer,
+        lp.unit_name AS unitName,
+        lp.implementation_grade AS implementationGrade,
+        lp.school_level AS schoolLevel,
+        COALESCE(lp.updated_at, a.created_at) AS lastModifiedAt
       FROM activities a
       INNER JOIN users u ON a.creator_id = u.id
+      LEFT JOIN lesson_plans lp ON lp.activity_id = a.id
       WHERE a.id = ?`,
       [activityId]
     ) as any[]
 
+    const ur = updatedActivities[0]
+    const { date: lastModifiedDate, time: lastModifiedTime } = formatLastModified(
+      ur.lastModifiedAt
+    )
     const formattedActivity = {
-      id: updatedActivities[0].id,
-      name: updatedActivities[0].name,
-      introduction: updatedActivities[0].introduction || '',
-      isPublic: updatedActivities[0].isPublic === 1 || updatedActivities[0].isPublic === true,
-      password: updatedActivities[0].password || '',
-      createdDate: updatedActivities[0].createdDate
+      id: ur.id,
+      name: ur.name,
+      introduction: ur.introduction || '',
+      isPublic: ur.isPublic === 1 || ur.isPublic === true,
+      password: ur.password || '',
+      createdDate: ur.createdDate
         ? (() => {
-            const date = new Date(updatedActivities[0].createdDate)
+            const date = new Date(ur.createdDate)
             const year = date.getFullYear()
             const month = String(date.getMonth() + 1).padStart(2, '0')
             const day = String(date.getDate()).padStart(2, '0')
             return `${year}/${month}/${day}`
           })()
         : '',
-      createdTime: updatedActivities[0].createdTime || '',
-      creatorName: updatedActivities[0].creatorName || '',
+      createdTime: ur.createdTime || '',
+      creatorId: ur.creatorId || '',
+      creatorName: ur.creatorName || '',
+      lessonPlanTitle: ur.lessonPlanTitle || '',
+      courseDomain: ur.courseDomain || '',
+      designer: ur.designer || '',
+      unitName: ur.unitName || '',
+      implementationGrade: ur.implementationGrade || '',
+      schoolLevel: ur.schoolLevel || '',
+      lastModifiedDate,
+      lastModifiedTime,
     }
 
     return NextResponse.json(formattedActivity)

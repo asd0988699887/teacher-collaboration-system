@@ -3,6 +3,11 @@
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import NotificationBell from './NotificationBell'
+import { clearCommunityOnboardingOnLogout } from '@/lib/communityOnboardingStorage'
+import { clearIdeaWallOnboardingOnLogout } from '@/lib/ideaWallOnboardingStorage'
+import { clearNetworkGraphOnboardingOnLogout } from '@/lib/networkGraphOnboardingStorage'
+import { clearKanbanOnboardingOnLogout } from '@/lib/kanbanOnboardingStorage'
+import { clearCoPrepOnboardingOnLogout } from '@/lib/coPrepOnboardingStorage'
 
 // 用戶顏色陣列（與其他組件保持一致）
 const USER_COLORS = [
@@ -97,6 +102,11 @@ export default function Header({ communityId }: HeaderProps = {}) {
   const handleLogout = () => {
     // 清除 localStorage 中的使用者資料
     if (typeof window !== 'undefined') {
+      clearCommunityOnboardingOnLogout()
+      clearIdeaWallOnboardingOnLogout()
+      clearNetworkGraphOnboardingOnLogout()
+      clearKanbanOnboardingOnLogout()
+      clearCoPrepOnboardingOnLogout()
       localStorage.removeItem('user')
       // 重新載入頁面以回到登入畫面
       window.location.href = '/'

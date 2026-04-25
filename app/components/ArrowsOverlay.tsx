@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 
 interface Idea {
   id: string
@@ -20,288 +20,188 @@ interface Arrow {
   x2: number
   y2: number
   id: string
-  type: 'extend' | 'converge' // 箭頭類型：延伸或收斂
+  type: 'extend' | 'converge'
 }
 
 /**
  * 箭頭覆蓋層組件
- * 在想法卡片上方繪製連接箭頭
+ *
+ * 使用 getBoundingClientRect() 取得真實 DOM 位置，
+ * 以 anchorRef（固定在 offset wrapper 左上角 0,0）為座標原點，
+ * 計算「卡片視窗座標 − 錨點視窗座標」即得 SVG 本地座標。
+ *
+ * 優點：
+ * - 不依賴 position.x/y 或 scale
+ * - 捲動時 anchor 與卡片視窗座標等量變化，差值不受捲動影響
+ * - 拖曳卡片時由 setInterval 每 50ms 重算，實時貼合
  */
 export default function ArrowsOverlay({ ideas }: ArrowsOverlayProps) {
   const [arrows, setArrows] = useState<Arrow[]>([])
-  const [svgSize, setSvgSize] = useState({ width: '100%', height: '100%', left: 0, top: 0 })
+  // 座標原點錨點：position absolute, left/top=0，始終與 SVG 共享同一個 containing block
+  const anchorRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const updateArrows = () => {
-      const container = document.getElementById('ideas-container')
-      
-      if (!container) {
-        console.log('找不到容器')
-        return
+  const updateArrows = useCallback(() => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+
+    const anchorRect = anchor.getBoundingClientRect()
+
+    /**
+     * 取得卡片在 SVG 本地座標系的錨點。
+     * x = cardViewport - anchorViewport（捲動時兩者等量抵銷）
+     */
+    const getPoint = (
+      cardId: string,
+      side: 'right' | 'left'
+    ): { x: number; y: number } | null => {
+      const el = document.getElementById(cardId)
+      if (!el) return null
+      const rect = el.getBoundingClientRect()
+      return {
+        x: (side === 'right' ? rect.right : rect.left) - anchorRect.left,
+        y: rect.top + rect.height / 2 - anchorRect.top,
       }
+    }
 
-      // 獲取縮放比例
-      let scale = 1
-      const zoomableContainer = container.querySelector('div[style*="transform"]') as HTMLElement
-      if (zoomableContainer) {
-        const transform = zoomableContainer.style.transform
-        const scaleMatch = transform.match(/scale\(([^)]+)\)/)
-        scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1
-      }
+    const newArrows: Arrow[] = []
 
-      // 獲取卡片元素的實際尺寸（用於計算箭頭連接點）
-      // 注意：由於箭頭也在縮放容器內，我們需要獲取縮放前的原始尺寸
-      const getCardDimensions = (elementId: string) => {
-        const element = document.getElementById(elementId)
-        if (element) {
-          const rect = element.getBoundingClientRect()
-          // 將縮放後的尺寸轉換回縮放前的尺寸
-          return { 
-            width: rect.width / scale, 
-            height: rect.height / scale 
-          }
-        }
-        // 預設尺寸（如果元素還沒渲染）- 這是縮放前的尺寸
-        return { width: 120, height: 80 }
-      }
-
-      // 計算所有卡片和箭頭的邊界，用於設定 SVG 尺寸
-      let minX = Infinity
-      let maxX = -Infinity
-      let minY = Infinity
-      let maxY = -Infinity
-
-      const newArrows: Arrow[] = []
-      const padding = 50 // 與 ZoomableIdeasContainer 保持一致
-
-      ideas.forEach((idea, childIndex) => {
-        // 處理延伸箭頭（黑色）
-        if (idea.parentId) {
-          const parentIndex = ideas.findIndex((i) => i.id === idea.parentId)
-          if (parentIndex >= 0) {
-            const parentIdea = ideas[parentIndex]
-            const childIdea = idea
-
-            // 使用 position 屬性計算箭頭位置（不受縮放影響）
-            if (parentIdea.position && childIdea.position) {
-              const parentDims = getCardDimensions(`idea-card-${parentIndex}`)
-              const childDims = getCardDimensions(`idea-card-${childIndex}`)
-
-              // 箭頭起點：父卡片的右側中心
-              const x1 = parentIdea.position.x + parentDims.width
-              const y1 = parentIdea.position.y + parentDims.height / 2
-              
-              // 箭頭終點：子卡片的左側中心
-              const x2 = childIdea.position.x
-              const y2 = childIdea.position.y + childDims.height / 2
-
-              // 更新邊界
-              minX = Math.min(minX, x1, x2)
-              maxX = Math.max(maxX, x1, x2)
-              minY = Math.min(minY, y1, y2)
-              maxY = Math.max(maxY, y1, y2)
-
-              newArrows.push({
-                x1,
-                y1,
-                x2,
-                y2,
-                id: `arrow-extend-${idea.id}`,
-                type: 'extend',
-              })
-            }
-          }
-        }
-
-        // 處理收斂箭頭（紫色）
-        if (idea.isConvergence && idea.convergedIdeaIds && idea.convergedIdeaIds.length > 0) {
-          const convergenceIdea = idea
-          
-          if (convergenceIdea.position) {
-            const convergenceDims = getCardDimensions(`idea-card-${childIndex}`)
-            
-            idea.convergedIdeaIds.forEach((convergedId) => {
-              const convergedIndex = ideas.findIndex((i) => i.id === convergedId)
-              if (convergedIndex >= 0) {
-                const convergedIdea = ideas[convergedIndex]
-                
-                if (convergedIdea.position) {
-                  const convergedDims = getCardDimensions(`idea-card-${convergedIndex}`)
-
-                  // 從被收斂節點指向收斂結果節點
-                  // 箭頭起點：被收斂卡片的右側中心
-                  const x1 = convergedIdea.position.x + convergedDims.width
-                  const y1 = convergedIdea.position.y + convergedDims.height / 2
-                  
-                  // 箭頭終點：收斂結果卡片的左側中心
-                  const x2 = convergenceIdea.position.x
-                  const y2 = convergenceIdea.position.y + convergenceDims.height / 2
-
-                  // 更新邊界
-                  minX = Math.min(minX, x1, x2)
-                  maxX = Math.max(maxX, x1, x2)
-                  minY = Math.min(minY, y1, y2)
-                  maxY = Math.max(maxY, y1, y2)
-
-                  newArrows.push({
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    id: `arrow-converge-${convergedId}-to-${idea.id}`,
-                    type: 'converge',
-                  })
-                }
-              }
+    ideas.forEach((idea, childIndex) => {
+      // 延伸箭頭（黑色）：parent 右緣中點 → child 左緣中點
+      if (idea.parentId) {
+        const parentIndex = ideas.findIndex((i) => i.id === idea.parentId)
+        if (parentIndex >= 0) {
+          const from = getPoint(`idea-card-${parentIndex}`, 'right')
+          const to   = getPoint(`idea-card-${childIndex}`,  'left')
+          if (from && to) {
+            newArrows.push({
+              x1: from.x, y1: from.y,
+              x2: to.x,   y2: to.y,
+              id: `arrow-extend-${idea.id}`,
+              type: 'extend',
             })
           }
         }
-
-        // 也計算卡片本身的邊界
-        if (idea.position) {
-          const cardDims = getCardDimensions(`idea-card-${childIndex}`)
-          minX = Math.min(minX, idea.position.x)
-          maxX = Math.max(maxX, idea.position.x + cardDims.width)
-          minY = Math.min(minY, idea.position.y)
-          maxY = Math.max(maxY, idea.position.y + cardDims.height)
-        }
-      })
-
-      // 計算 SVG 的實際尺寸和位置（包含所有卡片和箭頭）
-      const actualMinX = minX !== Infinity ? minX : 0
-      const actualMaxX = maxX !== -Infinity ? maxX : 0
-      const actualMinY = minY !== Infinity ? minY : 0
-      const actualMaxY = maxY !== -Infinity ? maxY : 0
-      
-      // 計算 SVG 需要的尺寸
-      const svgWidth = actualMaxX !== 0 || actualMinX !== 0
-        ? actualMaxX - actualMinX + padding * 2
-        : '100%'
-      const svgHeight = actualMaxY !== 0 || actualMinY !== 0
-        ? actualMaxY - actualMinY + padding * 2
-        : '100%'
-      
-      // 計算 SVG 的起始位置（如果 minX 或 minY 是負數，需要調整）
-      const svgLeft = actualMinX < 0 ? actualMinX - padding : 0
-      const svgTop = actualMinY < 0 ? actualMinY - padding : 0
-      
-      // 調整箭頭座標，使其相對於 SVG 的起始位置
-      const adjustedArrows = newArrows.map(arrow => ({
-        ...arrow,
-        x1: arrow.x1 - svgLeft,
-        y1: arrow.y1 - svgTop,
-        x2: arrow.x2 - svgLeft,
-        y2: arrow.y2 - svgTop,
-      }))
-      
-      // 如果計算出有效尺寸，使用像素值；否則使用百分比
-      if (typeof svgWidth === 'number' && typeof svgHeight === 'number') {
-        setSvgSize({
-          width: `${svgWidth}px`,
-          height: `${svgHeight}px`,
-          left: svgLeft,
-          top: svgTop,
-        })
-      } else {
-        setSvgSize({
-          width: '100%',
-          height: '100%',
-          left: 0,
-          top: 0,
-        })
       }
 
-      setArrows(adjustedArrows)
-    }
-
-    // 延遲執行，確保 DOM 已完全渲染
-    const timeoutId = setTimeout(updateArrows, 300)
-    
-    // 監聽拖拉事件，實時更新箭頭（增加更新頻率）
-    const intervalId = setInterval(updateArrows, 50)
-    
-    window.addEventListener('resize', updateArrows)
-    
-    // 監聽卡片拖動事件
-    const handleCardDrag = () => {
-      updateArrows()
-    }
-    
-    // 監聽所有想法卡片的拖動
-    const cards = document.querySelectorAll('[id^="idea-card-"]')
-    cards.forEach((card) => {
-      card.addEventListener('mousemove', handleCardDrag)
-      card.addEventListener('touchmove', handleCardDrag)
+      // 收斂箭頭（紫色）：被收斂節點右緣中點 → 收斂結果節點左緣中點
+      if (idea.isConvergence && idea.convergedIdeaIds && idea.convergedIdeaIds.length > 0) {
+        idea.convergedIdeaIds.forEach((convergedId) => {
+          const convergedIndex = ideas.findIndex((i) => i.id === convergedId)
+          if (convergedIndex >= 0) {
+            const from = getPoint(`idea-card-${convergedIndex}`, 'right')
+            const to   = getPoint(`idea-card-${childIndex}`,     'left')
+            if (from && to) {
+              newArrows.push({
+                x1: from.x, y1: from.y,
+                x2: to.x,   y2: to.y,
+                id: `arrow-converge-${convergedId}-to-${idea.id}`,
+                type: 'converge',
+              })
+            }
+          }
+        })
+      }
     })
-    
-    return () => {
-      clearTimeout(timeoutId)
-      clearInterval(intervalId)
-      window.removeEventListener('resize', updateArrows)
-      cards.forEach((card) => {
-        card.removeEventListener('mousemove', handleCardDrag)
-        card.removeEventListener('touchmove', handleCardDrag)
-      })
-    }
+
+    setArrows(newArrows)
   }, [ideas])
 
-  if (arrows.length === 0) {
-    // 沒有箭頭時不顯示任何內容，也不輸出日誌
-    return null
-  }
+  // 初始化 + ideas 變更 → 重算箭頭；每 50ms interval 追蹤卡片拖曳
+  useEffect(() => {
+    const timer = setTimeout(updateArrows, 300)
+    const interval = setInterval(updateArrows, 50)
+    window.addEventListener('resize', updateArrows)
+
+    return () => {
+      clearTimeout(timer)
+      clearInterval(interval)
+      window.removeEventListener('resize', updateArrows)
+    }
+  }, [updateArrows])
+
+  // 監聽 ideas-container 捲動（anchor 差值本身不受捲動影響，但保留以防邊緣情況）
+  useEffect(() => {
+    const container = document.getElementById('ideas-container')
+    if (!container) return
+    const onScroll = () => updateArrows()
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [updateArrows])
 
   return (
-    <svg
-      id="arrows-overlay-svg"
-      className="absolute pointer-events-none"
-      style={{
-        left: `${svgSize.left}px`,
-        top: `${svgSize.top}px`,
-        zIndex: 1, // 低於靜態卡片（2），箭頭在卡片下方，不會遮住內容
-        width: svgSize.width,
-        height: svgSize.height,
-        minHeight: '600px',
-        // 確保 SVG 覆蓋整個內容區域
-        minWidth: '100%',
-      }}
-    >
-      <defs>
-        {/* 黑色箭頭（延伸關係） */}
-        <marker
-          id="arrowhead-extend"
-          markerWidth="6"
-          markerHeight="6"
-          refX="6"
-          refY="3"
-          orient="auto"
+    <>
+      {/*
+       * 座標錨點：position absolute, left:0, top:0
+       * 始終渲染，提供 getBoundingClientRect 的基準原點。
+       * 與 SVG 同屬一個 containing block（offset wrapper），
+       * 所以 card.getBoundingClientRect - anchor.getBoundingClientRect = SVG 本地座標。
+       */}
+      <div
+        ref={anchorRef}
+        aria-hidden="true"
+        style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0, pointerEvents: 'none' }}
+      />
+
+      {arrows.length > 0 && (
+        <svg
+          id="arrows-overlay-svg"
+          className="absolute pointer-events-none"
+          style={{
+            left: 0,
+            top: 0,
+            width: '100%',
+            height: '100%',
+            minWidth: '100%',
+            minHeight: '600px',
+            overflow: 'visible', // 箭頭可超出 SVG 邊界，不被裁切
+            zIndex: 1,
+          }}
         >
-          <polygon points="0 0, 6 3, 0 6" fill="black" />
-        </marker>
-        {/* 紫色箭頭（收斂關係） */}
-        <marker
-          id="arrowhead-converge"
-          markerWidth="6"
-          markerHeight="6"
-          refX="6"
-          refY="3"
-          orient="auto"
-        >
-          <polygon points="0 0, 6 3, 0 6" fill="#9333ea" />
-        </marker>
-      </defs>
-      {arrows.map((arrow) => (
-        <line
-          key={arrow.id}
-          x1={arrow.x1}
-          y1={arrow.y1}
-          x2={arrow.x2}
-          y2={arrow.y2}
-          stroke={arrow.type === 'converge' ? '#9333ea' : 'black'}
-          strokeWidth="2"
-          markerEnd={arrow.type === 'converge' ? 'url(#arrowhead-converge)' : 'url(#arrowhead-extend)'}
-        />
-      ))}
-    </svg>
+          <defs>
+            {/* 黑色箭頭（延伸關係） */}
+            <marker
+              id="arrowhead-extend"
+              markerWidth="6"
+              markerHeight="6"
+              refX="6"
+              refY="3"
+              orient="auto"
+            >
+              <polygon points="0 0, 6 3, 0 6" fill="black" />
+            </marker>
+            {/* 紫色箭頭（收斂關係） */}
+            <marker
+              id="arrowhead-converge"
+              markerUnits="userSpaceOnUse"
+              markerWidth="12"
+              markerHeight="12"
+              refX="10"
+              refY="6"
+              orient="auto"
+              overflow="visible"
+            >
+              <path d="M 0 2 L 0 10 L 10 6 Z" fill="#7C3AED" />
+            </marker>
+          </defs>
+
+          {arrows.map((arrow) => (
+            <line
+              key={arrow.id}
+              x1={arrow.x1}
+              y1={arrow.y1}
+              x2={arrow.x2}
+              y2={arrow.y2}
+              stroke={arrow.type === 'converge' ? '#7C3AED' : 'black'}
+              strokeWidth={arrow.type === 'converge' ? '2.5' : '2'}
+              markerEnd={
+                arrow.type === 'converge'
+                  ? 'url(#arrowhead-converge)'
+                  : 'url(#arrowhead-extend)'
+              }
+            />
+          ))}
+        </svg>
+      )}
+    </>
   )
 }
-

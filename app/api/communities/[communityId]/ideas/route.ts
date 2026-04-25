@@ -32,10 +32,14 @@ export async function GET(
         i.converged_idea_ids AS convergedIdeaIds,
         i.created_at AS createdDate,
         DATE_FORMAT(i.created_at, '%H:%i') AS createdTime,
+        i.creator_id AS creatorId,
+        i.last_edited_at AS lastEditedAt,
         u.nickname AS creatorName,
-        u.account AS creatorAccount
+        u.account AS creatorAccount,
+        eu.nickname AS lastEditedByName
       FROM ideas i
       INNER JOIN users u ON i.creator_id = u.id
+      LEFT JOIN users eu ON i.last_edited_by = eu.id
       WHERE i.community_id = ?
       ORDER BY i.created_at ASC`,
       [communityId]
@@ -89,8 +93,21 @@ export async function GET(
             })()
           : '',
         createdTime: idea.createdTime || '',
+        creatorId: idea.creatorId || '',
         creatorName: idea.creatorName || '',
         creatorAccount: idea.creatorAccount || '',
+        lastEditedByName: idea.lastEditedByName || undefined,
+        lastEditedAt: idea.lastEditedAt
+          ? (() => {
+              const dt = new Date(idea.lastEditedAt)
+              const y = dt.getFullYear()
+              const m = String(dt.getMonth() + 1).padStart(2, '0')
+              const d = String(dt.getDate()).padStart(2, '0')
+              const hh = String(dt.getHours()).padStart(2, '0')
+              const mm = String(dt.getMinutes()).padStart(2, '0')
+              return `${y}/${m}/${d} ${hh}:${mm}`
+            })()
+          : undefined,
       }
     })
 
@@ -213,6 +230,7 @@ export async function POST(
         i.converged_idea_ids AS convergedIdeaIds,
         i.created_at AS createdDate,
         DATE_FORMAT(i.created_at, '%H:%i') AS createdTime,
+        i.creator_id AS creatorId,
         u.nickname AS creatorName,
         u.account AS creatorAccount
       FROM ideas i
@@ -271,6 +289,7 @@ export async function POST(
           })()
         : '',
       createdTime: newIdeas[0].createdTime || '',
+      creatorId: newIdeas[0].creatorId || '',
       creatorName: newIdeas[0].creatorName || '',
       creatorAccount: newIdeas[0].creatorAccount || '',
     }

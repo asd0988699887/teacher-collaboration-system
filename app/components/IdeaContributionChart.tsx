@@ -112,9 +112,14 @@ export default function IdeaContributionChart({ communityId }: IdeaContributionC
 
   return (
     <div className="w-full">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">
-        社群想法貢獻數量圖表
-      </h3>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4">
+        <h3 className="text-lg font-semibold text-gray-800 shrink-0">
+          社群想法貢獻數量圖表
+        </h3>
+        <p className="text-sm text-gray-600">
+          顯示各成員在想法牆中的新增與回覆次數，用來了解成員參與情形。
+        </p>
+      </div>
       
       <div style={{ width: '100%', height: Math.max(400, stats.length * 80), marginLeft: '-1.5vw', paddingLeft: '1.5vw' }}>
         <ResponsiveContainer width="100%" height="100%">

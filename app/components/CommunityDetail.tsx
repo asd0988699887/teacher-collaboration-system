@@ -21,8 +21,6 @@ import Header from './Header'
 import NotificationBell from './NotificationBell'
 import ResourceCard from './ResourceCard'
 import AddActivityModal from './AddActivityModal'
-import ActivityCard from './ActivityCard'
-import PasswordModal from './PasswordModal'
 import CourseObjectives from './CourseObjectives'
 import AddTaskModal from './AddTaskModal'
 import AddIdeaModal from './AddIdeaModal'
@@ -38,6 +36,26 @@ import VersionControlModal from './VersionControlModal'
 import IdeaContributionChart from './IdeaContributionChart'
 import IdeaTrendChart from './IdeaTrendChart'
 import NetworkGraph from './NetworkGraph'
+import { clearCommunityOnboardingOnLogout } from '@/lib/communityOnboardingStorage'
+import {
+  hasSeenIdeaWallOnboarding,
+  markIdeaWallOnboardingSeen,
+  clearIdeaWallOnboardingOnLogout,
+} from '@/lib/ideaWallOnboardingStorage'
+import {
+  hasSeenNetworkGraphOnboarding,
+  markNetworkGraphOnboardingSeen,
+  clearNetworkGraphOnboardingOnLogout,
+} from '@/lib/networkGraphOnboardingStorage'
+import {
+  hasSeenKanbanOnboarding,
+  markKanbanOnboardingSeen,
+  clearKanbanOnboardingOnLogout,
+} from '@/lib/kanbanOnboardingStorage'
+import { clearCoPrepOnboardingOnLogout } from '@/lib/coPrepOnboardingStorage'
+import IdeaWallOnboardingModal from './IdeaWallOnboardingModal'
+import KanbanOnboardingModal from './KanbanOnboardingModal'
+import { activityDisplayLabel } from '@/lib/activityDisplay'
 
 interface CommunityDetailProps {
   communityName: string
@@ -45,11 +63,13 @@ interface CommunityDetailProps {
   onBack: () => void
 }
 
-type TabType = 'resources' | 'activities' | 'ideas' | 'teamwork' | 'history' | 'management'
+type TabType = 'resources' | 'activities' | 'ideas' | 'teamwork' | 'history' | 'management' | 'links'
 
 interface Resource {
   id: string
   fileName: string
+  filePath?: string
+  fileType?: string
   uploadDate: string
   uploadTime: string
   uploaderName?: string
@@ -66,6 +86,16 @@ interface Activity {
   password: string
   creatorId?: string
   creatorName?: string
+  lessonPlanTitle?: string
+  courseDomain?: string
+  designer?: string
+  unitName?: string
+  implementationGrade?: string
+  schoolLevel?: string
+  lastModifiedDate?: string
+  lastModifiedTime?: string
+  /** 是否已按「結束共備」標記完成 */
+  coPrepCompleted?: boolean
 }
 
 interface KanbanTask {
@@ -93,6 +123,8 @@ interface Idea {
   createdDate: string
   createdTime: string
   creatorName?: string
+  /** 建立者使用者 ID（與 API ideas 列表 creatorId 一致） */
+  creatorId?: string
   creatorAccount?: string // 建立者帳號（用於權限檢查）
   creatorAvatar?: string
   parentId?: string // 延伸關係：指向父節點的 ID
@@ -100,6 +132,8 @@ interface Idea {
   rotation?: number // 卡片旋轉角度
   isConvergence?: boolean // 是否為收斂結果節點
   convergedIdeaIds?: string[] // 被收斂的想法節點 IDs
+  lastEditedByName?: string // 最後編輯者姓名
+  lastEditedAt?: string // 最後編輯時間（已格式化）
 }
 
 /**
@@ -107,7 +141,7 @@ interface Idea {
  * 對應 Figma 設計 (nodeId: 0:1) - 社群資源(空)
  */
 export default function CommunityDetail({ communityName, communityId: propCommunityId, onBack }: CommunityDetailProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('resources')
+  const [activeTab, setActiveTab] = useState<TabType>('activities')
   // 自定義水平卷軸狀態
   const [scrollInfo, setScrollInfo] = useState<{
     scrollLeft: number
@@ -125,21 +159,20 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   const prevHasHorizontalScrollRef = useRef(false) // 用於穩定 hasHorizontalScroll 狀態
   const [isMobile, setIsMobile] = useState(false) // 檢測是否為手機版
   const savedScrollLeftRef = useRef<number>(0) // 保存滾動位置
-  const prevActiveTabRef = useRef<TabType>('resources') // 追蹤上一個 tab
+  const prevActiveTabRef = useRef<TabType>('activities') // 追蹤上一個 tab
   const [resources, setResources] = useState<Resource[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [communityId, setCommunityId] = useState<string | null>(propCommunityId || null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [showIdeaWallOnboarding, setShowIdeaWallOnboarding] = useState(false)
+  const [showNetworkGraphOnboardingModal, setShowNetworkGraphOnboardingModal] = useState(false)
+  const [showKanbanOnboarding, setShowKanbanOnboarding] = useState(false)
   const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
   const [isVersionControlModalOpen, setIsVersionControlModalOpen] = useState(false)
   const [versionControlActivityId, setVersionControlActivityId] = useState<string | null>(null)
-  const [passwordVerifyingActivity, setPasswordVerifyingActivity] = useState<Activity | null>(null)
-  const [passwordAction, setPasswordAction] = useState<'edit' | 'view' | 'menu'>('view')
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null)
-  const [passwordVerifiedActivityIds, setPasswordVerifiedActivityIds] = useState<Set<string>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // 使用者頭像下拉選單狀態
@@ -173,7 +206,6 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   const [extendingFromIdeaId, setExtendingFromIdeaId] = useState<string | null>(null)
   const [isConvergenceModalOpen, setIsConvergenceModalOpen] = useState(false)
   const kanbanInitializedRef = useRef<Set<string>>(new Set()) // 追蹤每個社群是否已初始化
-  const [openMemberMenuId, setOpenMemberMenuId] = useState<string | null>(null) // 開啟的成員選單ID
   const [activeHistoryChart, setActiveHistoryChart] = useState<'contribution' | 'network' | 'trend'>('contribution') // 活動歷程圖表類型
   const positionUpdateTimeoutRef = useRef<Map<string, NodeJS.Timeout>>(new Map()) // 位置更新節流
   const lastUpdatePositionRef = useRef<Map<string, { x: number; y: number }>>(new Map()) // 記錄最後更新位置
@@ -242,6 +274,31 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       loadCommunityMembers()
     }
   }, [communityId])
+
+  // 共備活動：自動進入「進行中」教案編輯；已結束共備者僅在歷史活動瀏覽，不當作預設編輯對象
+  useEffect(() => {
+    if (activeTab !== 'activities' || !communityId) return
+    if (activities.length === 0) {
+      setViewingActivity(null)
+      return
+    }
+    setViewingActivity((prev) => {
+      if (prev) {
+        const updated = activities.find((a) => a.id === prev.id)
+        if (updated) {
+          if (updated.coPrepCompleted) {
+            const next = activities.find((a) => !a.coPrepCompleted)
+            // 無進行中活動時仍保留目前活動，才能用「預覽教案／歷史活動」瀏覽已結束教案
+            return next ?? updated
+          }
+          return updated
+        }
+      }
+      const inProgress = activities.find((a) => !a.coPrepCompleted)
+      // 全部已結束時仍開啟第一筆活動，避免共備活動頁只剩空白提示、看不到教案分頁
+      return inProgress ?? activities[0] ?? null
+    })
+  }, [activeTab, communityId, activities])
   
   // 追蹤 activeTab 變化，更新 prevActiveTabRef
   useEffect(() => {
@@ -249,6 +306,42 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       prevActiveTabRef.current = activeTab
     }
   }, [activeTab])
+
+  // 想法牆：首次進入時顯示操作引導（ideaWall_onboarding_seen_${userId}）
+  useEffect(() => {
+    if (activeTab !== 'ideas' || !userId) {
+      setShowIdeaWallOnboarding(false)
+      return
+    }
+    if (!hasSeenIdeaWallOnboarding(userId)) {
+      setShowIdeaWallOnboarding(true)
+    }
+  }, [activeTab, userId])
+
+  // 網絡圖：第一次切到該圖表時顯示單頁操作提示（networkGraph_onboarding_seen_${userId}）
+  useEffect(() => {
+    if (activeTab !== 'history' || activeHistoryChart !== 'network') {
+      setShowNetworkGraphOnboardingModal(false)
+      return
+    }
+    if (!userId) return
+    if (!hasSeenNetworkGraphOnboarding(userId)) {
+      setShowNetworkGraphOnboardingModal(true)
+    } else {
+      setShowNetworkGraphOnboardingModal(false)
+    }
+  }, [activeTab, activeHistoryChart, userId])
+
+  // 團隊分工：首次進入時顯示看板操作引導（kanban_onboarding_seen_${userId}）
+  useEffect(() => {
+    if (activeTab !== 'teamwork' || !userId) {
+      setShowKanbanOnboarding(false)
+      return
+    }
+    if (!hasSeenKanbanOnboarding(userId)) {
+      setShowKanbanOnboarding(true)
+    }
+  }, [activeTab, userId])
 
   // 持續監聽滾動事件，即時保存滾動位置
   useEffect(() => {
@@ -460,31 +553,6 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }, [isDropdownOpen])
 
-  // 點擊外部關閉成員選單
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (openMemberMenuId) {
-        const target = event.target as HTMLElement
-        // 如果點擊的不是成員選單相關的元素，則關閉選單
-        if (!target.closest('.member-menu-container')) {
-          setOpenMemberMenuId(null)
-        }
-      }
-    }
-
-    if (openMemberMenuId) {
-      // 延遲添加監聽器，避免立即觸發
-      const timeoutId = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside)
-      }, 0)
-
-      return () => {
-        clearTimeout(timeoutId)
-        document.removeEventListener('mousedown', handleClickOutside)
-      }
-    }
-  }, [openMemberMenuId])
-
   const handleAvatarClick = () => {
     setIsDropdownOpen(!isDropdownOpen)
   }
@@ -492,6 +560,11 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   const handleLogout = () => {
     // 清除 localStorage 中的使用者資料
     if (typeof window !== 'undefined') {
+      clearCommunityOnboardingOnLogout()
+      clearIdeaWallOnboardingOnLogout()
+      clearNetworkGraphOnboardingOnLogout()
+      clearKanbanOnboardingOnLogout()
+      clearCoPrepOnboardingOnLogout()
       localStorage.removeItem('user')
       // 重新載入頁面以回到登入畫面
       window.location.href = '/'
@@ -515,12 +588,13 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   }>>([])
 
   const tabs = [
-    { id: 'resources' as TabType, label: '資源', icon: '📁' },
     { id: 'activities' as TabType, label: '共備活動', icon: '📝' },
     { id: 'ideas' as TabType, label: '想法牆', icon: '💡' },
+    { id: 'resources' as TabType, label: '資源', icon: '📁' },
     { id: 'teamwork' as TabType, label: '團隊分工', icon: '🎯' },
     { id: 'history' as TabType, label: '活動歷程', icon: '📄' },
     { id: 'management' as TabType, label: '社群管理', icon: '👥' },
+    { id: 'links' as TabType, label: '好站連結', icon: '🔗' },
   ]
 
   const handleAddFileClick = () => {
@@ -753,61 +827,6 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }
 
-  const handleEditActivity = (activityId: string) => {
-    const activity = activities.find((a) => a.id === activityId)
-    if (activity) {
-      setEditingActivity(activity) // 設置要編輯的活動
-      setIsAddActivityModalOpen(true) // 打開模態框
-    }
-  }
-
-  const handleRequestPassword = (activityId: string, action: 'edit' | 'view' | 'menu') => {
-    const activity = activities.find((a) => a.id === activityId)
-    if (activity) {
-      setPasswordVerifyingActivity(activity)
-      setPasswordAction(action)
-      setIsPasswordModalOpen(true)
-    }
-  }
-
-  const handlePasswordVerify = (password: string): boolean => {
-    if (!passwordVerifyingActivity) return false
-    const isValid = password === passwordVerifyingActivity.password
-    if (isValid) {
-      // 密碼正確，將活動 ID 加入已驗證集合（保持驗證狀態）
-      setPasswordVerifiedActivityIds((prev) => {
-        const newSet = new Set(prev)
-        newSet.add(passwordVerifyingActivity.id)
-        return newSet
-      })
-      
-      // 根據 action 執行相應操作
-      if (passwordAction === 'menu') {
-        // 如果是選單，標記為已驗證，選單會在 ActivityCard 中自動打開
-        // 驗證狀態已經在上面設置了
-      } else if (passwordAction === 'edit') {
-        // 如果是編輯，打開編輯模態框
-        setEditingActivity(passwordVerifyingActivity)
-        setIsAddActivityModalOpen(true)
-      } else {
-        // 如果是查看，進入活動畫面
-        setViewingActivity(passwordVerifyingActivity)
-      }
-      setIsPasswordModalOpen(false)
-      setPasswordVerifyingActivity(null)
-    }
-    return isValid
-  }
-
-  const handleClosePasswordModal = () => {
-    setIsPasswordModalOpen(false)
-    setPasswordVerifyingActivity(null)
-  }
-
-  const handleBackFromActivity = () => {
-    setViewingActivity(null)
-  }
-
   // 處理 tab 切換的通用函數
   const handleTabChange = (tabId: TabType) => {
     // 如果離開想法牆，重置滾動位置
@@ -830,23 +849,9 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   }
 
   const handleSidebarClickFromActivity = (tabId: string) => {
-    setViewingActivity(null)
+    // 勿在此清空 viewingActivity：從教案頁切到想法牆等再切回「共備活動」時，
+    // 需保留目前選中的活動，否則可能短暫看不到教案編輯／歷史活動入口。
     handleTabChange(tabId as TabType)
-  }
-
-  const handleCardClick = (activityId: string) => {
-    const activity = activities.find((a) => a.id === activityId)
-    if (activity) {
-      // 如果沒有密碼，直接進入活動畫面
-      // 如果有密碼但已經驗證過，也進入活動畫面
-      const hasPassword = activity.password && activity.password.trim()
-      const isVerified = passwordVerifiedActivityIds.has(activityId)
-      
-      if (!hasPassword || isVerified) {
-        setViewingActivity(activity)
-      }
-      // 如果有密碼且未驗證，會由 ActivityCard 觸發密碼驗證
-    }
   }
 
   const handleManageVersion = (activityId: string) => {
@@ -948,6 +953,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
       // 重新載入活動列表
       await loadActivities()
+      setViewingActivity((prev) => (prev?.id === activityId ? null : prev))
       alert('活動已刪除')
     } catch (error: any) {
       console.error('刪除活動錯誤:', error)
@@ -2023,34 +2029,111 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     return USER_COLORS[index]
   }
 
-  // 如果正在查看活動，顯示課程目標頁面
-  if (viewingActivity) {
-    // 過濾出該活動的收斂結果節點並轉換格式
-    const convergenceResults = ideas
-      .filter(idea => idea.isConvergence && idea.activityId === viewingActivity.id)
-      .map(idea => ({
-        id: idea.id,
-        stage: idea.stage,
-        title: idea.title,
-        content: idea.content,
-        createdDate: idea.createdDate,
-        createdTime: idea.createdTime,
-      }))
+  // 共備活動：一進社群就要看到教案共編畫面（含預覽教案、歷史活動）；尚無活動時顯示空白編輯器
+  const showCoPrepLessonEditor = activeTab === 'activities' && !!communityId
 
-    return (
-      <CourseObjectives
-        activityName={viewingActivity.name}
-        activityId={viewingActivity.id}
-        onBack={handleBackFromActivity}
-        onSidebarClick={handleSidebarClickFromActivity}
-        convergenceResults={convergenceResults}
-        onVersionCreated={(activityId, versionData) => {
-          // 版本已創建，可以觸發重新載入版本列表
-          console.log('版本已創建:', activityId, versionData)
-        }}
-      />
-    )
-  }
+  // 全域 header（社群名稱返回鈕 + 通知 + 帳號），在主 layout 與共備活動頁共用同一份
+  const globalHeader = (
+    <div className="bg-[#FAFAFA] px-4 sm:px-6 md:px-8 py-3 flex items-center justify-between flex-shrink-0">
+      {/* 左側：社群圖標和名稱（可點擊返回） */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+        title="返回已加入社群"
+      >
+        <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="text-white"
+          >
+            <path
+              d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle
+              cx="9"
+              cy="7"
+              r="4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-gray-800">{communityName}</h2>
+      </button>
+
+      {/* 右側：通知和用戶頭像 */}
+      <div className="flex items-center gap-6">
+        {userId && (
+          <NotificationBell
+            userId={userId}
+            communityId={communityId || undefined}
+          />
+        )}
+        <div className="relative">
+          <div
+            ref={avatarRef}
+            onClick={handleAvatarClick}
+            className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: userId ? getUserColor(userId, userNickname) : 'rgba(138,99,210,0.9)' }}
+          >
+            <span className="text-white font-semibold text-sm">
+              {userNickname.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          {isDropdownOpen && (
+            <div
+              ref={dropdownRef}
+              className="absolute right-0 top-12 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
+            >
+              <div className="px-4 py-3">
+                <div className="text-gray-900 text-base mb-1">{userNickname}</div>
+                <div className="text-sm text-gray-600">{userAccount}</div>
+              </div>
+              <div className="border-t border-gray-200 my-1"></div>
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                登出
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
+  const convergenceResults = showCoPrepLessonEditor && viewingActivity
+    ? ideas
+        .filter((idea) => idea.isConvergence && idea.activityId === viewingActivity.id)
+        .map((idea) => ({
+          id: idea.id,
+          stage: idea.stage,
+          title: idea.title,
+          content: idea.content,
+          createdDate: idea.createdDate,
+          createdTime: idea.createdTime,
+        }))
+    : []
+
+  const headerTitle = viewingActivity ? activityDisplayLabel(viewingActivity) : '共備教案'
 
   return (
     <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
@@ -2166,46 +2249,33 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                 </>
               )}
               {tab.id === 'teamwork' && (
-                // 團隊分工圖標 - 剪貼板任務清單
+                // 團隊分工圖標 — 與原「社群管理」相同（雙人）
                 <>
-                  {/* 剪貼板主體 */}
                   <path
-                    d="M9 5H7C5.89543 5 5 5.89543 5 7V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V7C19 5.89543 18.1046 5 17 5H15"
+                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* 剪貼板頂部夾子 */}
-                  <path
-                    d="M9 3C9 2.44772 9.44772 2 10 2H14C14.5523 2 15 2.44772 15 3V5H9V3Z"
+                  <circle
+                    cx="9"
+                    cy="7"
+                    r="4"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* 清單項目線條 */}
                   <path
-                    d="M9 9H15"
+                    d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                   <path
-                    d="M9 12H15"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M9 15H13"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  {/* 勾選標記 */}
-                  <path
-                    d="M9 17L11 19L15 15"
+                    d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
@@ -2254,33 +2324,70 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                 </>
               )}
               {tab.id === 'management' && (
-                // 社群管理圖標
+                // 社群管理圖標 — 三人（左、中、右）
                 <>
+                  <circle
+                    cx="6.5"
+                    cy="8.5"
+                    r="2.25"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                   <path
-                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                    d="M2.5 21v-1.25a3.75 3.75 0 0 1 3.75-3.75"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <circle
-                    cx="9"
+                    cx="12"
                     cy="7"
-                    r="4"
+                    r="3"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
-                    d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13"
+                    d="M5.5 21v-1.5a6.5 6.5 0 0 1 13 0V21"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle
+                    cx="17.5"
+                    cy="8.5"
+                    r="2.25"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
-                    d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88"
+                    d="M21.5 21v-1.25a3.75 3.75 0 0 0-3.75-3.75"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'links' && (
+                // 好站連結圖標 — 鏈條
+                <>
+                  <path
+                    d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
@@ -2292,122 +2399,53 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           </button>
         ))}
       </div>
-
-      {/* 主要內容區（左留空給固定導航欄） */}
       <div className="flex-1 flex flex-col pb-16 md:pb-0 md:ml-[80px]">
         {/* Header */}
-        <div className="bg-[#FAFAFA] px-4 sm:px-6 md:px-8 py-3 flex items-center justify-between">
-          {/* 左側：社群圖標和名稱（可點擊返回） */}
-          <button
-            onClick={onBack}
-            className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
-            title="返回社群總覽"
-          >
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-white"
-              >
-                <path
-                  d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle
-                  cx="9"
-                  cy="7"
-                  r="4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <h2 className="text-lg font-semibold text-gray-800">{communityName}</h2>
-          </button>
+        {globalHeader}
 
-          {/* 右側：通知和用戶頭像 */}
-          <div className="flex items-center gap-6">
-            {/* 通知鈴鐺組件 */}
-            {userId && (
-              <NotificationBell 
-                userId={userId} 
-                communityId={communityId || undefined} 
-              />
-            )}
+        {/* 共備活動：embedded 模式，沿用此 layout 的 header 與 fixed sidebar */}
+        {showCoPrepLessonEditor && (
+          <CourseObjectives
+            embedded={true}
+            activityName={headerTitle}
+            activityId={viewingActivity?.id}
+            onSidebarClick={handleSidebarClickFromActivity}
+            convergenceResults={convergenceResults}
+            activities={activities}
+            onHistoryDelete={handleDeleteActivity}
+            onActivitiesRefresh={loadActivities}
+            onCoPrepCompleted={loadActivities}
+            onOpenVersionManagement={
+              viewingActivity ? () => handleManageVersion(viewingActivity.id) : () => {}
+            }
+            onVersionCreated={(activityId, versionData) => {
+              console.log('版本已創建:', activityId, versionData)
+            }}
+          />
+        )}
 
-            {/* 用戶頭像與下拉選單 */}
-            <div className="relative">
-              {/* 使用者頭像 */}
-              <div
-                ref={avatarRef}
-                onClick={handleAvatarClick}
-                className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                style={{ backgroundColor: userId ? getUserColor(userId, userNickname) : 'rgba(138,99,210,0.9)' }}
-              >
-                <span className="text-white font-semibold text-sm">
-                  {userNickname.charAt(0).toUpperCase()}
-                </span>
-              </div>
-
-              {/* 下拉選單 */}
-              {isDropdownOpen && (
-                <div
-                  ref={dropdownRef}
-                  className="absolute right-0 top-12 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
-                >
-                  {/* 使用者資訊 */}
-                  <div className="px-4 py-3">
-                    <div className="text-gray-900 text-base mb-1">
-                      {userNickname}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {userAccount}
-                    </div>
-                  </div>
-
-                  {/* 分隔線 */}
-                  <div className="border-t border-gray-200 my-1"></div>
-
-                  {/* 登出 */}
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    登出
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 內容區 */}
+        {/* 內容區（非共備活動分頁） */}
+        {!showCoPrepLessonEditor && (
         <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-6 md:px-12 py-4 md:py-8">
           {/* 標題欄 */}
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-2xl font-bold text-[#6D28D9]">
-              {activeTab === 'resources' && '社群資源'}
-              {activeTab === 'activities' && '共備活動'}
-              {activeTab === 'ideas' && '想法牆'}
-              {activeTab === 'teamwork' && '團隊分工'}
-              {activeTab === 'history' && '活動歷程'}
-              {activeTab === 'management' && '社群管理'}
-            </h1>
+            {activeTab === 'ideas' ? (
+              <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+                <h1 className="shrink-0 text-2xl font-bold text-[#6D28D9]">備課想法牆</h1>
+                <p className="text-sm leading-relaxed text-gray-600 sm:flex-1 sm:min-w-0 sm:pt-1">
+                  想法牆提供一個促進成員之間意見交流的平台，透過想法發散與收斂的歷程，協助進行討論、整合多元觀點，並逐步凝聚共識。
+                </p>
+              </div>
+            ) : (
+              <h1 className="text-2xl font-bold text-[#6D28D9]">
+                {activeTab === 'resources' && '社群資源'}
+                {activeTab === 'activities' && '共備活動'}
+                {activeTab === 'teamwork' && '團隊分工'}
+                {activeTab === 'history' && '活動歷程'}
+                {activeTab === 'management' && '社群管理'}
+                {activeTab === 'links' && '好站連結'}
+              </h1>
+            )}
             {activeTab === 'resources' && (
               <>
                 <input
@@ -2425,21 +2463,10 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                 </button>
               </>
             )}
-            {activeTab === 'activities' && (
-              <button
-                onClick={() => {
-                  setEditingActivity(null) // 清除編輯狀態
-                  setIsAddActivityModalOpen(true)
-                }}
-                className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
-              >
-                新增活動
-              </button>
-            )}
           </div>
 
           {/* 內容區域 */}
-          {activeTab !== 'ideas' && (
+          {activeTab !== 'ideas' && activeTab !== 'links' && (
           <div className="bg-white rounded-lg shadow-sm min-h-[400px] p-8">
             {activeTab === 'resources' && (
               <>
@@ -2453,6 +2480,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                       <ResourceCard
                         key={resource.id}
                         fileName={resource.fileName}
+                        filePath={resource.filePath}
+                        fileType={resource.fileType}
                         uploadDate={resource.uploadDate}
                         uploadTime={resource.uploadTime}
                         uploaderName={resource.uploaderName}
@@ -2466,37 +2495,19 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               </>
             )}
             {activeTab === 'activities' && (
-                <>
-                  {activities.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                <p className="text-lg">目前沒有活動</p>
+              <div className="flex flex-col items-center justify-center h-full min-h-[280px] text-gray-500 px-4 text-center">
+                {activities.length === 0 ? (
+                  <p className="text-lg">目前沒有共備活動</p>
+                ) : activities.every((a) => a.coPrepCompleted) ? (
+                  <p className="text-base">
+                    目前沒有進行中的共備。請從左側進入共備後，於「歷史活動」分頁檢視已結束的教案。
+                  </p>
+                ) : (
+                  <p className="text-base">
+                    已為您開啟教案編輯頁。若要切換活動，請點選頂部分頁的「歷史活動」。
+                  </p>
+                )}
               </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {activities.map((activity) => (
-                        <ActivityCard
-                          key={activity.id}
-                          activityName={activity.name}
-                          introduction={activity.introduction}
-                          createdDate={activity.createdDate}
-                          createdTime={activity.createdTime}
-                          password={activity.password}
-                          isPasswordVerified={passwordVerifiedActivityIds.has(activity.id)}
-                          creatorId={activity.creatorId}
-                          creatorName={activity.creatorName}
-                          onEdit={() => handleEditActivity(activity.id)}
-                          onManageVersion={() => handleManageVersion(activity.id)}
-                          onDelete={() => handleDeleteActivity(activity.id)}
-                          onCardClick={() => handleCardClick(activity.id)}
-                          onRequestPassword={(action) => handleRequestPassword(activity.id, action)}
-                          onPasswordVerified={() => {
-                            // 密碼驗證成功後，如果是從選單觸發的，選單會自動打開
-                          }}
-                        />
-                      ))}
-              </div>
-                  )}
-                </>
             )}
             {activeTab === 'teamwork' && (
               <DndContext
@@ -2665,6 +2676,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                     </button>
                   </div>
 
+                  {activeHistoryChart === 'network' && (
+                    <p className="text-sm text-gray-600 mb-3">
+                      顯示成員之間在想法互動中的連結關係，用來觀察誰和誰有互動。
+                    </p>
+                  )}
+
                   {/* 根據選中的圖表類型顯示對應內容 */}
                   {communityId && (
                     <div className="overflow-x-auto overflow-y-auto min-w-0 w-full">
@@ -2708,102 +2725,58 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                       return (
                         <div 
                           key={member.id}
-                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors relative"
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors relative"
                         >
-                          <div className="flex items-center gap-4 flex-1">
+                          <div className="flex items-center gap-4 min-w-0 flex-1">
                             {/* 頭像 */}
                             <div 
-                              className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-semibold"
+                              className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-white text-lg font-semibold"
                               style={{ backgroundColor: getUserColor(member.userId, member.nickname) }}
                             >
                               {member.nickname ? member.nickname.charAt(0).toUpperCase() : 'U'}
                             </div>
 
                             {/* 成員資訊 */}
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="text-base font-semibold text-gray-800">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <h3 className="text-base font-semibold text-gray-800 truncate">
                                   {member.nickname || member.account}
                                 </h3>
                                 {member.role === 'admin' && (
-                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded flex-shrink-0">
                                     管理員
                                   </span>
                                 )}
                               </div>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm text-gray-500 truncate">
                                 {member.school || '未提供學校資訊'}
                               </p>
                             </div>
                           </div>
 
-                          {/* 管理員編輯按鈕（只對非自己的成員顯示） */}
+                          {/* 管理員操作按鈕（只對非自己的成員顯示） */}
                           {canManage && (
-                            <div className="relative member-menu-container">
+                            <div className="flex items-center justify-end gap-2 sm:shrink-0">
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setOpenMemberMenuId(openMemberMenuId === member.userId ? null : member.userId)
+                                  handleToggleAdmin(member.userId, member.role === 'admin')
                                 }}
-                                className="text-gray-400 hover:text-gray-600 p-2 rounded hover:bg-gray-100 transition-colors"
+                                className="px-3 py-2 text-sm font-medium rounded-lg border border-purple-300 text-purple-700 bg-white hover:bg-purple-50 transition-colors whitespace-nowrap"
                               >
-                                <svg
-                                  width="20"
-                                  height="20"
-                                  viewBox="0 0 20 20"
-                                  fill="currentColor"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                >
-                                  <circle cx="10" cy="4" r="1.5" />
-                                  <circle cx="10" cy="10" r="1.5" />
-                                  <circle cx="10" cy="16" r="1.5" />
-                                </svg>
+                                {member.role === 'admin' ? '取消管理員' : '設為管理員'}
                               </button>
-
-                              {/* 下拉選單 */}
-                              {openMemberMenuId === member.userId && (
-                                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 member-menu-container">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setOpenMemberMenuId(null)
-                                      handleToggleAdmin(member.userId, member.role === 'admin')
-                                    }}
-                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                  >
-                                    {member.role === 'admin' ? (
-                                      <>
-                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                          <path d="M8 1L10.09 6.26L16 7.27L12 11.14L12.91 16.02L8 13.77L3.09 16.02L4 11.14L0 7.27L5.91 6.26L8 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                        </svg>
-                                        取消管理員
-                                      </>
-                                    ) : (
-                                      <>
-                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                          <path d="M8 1L10.09 6.26L16 7.27L12 11.14L12.91 16.02L8 13.77L3.09 16.02L4 11.14L0 7.27L5.91 6.26L8 1Z" fill="currentColor"/>
-                                        </svg>
-                                        設為管理員
-                                      </>
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setOpenMemberMenuId(null)
-                                      handleRemoveMember(member.userId, member.nickname || member.account)
-                                    }}
-                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                  >
-                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                      <path d="M2 4H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                                      <path d="M12.6667 4V13.3333C12.6667 14 12 14.6667 11.3333 14.6667H4.66667C4 14.6667 3.33333 14 3.33333 13.3333V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                                      <path d="M5.33333 4V2.66667C5.33333 2 6 1.33334 6.66667 1.33334H9.33333C10 1.33334 10.6667 2 10.6667 2.66667V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                                    </svg>
-                                    移出社群
-                                  </button>
-                                </div>
-                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleRemoveMember(member.userId, member.nickname || member.account)
+                                }}
+                                className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-600 bg-slate-50 hover:bg-slate-100 hover:border-slate-400 hover:text-slate-800 transition-colors whitespace-nowrap"
+                              >
+                                移出社群
+                              </button>
                             </div>
                           )}
                         </div>
@@ -2821,6 +2794,73 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               </div>
             )}
           </div>
+          )}
+
+          {/* 好站連結 */}
+          {activeTab === 'links' && (
+            <div className="bg-white rounded-lg shadow-sm min-h-[400px] p-8">
+              <p className="text-sm text-gray-500 mb-6">點擊卡片即可在新分頁開啟對應網站。</p>
+              <div className="space-y-3">
+                {[
+                  {
+                    name: 'CIRN 教育資源網',
+                    desc: '提供課程綱要、教案與教學資源，協助備課規劃。',
+                    url: 'https://cirn.moe.edu.tw/',
+                  },
+                  {
+                    name: 'NotebookLM',
+                    desc: '可整理教材、摘要重點，協助快速理解與備課。',
+                    url: 'https://notebooklm.google.com/',
+                  },
+                  {
+                    name: 'Gemini',
+                    desc: 'AI 工具，可協助教案設計、內容生成與靈感發想。',
+                    url: 'https://gemini.google.com/',
+                  },
+                  {
+                    name: '康軒數位資源',
+                    desc: '提供教材、教案與數位教學資源。',
+                    url: 'https://www.knsh.com.tw/',
+                  },
+                  {
+                    name: '南一數位資源',
+                    desc: '提供課本配套教材與教學輔助資源。',
+                    url: 'https://www.nani.com.tw/',
+                  },
+                  {
+                    name: '翰林數位資源',
+                    desc: '提供教學內容、題庫與教案參考。',
+                    url: 'https://www.hle.com.tw/',
+                  },
+                ].map((site) => (
+                  <a
+                    key={site.url}
+                    href={site.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4 transition-all hover:border-purple-300 hover:shadow-md hover:shadow-purple-100/60 hover:-translate-y-[1px]"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      {/* favicon */}
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600 group-hover:bg-purple-100 transition-colors">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="2" y1="12" x2="22" y2="12" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-800 group-hover:text-purple-700 transition-colors">
+                          {site.name}
+                        </p>
+                        <p className="truncate text-xs text-gray-500 mt-0.5">{site.desc}</p>
+                      </div>
+                    </div>
+                    {/* 外部連結 icon 已移除 */}
+                  </a>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* 想法牆（獨立容器，無白色背景） */}
@@ -2949,6 +2989,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* 新增/編輯活動模態框 */}
@@ -2961,8 +3002,6 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           editingActivity
             ? {
                 name: editingActivity.name,
-                isPublic: editingActivity.isPublic,
-                password: editingActivity.password,
                 introduction: editingActivity.introduction,
               }
             : undefined
@@ -2976,16 +3015,6 @@ export default function CommunityDetail({ communityName, communityId: propCommun
             : undefined
         }
       />
-
-      {/* 密碼驗證模態框 */}
-      {passwordVerifyingActivity && (
-        <PasswordModal
-          isOpen={isPasswordModalOpen}
-          onClose={handleClosePasswordModal}
-          onVerify={handlePasswordVerify}
-          activityName={passwordVerifyingActivity.name}
-        />
-      )}
 
       {/* 新增/編輯任務模態框 */}
       <AddTaskModal
@@ -3039,7 +3068,11 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           onClose={handleCloseEditIdeaModal}
           onSave={handleSaveIdea}
           onDelete={handleDeleteIdea}
+          showDeleteButton={
+            Boolean(userId && editingIdea.creatorId && editingIdea.creatorId === userId)
+          }
           onExtend={handleExtendIdea}
+          ideaId={editingIdea.id}
           initialData={{
             activityId: editingIdea.activityId,
             stage: editingIdea.stage,
@@ -3048,6 +3081,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           }}
           isConvergence={editingIdea.isConvergence}
           communityId={communityId || undefined}
+          lastEditedByName={editingIdea.lastEditedByName}
+          lastEditedAt={editingIdea.lastEditedAt}
         />
       )}
 
@@ -3063,18 +3098,85 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         />
       )}
 
-      {/* 版本管控視窗 */}
+      {/* 版本管理視窗 */}
       <VersionControlModal
         isOpen={isVersionControlModalOpen}
         onClose={handleCloseVersionControlModal}
         activityId={versionControlActivityId || ''}
-        activityName={
-          versionControlActivityId
-            ? activities.find((a) => a.id === versionControlActivityId)?.name || ''
-            : ''
-        }
         onRestore={handleRestoreVersion}
       />
+
+      <IdeaWallOnboardingModal
+        open={showIdeaWallOnboarding}
+        onDismiss={() => {
+          markIdeaWallOnboardingSeen(userId)
+          setShowIdeaWallOnboarding(false)
+        }}
+      />
+
+      <KanbanOnboardingModal
+        open={showKanbanOnboarding}
+        onDismiss={() => {
+          markKanbanOnboardingSeen(userId)
+          setShowKanbanOnboarding(false)
+        }}
+      />
+
+      {showNetworkGraphOnboardingModal && (
+        <>
+          <div className="fixed inset-0 z-[110] bg-black/50" aria-hidden />
+          <div className="fixed inset-0 z-[111] flex items-center justify-center p-4 pointer-events-none">
+            <div
+              className="pointer-events-auto w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="network-graph-onboarding-title"
+            >
+              <div className="flex items-center justify-end px-5 pt-4 pb-2 border-b border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    markNetworkGraphOnboardingSeen(userId)
+                    setShowNetworkGraphOnboardingModal(false)
+                  }}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                  aria-label="關閉"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="px-6 pt-2 pb-4 overflow-y-auto flex-1">
+                <h2
+                  id="network-graph-onboarding-title"
+                  className="text-xl font-bold text-gray-900 text-center mb-3"
+                >
+                  網絡圖操作提示
+                </h2>
+                <ul className="text-gray-600 text-sm leading-relaxed space-y-3 list-decimal pl-5">
+                  <li>球體可拖曳移動位置</li>
+                  <li>可使用滑鼠滾輪放大縮小</li>
+                  <li>點擊球體右側可查看詳細資訊</li>
+                </ul>
+              </div>
+              <div className="flex justify-end px-6 py-4 border-t border-gray-100 bg-gray-50/80">
+                <button
+                  type="button"
+                  onClick={() => {
+                    markNetworkGraphOnboardingSeen(userId)
+                    setShowNetworkGraphOnboardingModal(false)
+                  }}
+                  className="px-6 py-2.5 rounded-xl bg-teal-500 text-white font-medium hover:bg-teal-600 transition-colors shadow-sm"
+                >
+                  我知道了
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* 手機版底部導航欄 */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex items-center justify-around py-2 z-50">
@@ -3135,14 +3237,30 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               {tab.id === 'teamwork' && (
                 <>
                   <path
-                    d="M9 11L12 14L22 4"
+                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle
+                    cx="9"
+                    cy="7"
+                    r="4"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
-                    d="M21 12V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V5C3 3.89543 3.89543 3 5 3H16"
+                    d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
@@ -3170,17 +3288,67 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               )}
               {tab.id === 'management' && (
                 <>
+                  <circle
+                    cx="6.5"
+                    cy="8.5"
+                    r="2.25"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                   <path
-                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                    d="M2.5 21v-1.25a3.75 3.75 0 0 1 3.75-3.75"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <circle
-                    cx="9"
+                    cx="12"
                     cy="7"
-                    r="4"
+                    r="3"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M5.5 21v-1.5a6.5 6.5 0 0 1 13 0V21"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle
+                    cx="17.5"
+                    cy="8.5"
+                    r="2.25"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M21.5 21v-1.25a3.75 3.75 0 0 0-3.75-3.75"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              )}
+              {tab.id === 'links' && (
+                <>
+                  <path
+                    d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"

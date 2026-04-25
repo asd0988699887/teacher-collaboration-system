@@ -14,12 +14,11 @@ interface VersionControlModalProps {
   isOpen: boolean
   onClose: () => void
   activityId: string
-  activityName: string
   onRestore?: (versionId: string) => void
 }
 
 /**
- * 版本管控視窗組件
+ * 版本管理視窗組件
  * 顯示活動的所有版本，包含最後修改日期、使用者、版本流水編號
  * 點擊版本後可以選擇回覆
  */
@@ -27,7 +26,6 @@ export default function VersionControlModal({
   isOpen,
   onClose,
   activityId,
-  activityName,
   onRestore,
 }: VersionControlModalProps) {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
@@ -97,18 +95,8 @@ export default function VersionControlModal({
 
   const handleRestore = (versionId: string) => {
     if (window.confirm('確定要回復到此版本嗎？')) {
-      // 找到對應的版本號
-      const version = versions.find(v => v.id === versionId)
-      if (version) {
-        // 清除 localStorage 中的版本號，讓 CourseObjectives 重新從 API 讀取最新版本
-        const storageKey = `currentVersion_${activityId}`
-        localStorage.removeItem(storageKey)
-        setCurrentVersionNumber(version.versionNumber)
-        
-        // 觸發自定義事件，通知 CourseObjectives 重新載入版本號
-        window.dispatchEvent(new Event('versionRestored'))
-      }
-      
+      // localStorage 更新與事件通知交由 CommunityDetail.handleRestoreVersion 統一處理，
+      // 避免在 API 完成前提早清空 localStorage 造成 race condition
       onRestore?.(versionId)
       handleClose()
     }
@@ -131,9 +119,7 @@ export default function VersionControlModal({
         >
           {/* 標題 */}
           <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-800">
-              版本管控 - {activityName}
-            </h2>
+            <h2 className="text-xl font-semibold text-gray-800">版本管理</h2>
           </div>
 
           <div className="p-6">

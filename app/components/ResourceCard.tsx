@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-
 interface ResourceCardProps {
   fileName: string
+  filePath?: string
+  fileType?: string
   uploadDate: string
   uploadTime: string
   uploaderName?: string
@@ -16,8 +16,87 @@ interface ResourceCardProps {
  * 資源卡片組件
  * 顯示上傳的檔案資訊
  */
+// 根據 MIME type 或副檔名判斷是否為圖片
+function isImageFile(fileType?: string, fileName?: string): boolean {
+  if (fileType) {
+    return fileType.startsWith('image/')
+  }
+  if (fileName) {
+    return /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(fileName)
+  }
+  return false
+}
+
+// 根據檔名副檔名取得檔案類別
+function getFileCategory(fileName: string): 'pdf' | 'word' | 'excel' | 'ppt' | 'other' {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
+  if (ext === 'pdf') return 'pdf'
+  if (['doc', 'docx'].includes(ext)) return 'word'
+  if (['xls', 'xlsx'].includes(ext)) return 'excel'
+  if (['ppt', 'pptx'].includes(ext)) return 'ppt'
+  return 'other'
+}
+
+// 各類型圖示（SVG inline）
+function FileTypeIcon({ category }: { category: ReturnType<typeof getFileCategory> }) {
+  if (category === 'pdf') {
+    return (
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100">
+        <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#EF4444" />
+          <text x="5" y="22" fontSize="11" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">PDF</text>
+        </svg>
+      </div>
+    )
+  }
+  if (category === 'word') {
+    return (
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
+        <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#2563EB" />
+          <text x="5" y="22" fontSize="11" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">DOC</text>
+        </svg>
+      </div>
+    )
+  }
+  if (category === 'excel') {
+    return (
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
+        <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#16A34A" />
+          <text x="5" y="22" fontSize="11" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">XLS</text>
+        </svg>
+      </div>
+    )
+  }
+  if (category === 'ppt') {
+    return (
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100">
+        <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#EA580C" />
+          <text x="5" y="22" fontSize="11" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">PPT</text>
+        </svg>
+      </div>
+    )
+  }
+  // other
+  return (
+    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 2V8H20" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M16 13H8" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M16 17H8" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M10 9H9H8" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  )
+}
+
 export default function ResourceCard({
   fileName,
+  filePath,
+  fileType,
   uploadDate,
   uploadTime,
   uploaderName,
@@ -25,10 +104,6 @@ export default function ResourceCard({
   onDelete,
   onDownload,
 }: ResourceCardProps) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-
   // 移除副檔名，只顯示檔名
   const displayName = fileName.replace(/\.[^/.]+$/, '')
 
@@ -67,178 +142,113 @@ export default function ResourceCard({
     return name.charAt(0).toUpperCase()
   }
 
-  // 點擊外部關閉選單
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        menuRef.current &&
-        buttonRef.current &&
-        !menuRef.current.contains(event.target as Node) &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false)
-      }
-    }
-
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside)
-      }
-    }
-  }, [isMenuOpen])
-
-  const handleMenuToggle = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsMenuOpen(!isMenuOpen)
-  }
-
-  const handleDownload = () => {
-    setIsMenuOpen(false)
+  const handleCardActivate = () => {
     onDownload?.()
   }
 
-  const handleDelete = () => {
-    setIsMenuOpen(false)
+  const cardBody = (
+    <>
+      {/* 預覽區：圖片縮圖 or 檔案類型圖示 */}
+      <div className="mb-2">
+        {isImageFile(fileType, fileName) && filePath ? (
+          <div className="h-24 w-full overflow-hidden rounded-md bg-gray-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={filePath}
+              alt={displayName}
+              className="h-full w-full object-cover pointer-events-none"
+            />
+          </div>
+        ) : (
+          <FileTypeIcon category={getFileCategory(fileName)} />
+        )}
+      </div>
 
-    // 使用瀏覽器原生確認對話框
-    if (window.confirm('確定要刪除此資源嗎？此操作無法復原。')) {
-    onDelete?.()
-  }
-  }
+      {/* 標題 */}
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-base font-bold text-gray-900 flex-1">
+          {displayName}
+        </h3>
+      </div>
+
+      {/* 日期時間和上傳者 */}
+      <div className="flex items-center justify-between mt-2">
+        <p className="text-sm text-gray-500">
+          {uploadDate} {uploadTime}
+        </p>
+        {uploaderName && (
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: getUserColor(uploaderId) }}
+            title={uploaderName}
+          >
+            <span className="text-white font-semibold text-xs">
+              {getInitial(uploaderName)}
+            </span>
+          </div>
+        )}
+      </div>
+    </>
+  )
 
   return (
-    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 relative overflow-visible border-t border-r border-b border-purple-300" style={{ width: '240px', borderLeftWidth: '4px', borderLeftColor: '#8A63D2' }}>
-      {/* 卡片內容 */}
-      <div className="pl-5 pr-4 py-3">
-        {/* 標題與選項按鈕 */}
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="text-base font-bold text-gray-900 flex-1">
-            {displayName}
-          </h3>
-          <div className="relative">
-            <button
-              ref={buttonRef}
-              onClick={handleMenuToggle}
-              className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors flex-shrink-0"
-              title="選項"
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <circle cx="10" cy="4" r="1.5" fill="currentColor" />
-                <circle cx="10" cy="10" r="1.5" fill="currentColor" />
-                <circle cx="10" cy="16" r="1.5" fill="currentColor" />
-              </svg>
-            </button>
+    <div
+      className={`bg-white rounded-lg shadow-sm transition-shadow duration-200 relative border-t border-r border-b border-purple-300 ${
+        onDownload ? 'hover:shadow-md' : ''
+      }`}
+      style={{ width: '240px', borderLeftWidth: '4px', borderLeftColor: '#8A63D2' }}
+    >
+      {onDelete && (
+        <button
+          type="button"
+          className="absolute right-2 top-2 z-10 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+          onClick={() => {
+            if (window.confirm('確定要刪除此資源嗎？此操作無法復原。')) {
+              onDelete()
+            }
+          }}
+          aria-label="刪除資源"
+          title="刪除資源"
+        >
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M2 4H14"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M12.6667 4V13.3333C12.6667 14 12 14.6667 11.3333 14.6667H4.66667C4 14.6667 3.33333 14 3.33333 13.3333V4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M5.33333 4V2.66667C5.33333 2 6 1.33334 6.66667 1.33334H9.33333C10 1.33334 10.6667 2 10.6667 2.66667V4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
 
-            {/* 下拉選單 - 顯示在右邊 */}
-            {isMenuOpen && (
-              <div
-                ref={menuRef}
-                className="absolute left-full ml-2 top-0 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
-              >
-                {/* 下載資源 */}
-                <button
-                  onClick={handleDownload}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M8 11L8 2"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M11 8L8 11L5 8"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M2 11V13C2 13.5304 2.21071 14.0391 2.58579 14.4142C2.96086 14.7893 3.46957 15 4 15H12C12.5304 15 13.0391 14.7893 13.4142 14.4142C13.7893 14.0391 14 13.5304 14 13V11"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  下載資源
-                </button>
-
-                {/* 刪除資源 */}
-                <button
-                  onClick={handleDelete}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M2 4H14"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M12.6667 4V13.3333C12.6667 14 12 14.6667 11.3333 14.6667H4.66667C4 14.6667 3.33333 14 3.33333 13.3333V4"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M5.33333 4V2.66667C5.33333 2 6 1.33334 6.66667 1.33334H9.33333C10 1.33334 10.6667 2 10.6667 2.66667V4"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  刪除資源
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 日期時間和上傳者 */}
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-sm text-gray-500">
-            {uploadDate} {uploadTime}
-          </p>
-          {/* 上傳者頭像 */}
-          {uploaderName && (
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: getUserColor(uploaderId) }}
-              title={uploaderName}
-            >
-              <span className="text-white font-semibold text-xs">
-                {getInitial(uploaderName)}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
+      {onDownload ? (
+        <button
+          type="button"
+          className="block w-full cursor-pointer rounded-lg bg-transparent pl-5 pr-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-purple-300 focus-visible:ring-offset-0"
+          onClick={handleCardActivate}
+          title="點擊下載或開啟資源"
+          aria-label={`下載或開啟：${displayName}`}
+        >
+          {cardBody}
+        </button>
+      ) : (
+        <div className="pl-5 pr-4 py-3">{cardBody}</div>
+      )}
     </div>
   )
 }

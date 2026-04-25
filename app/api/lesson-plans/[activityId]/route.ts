@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool, { query, transaction } from '@/lib/db'
 import { createNotificationsForCommunity } from '@/lib/notifications'
+import { activityDisplayLabel } from '@/lib/activityDisplay'
 
 // 生成 UUID
 function generateUUID(): string {
@@ -838,13 +839,21 @@ export async function POST(
     try {
       // 查詢活動所屬的社群 ID 和活動名稱
       const activities = await query(
-        'SELECT community_id, name FROM activities WHERE id = ?',
+        `SELECT a.community_id, a.name, lp.lesson_plan_title AS lessonPlanTitle
+         FROM activities a
+         LEFT JOIN lesson_plans lp ON lp.activity_id = a.id
+         WHERE a.id = ?`,
         [activityId]
       ) as any[]
 
       if (activities.length > 0) {
         const communityId = activities[0].community_id
-        const activityName = activities[0].name || '教案'
+        const row = activities[0]
+        const activityName =
+          activityDisplayLabel({
+            name: row.name || '',
+            lessonPlanTitle: row.lessonPlanTitle,
+          }) || '教案'
 
         // 查詢操作者名稱
         const users = await query(

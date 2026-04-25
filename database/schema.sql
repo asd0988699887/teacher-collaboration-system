@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS activities (
     password VARCHAR(255) COMMENT '密碼（如果非公開）',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '建立時間',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新時間',
+    completed_at DATETIME NULL DEFAULT NULL COMMENT '結束共備時間（NULL 表示進行中）',
     FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
     FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_community (community_id),

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { activityDisplayLabel } from '@/lib/activityDisplay'
 
 interface Idea {
   id: string
@@ -97,22 +98,21 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
 
-  // 找出所有已被收斂的節點 IDs
-  const convergedIdeaIds = new Set<string>()
+  // 計算每個 idea 被收斂的次數（用於顯示已收斂紀錄，不限制再次使用）
+  const convergedCountMap = new Map<string, number>()
   ideas.forEach(idea => {
     if (idea.isConvergence && idea.convergedIdeaIds) {
-      idea.convergedIdeaIds.forEach(id => convergedIdeaIds.add(id))
+      idea.convergedIdeaIds.forEach(id => {
+        convergedCountMap.set(id, (convergedCountMap.get(id) ?? 0) + 1)
+      })
     }
   })
 
-  // 根據選擇的階段篩選想法，排除：
-  // 1. 收斂節點本身
-  // 2. 已經被收斂過的節點
+  // 根據選擇的階段篩選想法，排除收斂節點本身；已被收斂過的節點仍可再次選取
   const filteredIdeas = selectedStage 
     ? ideas.filter(idea => 
         idea.stage === selectedStage && 
-        !idea.isConvergence && 
-        !convergedIdeaIds.has(idea.id)
+        !idea.isConvergence
       )
     : []
 
@@ -286,32 +286,6 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
           </div>
 
           <div className="p-6 flex-1 overflow-y-auto">
-            {/* 活動名稱 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                活動名稱
-              </label>
-              <select
-                value={selectedActivityId}
-                onChange={(e) => setSelectedActivityId(e.target.value)}
-                disabled={activities.length === 0 || isLoadingActivities}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
-              >
-                <option value="">
-                  {isLoadingActivities 
-                    ? '載入中...' 
-                    : activities.length === 0 
-                      ? '目前沒有共備活動' 
-                      : '請選擇活動名稱（可選）'}
-                </option>
-                {activities.map((activity) => (
-                  <option key={activity.id} value={activity.id}>
-                    {activity.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* 收斂階段選擇 */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -346,7 +320,9 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
                     <p className="text-gray-500 text-center py-4">此階段沒有想法節點</p>
                   ) : (
                     <div className="space-y-2">
-                      {filteredIdeas.map((idea) => (
+                      {filteredIdeas.map((idea) => {
+                        const timesConverged = convergedCountMap.get(idea.id) ?? 0
+                        return (
                         <label
                           key={idea.id}
                           className="flex items-start space-x-3 p-3 hover:bg-white rounded cursor-pointer transition-colors"
@@ -357,12 +333,20 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
                             onChange={() => handleIdeaToggle(idea.id)}
                             className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
                           />
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">{idea.title}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-gray-900">{idea.title}</span>
+                              {timesConverged > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-purple-100 text-purple-700 shrink-0">
+                                  已收斂 {timesConverged} 次
+                                </span>
+                              )}
+                            </div>
                             <div className="text-sm text-gray-600 mt-1 line-clamp-2">{idea.content}</div>
                           </div>
                         </label>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>

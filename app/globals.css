@@ -112,3 +112,772 @@ body > * {
     text-orientation: mixed;
   }
 }
+
+/* ========== 共備社群首次引導（CommunityOnboardingModal）========== */
+.community-onboard-cursor-step1 {
+  animation: community-onboard-cursor-1 2.8s ease-in-out infinite;
+}
+.community-onboard-ripple-step1 {
+  animation: community-onboard-ripple 2.8s ease-in-out infinite;
+}
+
+@keyframes community-onboard-cursor-1 {
+  0%,
+  12% {
+    left: 8%;
+    top: 68%;
+    opacity: 1;
+  }
+  42% {
+    left: 62%;
+    top: 10%;
+  }
+  48% {
+    left: 62%;
+    top: 10%;
+    transform: scale(0.88);
+  }
+  54% {
+    left: 62%;
+    top: 10%;
+    transform: scale(1);
+  }
+  100% {
+    left: 62%;
+    top: 10%;
+  }
+}
+
+.community-onboard-cursor-step2 {
+  animation: community-onboard-cursor-2 2.8s ease-in-out infinite;
+}
+.community-onboard-ripple-step2 {
+  animation: community-onboard-ripple-2 2.8s ease-in-out infinite;
+}
+
+@keyframes community-onboard-cursor-2 {
+  0%,
+  12% {
+    left: 8%;
+    top: 68%;
+    opacity: 1;
+  }
+  42% {
+    left: 78%;
+    top: 10%;
+  }
+  48% {
+    left: 78%;
+    top: 10%;
+    transform: scale(0.88);
+  }
+  54% {
+    left: 78%;
+    top: 10%;
+    transform: scale(1);
+  }
+  100% {
+    left: 78%;
+    top: 10%;
+  }
+}
+
+@keyframes community-onboard-ripple {
+  0%,
+  45% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  48% {
+    opacity: 0.7;
+    transform: scale(1.2);
+  }
+  55% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes community-onboard-ripple-2 {
+  0%,
+  45% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  48% {
+    opacity: 0.7;
+    transform: scale(1.2);
+  }
+  55% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.community-onboard-card-glow {
+  animation: community-onboard-card-glow 2s ease-in-out infinite;
+}
+
+@keyframes community-onboard-card-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.45);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(139, 92, 246, 0.35);
+    transform: scale(1.04);
+  }
+}
+
+.community-onboard-cursor-step4 {
+  animation: community-onboard-cursor-4 2.8s ease-in-out infinite;
+}
+.community-onboard-ripple-step4 {
+  animation: community-onboard-ripple-4 2.8s ease-in-out infinite;
+}
+
+/* 游標移入卡片底部中央「進入社群」按鈕（座標相對於示意卡片） */
+@keyframes community-onboard-cursor-4 {
+  0%,
+  12% {
+    left: 16%;
+    top: 22%;
+    bottom: auto;
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  42% {
+    left: 50%;
+    top: auto;
+    bottom: 20px;
+    transform: translateX(-50%);
+  }
+  48% {
+    left: 50%;
+    top: auto;
+    bottom: 20px;
+    transform: translateX(-50%) scale(0.88);
+  }
+  54%,
+  100% {
+    left: 50%;
+    top: auto;
+    bottom: 20px;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes community-onboard-ripple-4 {
+  0%,
+  45% {
+    opacity: 0;
+    left: 50%;
+    top: auto;
+    bottom: 24px;
+    transform: translateX(-50%) scale(0.5);
+  }
+  48% {
+    opacity: 0.65;
+    transform: translateX(-50%) scale(1);
+  }
+  55% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.4);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.community-onboard-target-card {
+  animation: community-onboard-card-nudge 2.8s ease-in-out infinite;
+}
+
+@keyframes community-onboard-card-nudge {
+  0%,
+  40%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* ========== 想法牆引導（IdeaWallOnboardingModal）========== */
+.idea-wall-onboard-cursor-fab {
+  position: absolute;
+  animation: idea-wall-cursor-fab 2.8s ease-in-out infinite;
+}
+.idea-wall-onboard-ripple-fab {
+  /* 與 FAB 幾何中心對齊（bottom-4 + half 48px − half ripple 16px） */
+  right: calc(1rem + 24px - 16px);
+  bottom: calc(1rem + 24px - 16px);
+  animation: idea-wall-ripple-fab 2.8s ease-in-out infinite;
+}
+
+/* 游標移入右下角「＋」按鈕上方（尖角對準圓心：FAB 為 bottom-4 right-4、48×48） */
+@keyframes idea-wall-cursor-fab {
+  0%,
+  12% {
+    left: 18%;
+    top: 38%;
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  42% {
+    left: calc(100% - 45px);
+    top: calc(100% - 43px);
+    transform: translate(0, 0);
+  }
+  48% {
+    left: calc(100% - 45px);
+    top: calc(100% - 43px);
+    transform: scale(0.88);
+  }
+  54%,
+  100% {
+    left: calc(100% - 45px);
+    top: calc(100% - 43px);
+    transform: scale(1);
+  }
+}
+
+@keyframes idea-wall-ripple-fab {
+  0%,
+  44% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  48% {
+    opacity: 0.7;
+    transform: scale(1.15);
+  }
+  55% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.idea-wall-onboard-card-pulse {
+  animation: idea-wall-card-pulse 2s ease-in-out infinite;
+}
+
+@keyframes idea-wall-card-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px rgba(139, 92, 246, 0.35);
+  }
+}
+
+.idea-wall-onboard-cursor-view {
+  position: absolute;
+  animation: idea-wall-cursor-view 2.8s ease-in-out infinite;
+}
+.idea-wall-onboard-ripple-view {
+  animation: idea-wall-ripple-view 2.8s ease-in-out infinite;
+}
+
+@keyframes idea-wall-cursor-view {
+  0%,
+  15% {
+    left: 50%;
+    top: 85%;
+    opacity: 1;
+    transform: translate(-40%, 0);
+  }
+  42% {
+    left: 50%;
+    top: 32%;
+    transform: translate(-50%, 0);
+  }
+  48% {
+    transform: translate(-50%, 0) scale(0.88);
+  }
+  54% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    left: 50%;
+    top: 32%;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes idea-wall-ripple-view {
+  0%,
+  40% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.5);
+  }
+  45% {
+    opacity: 0.65;
+    transform: translate(-50%, 0) scale(1.1);
+  }
+  52% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.idea-wall-onboard-cursor-extend {
+  position: absolute;
+  animation: idea-wall-cursor-extend 2.8s ease-in-out infinite;
+}
+
+/* 第 5 頁：想法收斂（游標從中間移到左上按鈕上方） */
+.idea-wall-onboard-cursor-convergence {
+  position: absolute;
+  animation: idea-wall-cursor-convergence 2.8s ease-in-out infinite;
+}
+
+/* 與真實「延伸想法」按鈕（藍底）一致並凸顯 */
+.idea-wall-onboard-extend-highlight {
+  animation: idea-wall-extend-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes idea-wall-extend-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.95),
+      0 0 10px 2px rgba(59, 130, 246, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 1),
+      0 0 22px 6px rgba(59, 130, 246, 0.65);
+  }
+}
+
+.idea-wall-onboard-ripple-extend {
+  animation: idea-wall-ripple-extend 2.8s ease-in-out infinite;
+}
+
+/* 游標移向底部「+ 延伸想法」（藍色按鈕）上方 */
+@keyframes idea-wall-cursor-extend {
+  0%,
+  10% {
+    left: 42%;
+    top: 8%;
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  44% {
+    left: clamp(6.3rem, 30%, 9.2rem);
+    top: auto;
+    bottom: 2.35rem;
+    transform: translate(0, 0);
+  }
+  48% {
+    left: clamp(6.3rem, 30%, 9.2rem);
+    top: auto;
+    bottom: 2.35rem;
+    transform: scale(0.88);
+  }
+  54%,
+  100% {
+    left: clamp(6.3rem, 30%, 9.2rem);
+    top: auto;
+    bottom: 2.35rem;
+    transform: scale(1);
+  }
+}
+
+@keyframes idea-wall-cursor-convergence {
+  0%,
+  14% {
+    left: 48%;
+    top: 58%;
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  44% {
+    left: 15%;
+    top: 20%;
+    transform: translate(0, 0);
+  }
+  50% {
+    left: 15%;
+    top: 20%;
+    transform: scale(0.88);
+  }
+  58%,
+  100% {
+    left: 15%;
+    top: 20%;
+    transform: scale(1);
+  }
+}
+
+@keyframes idea-wall-ripple-extend {
+  0%,
+  44% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  48% {
+    opacity: 0.65;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  55% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.35);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.35);
+  }
+}
+
+.idea-wall-onboard-reply-target-glow {
+  animation: idea-wall-reply-target-glow 2s ease-in-out infinite;
+}
+
+/* 回覆節點紫色高亮框（依需求加回） */
+.idea-wall-onboard-reply-purple-glow {
+  box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.45);
+  animation:
+    idea-wall-reply-target-glow 2s ease-in-out infinite,
+    idea-wall-reply-purple-glow 2s ease-in-out infinite;
+}
+
+@keyframes idea-wall-reply-purple-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(139, 92, 246, 0.45),
+      0 0 0 0 rgba(17, 24, 39, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 16px 4px rgba(139, 92, 246, 0.35),
+      0 0 10px 2px rgba(17, 24, 39, 0.18);
+  }
+}
+
+@keyframes idea-wall-reply-target-glow {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+.idea-wall-onboard-arrow-path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: idea-wall-arrow-draw 2s ease-in-out infinite;
+}
+
+/* 第 7 頁「產生收斂結果」：純實線，無 dash、無動畫 */
+.idea-wall-onboard-converge-arrow-path {
+  stroke-dasharray: none;
+}
+
+@keyframes idea-wall-arrow-draw {
+  0% {
+    stroke-dashoffset: 24;
+    opacity: 0.4;
+  }
+  45% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+/* ========== 團隊分工看板引導（KanbanOnboardingModal）========== */
+.kanban-onboard-cursor-add-list {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  animation: kanban-cursor-add-list 2.6s ease-in-out infinite;
+}
+
+.kanban-onboard-ripple-add-list {
+  position: absolute;
+  left: 48px;
+  top: 22px;
+  width: 28px;
+  height: 28px;
+  animation: kanban-ripple-add-list 2.6s ease-in-out infinite;
+}
+
+@keyframes kanban-cursor-add-list {
+  0%,
+  10% {
+    left: 8%;
+    top: 72%;
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  38% {
+    left: 22px;
+    top: 20px;
+    transform: translate(0, 0) scale(1);
+  }
+  44% {
+    left: 22px;
+    top: 20px;
+    transform: scale(0.88);
+  }
+  50%,
+  100% {
+    left: 22px;
+    top: 20px;
+    transform: scale(1);
+  }
+}
+
+@keyframes kanban-ripple-add-list {
+  0%,
+  36% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  42% {
+    opacity: 0.65;
+    transform: scale(1.1);
+  }
+  52% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.kanban-onboard-cursor-add-task {
+  position: absolute;
+  animation: kanban-cursor-add-task 2.6s ease-in-out infinite;
+}
+
+.kanban-onboard-ripple-add-task {
+  position: absolute;
+  left: 50%;
+  top: 46px;
+  margin-left: -14px;
+  margin-top: -14px;
+  animation: kanban-ripple-add-task 2.6s ease-in-out infinite;
+}
+
+@keyframes kanban-cursor-add-task {
+  0%,
+  10% {
+    left: 8%;
+    top: 88%;
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  38% {
+    left: 50%;
+    top: 48px;
+    transform: translate(-50%, 0) scale(1);
+  }
+  44% {
+    left: 50%;
+    top: 48px;
+    transform: translate(-50%, 0) scale(0.88);
+  }
+  50%,
+  100% {
+    left: 50%;
+    top: 48px;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes kanban-ripple-add-task {
+  0%,
+  36% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  42% {
+    opacity: 0.65;
+    transform: scale(1.1);
+  }
+  52% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.kanban-onboard-drag-card {
+  animation: kanban-drag-card 2.8s ease-in-out infinite;
+}
+
+.kanban-onboard-drag-cursor {
+  position: absolute;
+  left: calc(50% - 68px);
+  bottom: 42px;
+  animation: kanban-drag-cursor 2.8s ease-in-out infinite;
+}
+
+@keyframes kanban-drag-card {
+  0%,
+  12% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  38%,
+  58% {
+    transform: translateX(62px);
+    opacity: 1;
+  }
+  78%,
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes kanban-drag-cursor {
+  0%,
+  12% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  38%,
+  58% {
+    transform: translate(62px, -4px);
+    opacity: 1;
+  }
+  78%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+}
+
+/* ========== 進行共備引導（CoPrepOnboardingModal）========== */
+
+/* 第1頁：儲存按鈕 - 游標點擊（按鈕置中） */
+.coprep-onboard-cursor-save {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  margin-left: -12px;
+  animation: coprep-cursor-save 2.4s ease-in-out infinite;
+}
+.coprep-onboard-ripple-save {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  margin-left: -14px;
+  width: 28px;
+  height: 28px;
+  animation: coprep-ripple-save 2.4s ease-in-out infinite;
+}
+@keyframes coprep-cursor-save {
+  0%, 10% { bottom: 56px; margin-left: -36px; opacity: 1; transform: scale(1); }
+  40%     { bottom: 28px; margin-left: -12px; transform: scale(1); }
+  48%     { bottom: 28px; margin-left: -12px; transform: scale(0.88); }
+  55%, 90%{ bottom: 28px; margin-left: -12px; transform: scale(1); opacity: 1; }
+  100%    { bottom: 56px; margin-left: -36px; opacity: 0; transform: scale(1); }
+}
+@keyframes coprep-ripple-save {
+  0%, 38% { transform: scale(0); opacity: 0; }
+  48%     { transform: scale(1); opacity: 1; }
+  80%     { transform: scale(1.6); opacity: 0; }
+  100%    { transform: scale(0); opacity: 0; }
+}
+
+/* 第2頁：版本管理 - 游標點擊「v1」（錨定 .coprep-onboard-v1-wrap） */
+.coprep-onboard-v1-wrap .coprep-onboard-cursor-version {
+  position: absolute;
+  left: 50%;
+  margin-left: -12px;
+  top: 0;
+  animation: coprep-cursor-version 2.4s ease-in-out infinite;
+}
+.coprep-onboard-v1-wrap .coprep-onboard-ripple-version {
+  position: absolute;
+  left: 50%;
+  margin-left: -12px;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  animation: coprep-ripple-version 2.4s ease-in-out infinite;
+}
+@keyframes coprep-cursor-version {
+  0%, 10% { top: 22px; margin-left: -22px; opacity: 1; transform: scale(1); }
+  40%     { top: 0; margin-left: -12px; transform: scale(1); }
+  48%     { top: 0; margin-left: -12px; transform: scale(0.88); }
+  55%, 90%{ top: 0; margin-left: -12px; transform: scale(1); opacity: 1; }
+  100%    { top: 22px; margin-left: -22px; opacity: 0; transform: scale(1); }
+}
+@keyframes coprep-ripple-version {
+  0%, 38% { transform: scale(0); opacity: 0; }
+  48%     { transform: scale(1); opacity: 1; }
+  80%     { transform: scale(1.6); opacity: 0; }
+  100%    { transform: scale(0); opacity: 0; }
+}
+
+/* 第3頁：想法收斂結果 - 右側面板高亮脈衝 */
+.coprep-onboard-convergence-panel {
+  animation: coprep-convergence-highlight 2.2s ease-in-out infinite;
+}
+@keyframes coprep-convergence-highlight {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); border-color: #c4b5fd; }
+  40%      { box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.25); border-color: #7c3aed; }
+  70%      { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0.08); border-color: #a78bfa; }
+}
+
+/* 第4頁：結束共備 - 游標由右側移入、於按鈕幾何中心點擊（錨定 .coprep-onboard-end-btn-wrap） */
+.coprep-onboard-end-btn-wrap .coprep-onboard-cursor-end {
+  position: absolute;
+  left: 50%;
+  margin-left: -12px;
+  bottom: 6px;
+  animation: coprep-cursor-end 2.4s ease-in-out infinite;
+}
+.coprep-onboard-end-btn-wrap .coprep-onboard-ripple-end {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin-left: -14px;
+  margin-top: -14px;
+  width: 28px;
+  height: 28px;
+  animation: coprep-ripple-end 2.4s ease-in-out infinite;
+}
+@keyframes coprep-cursor-end {
+  0%, 10% { left: 118%; margin-left: -12px; bottom: 0; opacity: 1; transform: scale(1); }
+  40%     { left: 50%; margin-left: -12px; bottom: 6px; transform: scale(1); }
+  48%     { left: 50%; margin-left: -12px; bottom: 6px; transform: scale(0.88); }
+  55%, 90%{ left: 50%; margin-left: -12px; bottom: 6px; transform: scale(1); opacity: 1; }
+  100%    { left: 118%; margin-left: -12px; bottom: 0; opacity: 0; transform: scale(1); }
+}
+@keyframes coprep-ripple-end {
+  0%, 38% { transform: scale(0); opacity: 0; }
+  48%     { transform: scale(1); opacity: 1; }
+  80%     { transform: scale(1.6); opacity: 0; }
+  100%    { transform: scale(0); opacity: 0; }
+}

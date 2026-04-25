@@ -4,6 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, ShadingType, PageOrientation, VerticalAlign } from 'docx'
+import ActivityCard from './ActivityCard'
+import HistoryLessonPreviewModal, { mapLessonPlanApiToPreview } from './HistoryLessonPreviewModal'
+import { activityDisplayLabel } from '@/lib/activityDisplay'
+import CoPrepOnboardingModal from './CoPrepOnboardingModal'
+import { hasSeenCoPrepOnboarding, markCoPrepOnboardingSeen } from '@/lib/coPrepOnboardingStorage'
 
 interface ConvergenceResult {
   id: string
@@ -14,10 +19,45 @@ interface ConvergenceResult {
   createdTime: string
 }
 
+/** 與社群活動列表 API 對應，供「歷史活動」分頁顯示 */
+export interface ActivityForHistory {
+  id: string
+  name: string
+  introduction: string
+  createdDate: string
+  createdTime: string
+  password: string
+  isPublic?: boolean
+  creatorId?: string
+  creatorName?: string
+  lessonPlanTitle?: string
+  courseDomain?: string
+  designer?: string
+  unitName?: string
+  implementationGrade?: string
+  schoolLevel?: string
+  lastModifiedDate?: string
+  lastModifiedTime?: string
+  coPrepCompleted?: boolean
+}
+
+function buildHistoryActivityIntro(a: {
+  schoolLevel?: string
+  implementationGrade?: string
+  courseDomain?: string
+  unitName?: string
+}) {
+  const parts = [a.schoolLevel, a.implementationGrade, a.courseDomain, a.unitName]
+    .map((s) => (typeof s === 'string' ? s.trim() : ''))
+    .filter(Boolean)
+  return parts.length > 0 ? parts.join('') : '（尚無教案摘要）'
+}
+
 interface CourseObjectivesProps {
   activityName: string
   activityId?: string
-  onBack: () => void
+  /** 未傳時為空函式；在「歷史活動」分頁再按返回時呼叫 */
+  onBack?: () => void
   onSidebarClick?: (tabId: string) => void
   convergenceResults?: ConvergenceResult[]
   onVersionCreated?: (activityId: string, versionData: {
@@ -26,7 +66,49 @@ interface CourseObjectivesProps {
     lastModifiedTime: string
     lastModifiedUser: string
   }) => void
+  /** 歷史活動：社群內所有共備活動 */
+  activities?: ActivityForHistory[]
+  onHistoryDelete?: (id: string) => void
+  onSelectActivity?: (id: string) => void
+  /** 點擊標題旁版本號時開啟版本管理（進行中共備） */
+  onOpenVersionManagement?: () => void
+  /** 結束共備成功後請父層重新載入活動列表 */
+  onCoPrepCompleted?: () => void | Promise<void>
+  onActivitiesRefresh?: () => void | Promise<void>
+  /** 嵌入模式：由外層 layout 提供 header 與 sidebar，本元件只渲染內容區 */
+  embedded?: boolean
 }
+
+/** Word 匯出時可覆寫的欄位（歷史活動下載教案用） */
+export type LessonPlanWordOverride = Partial<{
+  lessonPlanTitle: string
+  designer: string
+  courseDomain: string
+  teachingTimeLessons: string
+  teachingTimeMinutes: string
+  unitName: string
+  schoolLevel: string
+  implementationGrade: string
+  materialSource: string
+  teachingEquipment: string
+  learningObjectives: Array<{ content: string }>
+  addedCoreCompetencies: Array<{ content: string }>
+  addedLearningPerformances: Array<{
+    content: Array<{ code: string; description: string }>
+  }>
+  addedLearningContents: Array<{
+    content: Array<{ code: string; description: string }>
+  }>
+  activityRows: Array<{
+    id: string
+    sequenceNumber: string
+    selectedLearningObjectives: string[]
+    activityFlow: string
+    time: string
+    assessmentMethod: string
+    notes: string
+  }>
+}>
 
 /**
  * 課程目標頁面組件
@@ -36,10 +118,17 @@ interface CourseObjectivesProps {
 export default function CourseObjectives({
   activityName,
   activityId,
-  onBack,
+  onBack = () => {},
   onSidebarClick,
   convergenceResults = [],
   onVersionCreated,
+  activities = [],
+  onHistoryDelete,
+  onSelectActivity,
+  onOpenVersionManagement,
+  onCoPrepCompleted,
+  onActivitiesRefresh,
+  embedded = false,
 }: CourseObjectivesProps) {
   const [lessonPlanTitle, setLessonPlanTitle] = useState('')
   const [courseDomain, setCourseDomain] = useState('')
@@ -482,7 +571,9 @@ export default function CourseObjectives({
   
   // 標籤頁狀態
   const [activeTab, setActiveTab] = useState('objectives')
-  
+  /** 歷史活動：唯讀教案預覽視窗（不離開本頁） */
+  const [historyPreviewActivityId, setHistoryPreviewActivityId] = useState<string | null>(null)
+
   // 根據學段生成年級選項
   const getGradeOptions = () => {
     if (schoolLevel === '國小') {
@@ -563,7 +654,24 @@ export default function CourseObjectives({
 
   // 新增活動 Modal 狀態
   const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false)
-  const [editingActivityId, setEditingActivityId] = useState<string | null>(null) // 正在編輯的活動ID，null表示新增模式
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
+
+  // 進行共備新手導覽
+  const [showCoPrepOnboarding, setShowCoPrepOnboarding] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = localStorage.getItem('user')
+      if (!raw) return
+      const u = JSON.parse(raw) as { id?: string; userId?: string }
+      const uid = u.id || u.userId
+      if (uid && !hasSeenCoPrepOnboarding(String(uid))) {
+        setShowCoPrepOnboarding(true)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
   const [newActivityData, setNewActivityData] = useState<{
     sequenceNumber: string
     selectedLearningObjectives: string[]
@@ -582,8 +690,12 @@ export default function CourseObjectives({
 
   // 當前版本號
   const [currentVersion, setCurrentVersion] = useState<string>('')
+  // 用於強制觸發教案內容重新載入（版本回復後需重新 fetch 資料）
+  const [lessonPlanReloadKey, setLessonPlanReloadKey] = useState<number>(0)
   // 使用 ref 存儲 activityId，確保事件處理函數能訪問最新值
   const activityIdRef = useRef(activityId)
+  // 用於中止進行中的版本載入 API 請求（避免 race condition 覆蓋回復的版本號）
+  const versionLoadControllerRef = useRef<AbortController | null>(null)
   // 追蹤使用者是否手動修改過分鐘數
   const isMinutesManuallyEditedRef = useRef(false)
   // 追蹤前一個學段值，用於判斷學段是否改變
@@ -1999,101 +2111,108 @@ export default function CourseObjectives({
   useEffect(() => {
     const loadCurrentVersion = async () => {
       const currentActivityId = activityIdRef.current
-      if (!currentActivityId) {
-        console.log('⚠️ CourseObjectives: activityId 為空，跳過載入版本號')
-        return
-      }
+      if (!currentActivityId) return
 
       console.log('🔄 CourseObjectives: 開始載入版本號，activityId:', currentActivityId)
-      
-      // 優先從 localStorage 讀取（因為回復版本時會更新 localStorage）
+
+      // 中止上一個進行中的 API 請求
+      versionLoadControllerRef.current?.abort()
+      const controller = new AbortController()
+      versionLoadControllerRef.current = controller
+
       const storageKey = `currentVersion_${currentActivityId}`
+
+      // 優先使用 localStorage（回復版本後已寫入）
       const storedVersion = localStorage.getItem(storageKey)
-      
       if (storedVersion) {
         console.log('✅ CourseObjectives: 從 localStorage 讀取到版本號:', storedVersion)
         setCurrentVersion(storedVersion)
-        // 仍然從 API 驗證，但不覆蓋 localStorage 的值（除非 API 返回的版本號更新）
-        try {
-          const response = await fetch(`/api/activity-versions/${currentActivityId}`)
-          const data = await response.json()
-          
-          if (response.ok && data.versions && data.versions.length > 0) {
-            const latestVersion = data.versions[0]
-            const apiVersionNumber = `v${latestVersion.versionNumber}`
-            console.log('📡 CourseObjectives: API 回應版本號:', apiVersionNumber)
-            
-            // 如果 localStorage 的版本號和 API 的版本號不同，可能是回復版本的情況
-            // 在這種情況下，優先使用 localStorage 的值（回復的版本號）
-            if (storedVersion !== apiVersionNumber) {
-              console.log('⚠️ CourseObjectives: localStorage 版本號與 API 不同，使用 localStorage（可能是回復版本）')
-              console.log('   localStorage:', storedVersion, 'API:', apiVersionNumber)
-            }
-          }
-        } catch (error) {
-          console.error('❌ CourseObjectives: API 驗證失敗，繼續使用 localStorage:', error)
+        return // localStorage 有值就不再打 API，避免 race condition
+      }
+
+      // localStorage 無值才去打 API
+      console.log('⚠️ CourseObjectives: localStorage 沒有版本號，從 API 讀取')
+      try {
+        const response = await fetch(`/api/activity-versions/${currentActivityId}`, {
+          signal: controller.signal,
+        })
+        const data = await response.json()
+
+        // 若請求已被中止（versionRestored 發生），直接放棄此次 API 結果
+        if (controller.signal.aborted) {
+          console.log('⚠️ CourseObjectives: API 請求已被中止，忽略回應')
+          return
         }
-      } else {
-        // 如果 localStorage 沒有版本號，從 API 讀取
-        console.log('⚠️ CourseObjectives: localStorage 沒有版本號，從 API 讀取')
-        try {
-          const response = await fetch(`/api/activity-versions/${currentActivityId}`)
-          const data = await response.json()
 
-          console.log('📡 CourseObjectives: API 回應:', data)
+        console.log('📡 CourseObjectives: API 回應:', data)
 
-          if (response.ok && data.versions && data.versions.length > 0) {
-            // 取得最新版本（版本號最大的）
-            const latestVersion = data.versions[0]
-            const versionNumber = `v${latestVersion.versionNumber}`
-            console.log('✅ CourseObjectives: 從 API 讀取到版本號:', versionNumber)
-            setCurrentVersion(versionNumber)
-            // 更新 localStorage（同步到本地快取）
-            localStorage.setItem(storageKey, versionNumber)
-            console.log('✅ CourseObjectives: 已更新版本號到 state 和 localStorage:', versionNumber)
-          } else {
-            console.log('⚠️ CourseObjectives: API 沒有版本號')
-            setCurrentVersion('')
+        if (response.ok && data.versions && data.versions.length > 0) {
+          // 再次確認 localStorage 沒有被 versionRestored 寫入（雙重保護）
+          const freshStored = localStorage.getItem(storageKey)
+          if (freshStored) {
+            console.log('✅ CourseObjectives: API 回應前 versionRestored 已寫入 localStorage，使用 localStorage:', freshStored)
+            setCurrentVersion(freshStored)
+            return
           }
-        } catch (error) {
-          console.error('❌ CourseObjectives: 載入版本號錯誤:', error)
+          const versionNumber = `v${data.versions[0].versionNumber}`
+          console.log('✅ CourseObjectives: 從 API 讀取到版本號:', versionNumber)
+          setCurrentVersion(versionNumber)
+          localStorage.setItem(storageKey, versionNumber)
+          console.log('✅ CourseObjectives: 已更新版本號到 state 和 localStorage:', versionNumber)
+        } else {
+          console.log('⚠️ CourseObjectives: API 沒有版本號')
           setCurrentVersion('')
         }
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('⚠️ CourseObjectives: API 請求被中止（AbortError），忽略')
+          return
+        }
+        console.error('❌ CourseObjectives: 載入版本號錯誤:', error)
+        setCurrentVersion('')
       }
     }
 
     loadCurrentVersion()
 
-    // 監聽版本回復事件，重新載入版本號
+    // 監聽版本回復事件
     const handleVersionRestored = (event: Event) => {
       const currentActivityId = activityIdRef.current
       const customEvent = event as CustomEvent<{ activityId: string; versionNumber: string } | undefined>
       const eventData = customEvent.detail
-      
+
       console.log('✅ CourseObjectives: 收到版本回復事件，activityId:', currentActivityId, '事件資料:', eventData)
-      
-      // 如果事件中包含版本號，直接使用它（優先）
+
       if (eventData && eventData.versionNumber && eventData.activityId === currentActivityId) {
+        // 中止任何進行中的 API 請求，避免舊請求回來後覆蓋回復的版本號
+        versionLoadControllerRef.current?.abort()
+        versionLoadControllerRef.current = null
+
         console.log('✅ CourseObjectives: 使用事件中的版本號:', eventData.versionNumber)
-        setCurrentVersion(eventData.versionNumber)
-        // 同步更新 localStorage
         const storageKey = `currentVersion_${currentActivityId}`
         localStorage.setItem(storageKey, eventData.versionNumber)
+        setCurrentVersion(eventData.versionNumber)
         console.log('✅ CourseObjectives: 已更新版本號到 state 和 localStorage:', eventData.versionNumber)
+        // 觸發教案內容重新載入，確保畫面資料與回復的版本一致
+        setLessonPlanReloadKey((k) => k + 1)
       } else {
-        // 如果事件中沒有版本號，延遲後重新從 localStorage 讀取（因為回復版本時會更新 localStorage）
+        // 事件無版本號：中止舊請求後重新載入（localStorage 此時應已由 CommunityDetail 寫入）
         console.log('⚠️ CourseObjectives: 事件中沒有版本號，將從 localStorage 重新讀取')
+        versionLoadControllerRef.current?.abort()
+        versionLoadControllerRef.current = null
         setTimeout(() => {
           console.log('✅ CourseObjectives: 開始重新載入版本號（延遲後）')
           loadCurrentVersion()
-        }, 500) // 縮短延遲時間，因為 localStorage 已經更新
+        }, 300)
       }
     }
+
     window.addEventListener('versionRestored', handleVersionRestored)
     console.log('✅ CourseObjectives: 已註冊 versionRestored 事件監聽器')
 
     return () => {
       window.removeEventListener('versionRestored', handleVersionRestored)
+      versionLoadControllerRef.current?.abort()
       console.log('✅ CourseObjectives: 已移除 versionRestored 事件監聽器')
     }
   }, [activityId])
@@ -2296,7 +2415,7 @@ export default function CourseObjectives({
     }
 
     loadLessonPlan()
-  }, [activityId])
+  }, [activityId, lessonPlanReloadKey])
 
   // 當節數或學段改變時，根據學段自動計算分鐘數
   // 國小：1 節課 = 40 分鐘
@@ -2702,7 +2821,24 @@ export default function CourseObjectives({
   }
 
   // 生成 Word 文件 - 完全按照指定的表格結構
-  const generateWord = async () => {
+  const generateWord = async (override?: LessonPlanWordOverride) => {
+    const o = {
+      lessonPlanTitle: override?.lessonPlanTitle ?? lessonPlanTitle,
+      designer: override?.designer ?? designer,
+      courseDomain: override?.courseDomain ?? courseDomain,
+      teachingTimeLessons: override?.teachingTimeLessons ?? teachingTimeLessons,
+      teachingTimeMinutes: override?.teachingTimeMinutes ?? teachingTimeMinutes,
+      unitName: override?.unitName ?? unitName,
+      schoolLevel: override?.schoolLevel ?? schoolLevel,
+      implementationGrade: override?.implementationGrade ?? implementationGrade,
+      materialSource: override?.materialSource ?? materialSource,
+      teachingEquipment: override?.teachingEquipment ?? teachingEquipment,
+      learningObjectives: override?.learningObjectives ?? learningObjectives,
+      addedCoreCompetencies: override?.addedCoreCompetencies ?? addedCoreCompetencies,
+      addedLearningPerformances: override?.addedLearningPerformances ?? addedLearningPerformances,
+      addedLearningContents: override?.addedLearningContents ?? addedLearningContents,
+      activityRows: override?.activityRows ?? activityRows,
+    }
     const children: (Paragraph | Table)[] = []
 
     // 添加標題「12年國教素養導向教學方案格式」
@@ -2820,24 +2956,24 @@ export default function CourseObjectives({
     // ========================
     // 10列、4欄，欄寬比例：18%, 42%, 15%, 25%
     
-    const teachingTimeText = teachingTimeLessons && teachingTimeMinutes
-      ? `${teachingTimeLessons} 節課,共 ${teachingTimeMinutes} 分鐘`
-      : teachingTimeLessons
-      ? `${teachingTimeLessons} 節課`
-      : teachingTimeMinutes
-      ? `${teachingTimeMinutes} 分鐘`
+    const teachingTimeText = o.teachingTimeLessons && o.teachingTimeMinutes
+      ? `${o.teachingTimeLessons} 節課,共 ${o.teachingTimeMinutes} 分鐘`
+      : o.teachingTimeLessons
+      ? `${o.teachingTimeLessons} 節課`
+      : o.teachingTimeMinutes
+      ? `${o.teachingTimeMinutes} 分鐘`
       : ''
     
-    const coreCompetencyText = addedCoreCompetencies.length > 0
-      ? addedCoreCompetencies.map(c => c.content).join('\n')
+    const coreCompetencyText = o.addedCoreCompetencies.length > 0
+      ? o.addedCoreCompetencies.map(c => c.content).join('\n')
       : ''
     
-    const learningPerformanceText = addedLearningPerformances.length > 0
-      ? addedLearningPerformances.flatMap(p => p.content.map(c => `${c.code}: ${c.description}`)).join('\n')
+    const learningPerformanceText = o.addedLearningPerformances.length > 0
+      ? o.addedLearningPerformances.flatMap(p => p.content.map(c => `${c.code}: ${c.description}`)).join('\n')
       : ''
     
-    const learningContentText = addedLearningContents.length > 0
-      ? addedLearningContents.flatMap(c => c.content.map(cont => `${cont.code}: ${cont.description}`)).join('\n')
+    const learningContentText = o.addedLearningContents.length > 0
+      ? o.addedLearningContents.flatMap(c => c.content.map(cont => `${cont.code}: ${cont.description}`)).join('\n')
       : ''
 
     // 建立表格一的 10 列
@@ -2856,7 +2992,7 @@ export default function CourseObjectives({
             },
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: lessonPlanTitle || '', ...textStyle })] })],
+            children: [new Paragraph({ children: [new TextRun({ text: o.lessonPlanTitle || '', ...textStyle })] })],
             width: { size: 42, type: WidthType.PERCENTAGE },
             borders: {
               top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
@@ -2876,7 +3012,7 @@ export default function CourseObjectives({
             },
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: designer || '', ...textStyle })] })],
+            children: [new Paragraph({ children: [new TextRun({ text: o.designer || '', ...textStyle })] })],
             width: { size: 25, type: WidthType.PERCENTAGE },
             borders: outerCornerTopRightStyle, // 右上角，使用外框
           }),
@@ -2891,7 +3027,7 @@ export default function CourseObjectives({
             borders: outerLeftBorderStyle, // 左側，使用外框
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: courseDomain || '', ...textStyle })] })],
+            children: [new Paragraph({ children: [new TextRun({ text: o.courseDomain || '', ...textStyle })] })],
             width: { size: 42, type: WidthType.PERCENTAGE },
             ...contentCellStyle,
           }),
@@ -2916,7 +3052,7 @@ export default function CourseObjectives({
             borders: outerLeftBorderStyle, // 左側，使用外框
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: unitName || '', ...textStyle })] })],
+            children: [new Paragraph({ children: [new TextRun({ text: o.unitName || '', ...textStyle })] })],
             columnSpan: 3,
             width: { size: 82, type: WidthType.PERCENTAGE },
             borders: outerRightBorderStyle, // 右側，使用外框
@@ -2934,9 +3070,9 @@ export default function CourseObjectives({
           new TableCell({
             children: [new Paragraph({ 
               children: [new TextRun({ 
-                text: schoolLevel && implementationGrade 
-                  ? `${schoolLevel} ${implementationGrade}年級` 
-                  : (schoolLevel || (implementationGrade ? `${implementationGrade}年級` : '')), 
+                text: o.schoolLevel && o.implementationGrade 
+                  ? `${o.schoolLevel} ${o.implementationGrade}年級` 
+                  : (o.schoolLevel || (o.implementationGrade ? `${o.implementationGrade}年級` : '')), 
                 ...textStyle 
               })] 
             })],
@@ -3012,7 +3148,7 @@ export default function CourseObjectives({
             borders: outerLeftBorderStyle, // 左側，使用外框
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: materialSource || '', ...textStyle })] })],
+            children: [new Paragraph({ children: [new TextRun({ text: o.materialSource || '', ...textStyle })] })],
             columnSpan: 3,
             width: { size: 82, type: WidthType.PERCENTAGE },
             borders: outerRightBorderStyle, // 右側，使用外框
@@ -3029,7 +3165,7 @@ export default function CourseObjectives({
           }),
           new TableCell({
             children: [new Paragraph({ 
-              children: [new TextRun({ text: teachingEquipment || '', ...textStyle })],
+              children: [new TextRun({ text: o.teachingEquipment || '', ...textStyle })],
               spacing: { after: 200, before: 200 }, // 增加上下間距，提高欄位高度
             })],
             columnSpan: 3,
@@ -3049,8 +3185,8 @@ export default function CourseObjectives({
           new TableCell({
             children: [new Paragraph({ 
               children: [new TextRun({ 
-                text: learningObjectives.length > 0 
-                  ? learningObjectives.map(obj => obj.content).join('\n')
+                text: o.learningObjectives.length > 0 
+                  ? o.learningObjectives.map(obj => obj.content).join('\n')
                   : '', 
                 ...textStyle 
               })],
@@ -3197,15 +3333,15 @@ export default function CourseObjectives({
     ]
 
     // Row 2: 活動資料列
-    if (activityRows.length > 0) {
+    if (o.activityRows.length > 0) {
       // 如果有活動資料，為每個活動建立一行
-      const sortedRows = sortActivityRows(activityRows)
+      const sortedRows = sortActivityRows(o.activityRows)
       sortedRows.forEach((row, index) => {
         // 取得選中的學習目標文字
         const selectedObjectives = row.selectedLearningObjectives
           .map(idx => {
             const objIdx = parseInt(idx)
-            return learningObjectives[objIdx]?.content || ''
+            return o.learningObjectives[objIdx]?.content || ''
           })
           .filter(Boolean)
           .join('、')
@@ -3374,6 +3510,91 @@ export default function CourseObjectives({
     await writable.close()
   }
 
+  /** 歷史活動：依活動 ID 從 API 載入並下載 Word 教案（與編輯中下載相同格式） */
+  const handleHistoryLessonDownload = async (historyActivityId: string, fileBaseName: string) => {
+    try {
+      const res = await fetch(`/api/lesson-plans/${historyActivityId}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error((data as { error?: string }).error || '載入教案失敗')
+      }
+      const m = mapLessonPlanApiToPreview(data)
+      if (!m) {
+        alert('此活動尚無教案資料可下載')
+        return
+      }
+      const override: LessonPlanWordOverride = {
+        lessonPlanTitle: m.lessonPlanTitle,
+        designer: m.designer,
+        courseDomain: m.courseDomain,
+        teachingTimeLessons: m.teachingTimeLessons,
+        teachingTimeMinutes: m.teachingTimeMinutes,
+        unitName: m.unitName,
+        schoolLevel: m.schoolLevel,
+        implementationGrade: m.implementationGrade,
+        materialSource: m.materialSource,
+        teachingEquipment: m.teachingEquipment,
+        learningObjectives: m.learningObjectives,
+        addedCoreCompetencies: m.addedCoreCompetencies,
+        addedLearningPerformances: m.addedLearningPerformances.map((g) => ({
+          ...g,
+          content: g.content || [],
+        })),
+        addedLearningContents: m.addedLearningContents.map((g) => ({
+          ...g,
+          content: g.content || [],
+        })),
+        activityRows: m.activityRows.map((r) => ({
+          id: r.id,
+          sequenceNumber: r.sequenceNumber,
+          selectedLearningObjectives: r.selectedLearningObjectives,
+          activityFlow: r.activityFlow,
+          time: r.time,
+          assessmentMethod: r.assessmentMethod,
+          notes: r.notes,
+        })),
+      }
+      const safeBase =
+        (fileBaseName && fileBaseName.replace(/[\\/:*?"<>|]/g, '_').trim()) ||
+        m.lessonPlanTitle.replace(/[\\/:*?"<>|]/g, '_').trim() ||
+        '教案'
+      const fileName = `${safeBase}_${new Date().toISOString().split('T')[0]}.docx`
+      const doc = await generateWord(override)
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      console.error(e)
+      alert(e instanceof Error ? e.message : '下載教案失敗')
+    }
+  }
+
+  /** 結束共備前：檢查「課程目標」分頁應填項目是否齊全 */
+  const getEndCoPrepMissingCourseObjectiveFields = (): string[] => {
+    const missing: string[] = []
+    if (!lessonPlanTitle.trim()) missing.push('教案標題')
+    if (!courseDomain.trim()) missing.push('課程領域')
+    if (!designer.trim()) missing.push('設計者')
+    if (!unitName.trim()) missing.push('單元名稱')
+    if (!schoolLevel) missing.push('學段')
+    if (!implementationGrade) missing.push('實施年級')
+    if (!String(teachingTimeLessons).trim()) missing.push('授課節數')
+    if (!String(teachingTimeMinutes).trim()) missing.push('授課分鐘數')
+    if (addedCoreCompetencies.length < 1) missing.push('核心素養（請至少加入一項）')
+    if (addedLearningPerformances.length < 1) missing.push('學習表現（請至少加入一項）')
+    if (addedLearningContents.length < 1) missing.push('學習內容（請至少加入一項）')
+    if (!materialSource.trim()) missing.push('教材來源')
+    if (!teachingEquipment.trim()) missing.push('教學設備/資源')
+    if (learningObjectives.length < 1) missing.push('學習目標（請至少新增一項）')
+    return missing
+  }
+
   // 儲存表單資料並新增版本記錄
   const handleSave = async () => {
     if (!activityId) {
@@ -3481,6 +3702,120 @@ export default function CourseObjectives({
     }
   }
 
+  /** 結束共備：驗證 → 儲存教案 → 標記活動完成（列入歷史活動） */
+  const handleEndCoPrep = async () => {
+    const missingObj = getEndCoPrepMissingCourseObjectiveFields()
+    if (missingObj.length > 0) {
+      alert(
+        `無法結束共備：課程目標尚有未填寫或未完成項目。\n\n請先至「課程目標」分頁完成下列項目：\n• ${missingObj.join('\n• ')}`
+      )
+      return
+    }
+    if (activityRows.length < 1) {
+      alert('無法結束共備：請在「活動與評量設計」至少新增一項活動。')
+      return
+    }
+    if (!activityId) {
+      alert('無法結束共備：缺少活動 ID')
+      return
+    }
+
+    const userData = localStorage.getItem('user')
+    let userId = ''
+    let userNickname = '使用者'
+    if (userData) {
+      try {
+        const user = JSON.parse(userData)
+        userId = user.id || user.account || ''
+        userNickname = user.nickname || '使用者'
+      } catch {
+        // ignore
+      }
+    }
+    if (!userId) {
+      alert('無法結束共備：請先登入')
+      return
+    }
+
+    const formData = {
+      userId,
+      isAutoSave: false,
+      lessonPlanTitle,
+      courseDomain,
+      designer,
+      unitName,
+      schoolLevel,
+      implementationGrade,
+      teachingTimeLessons,
+      teachingTimeMinutes,
+      materialSource,
+      teachingEquipment,
+      learningObjectives: learningObjectives.map((obj) => obj.content).join('|||'),
+      addedCoreCompetencies,
+      addedLearningPerformances,
+      addedLearningContents,
+      activityRows,
+      assessmentTools,
+      references,
+      checkedPerformances: Array.from(checkedPerformances),
+      checkedContents: Array.from(checkedContents),
+    }
+
+    try {
+      const saveRes = await fetch(`/api/lesson-plans/${activityId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+      if (!saveRes.ok) {
+        const errorData = await saveRes.json().catch(() => ({}))
+        const errorMessage = errorData.details
+          ? `${errorData.error}: ${errorData.details}`
+          : errorData.error || '儲存失敗'
+        throw new Error(errorMessage)
+      }
+      const result = await saveRes.json()
+      if (result.data?.versionNumber) {
+        const versionNumber = `v${result.data.versionNumber}`
+        setCurrentVersion(versionNumber)
+        const storageKey = `currentVersion_${activityId}`
+        localStorage.setItem(storageKey, versionNumber)
+      }
+      if (onVersionCreated && result.data?.versionNumber) {
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        const hours = String(now.getHours()).padStart(2, '0')
+        const minutes = String(now.getMinutes()).padStart(2, '0')
+        onVersionCreated(activityId, {
+          versionNumber: `v${result.data.versionNumber}`,
+          lastModifiedDate: `${year}/${month}/${day}`,
+          lastModifiedTime: `${hours}:${minutes}`,
+          lastModifiedUser: userNickname,
+        })
+      }
+
+      const completeRes = await fetch(`/api/activities/${activityId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      const completeData = await completeRes.json().catch(() => ({}))
+      if (!completeRes.ok) {
+        throw new Error(completeData.error || completeData.details || '結束共備失敗')
+      }
+
+      alert('共備已結束，此活動已移至「歷史活動」。')
+      setActiveTab('history')
+      await onCoPrepCompleted?.()
+      await onActivitiesRefresh?.()
+    } catch (error: unknown) {
+      console.error('結束共備錯誤:', error)
+      alert(error instanceof Error ? error.message : '結束共備失敗')
+    }
+  }
+
   // 自動保存雙向細目表勾選狀態（不建立新版本）
   const autoSaveSpecification = useCallback(async () => {
     if (!activityId) return
@@ -3567,25 +3902,35 @@ export default function CourseObjectives({
     }
   }, [checkedPerformances, checkedContents, autoSaveSpecification])
 
+  const handleHeaderBack = () => {
+    if (activeTab !== 'history') {
+      setActiveTab('history')
+    } else {
+      onBack()
+    }
+  }
+
   const tabs = [
     { id: 'objectives', label: '課程目標' },
     { id: 'activity', label: '活動與評量設計' },
     { id: 'specification', label: '雙向細目表' },
     { id: 'preview', label: '預覽教案' },
+    { id: 'history', label: '歷史活動' },
   ]
 
   const sidebarTabs = [
-    { id: 'resources', label: '資源' },
     { id: 'activities', label: '共備活動' },
     { id: 'ideas', label: '想法牆' },
+    { id: 'resources', label: '資源' },
     { id: 'teamwork', label: '團隊分工' },
     { id: 'history', label: '活動歷程' },
     { id: 'management', label: '社群管理' },
   ]
 
   return (
-    <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
-      {/* 左側導航欄 - 手機版隱藏，桌面版顯示 */}
+    <div className={embedded ? 'flex-1 flex flex-col min-h-0' : 'w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row'}>
+      {/* 左側導航欄 - 嵌入模式由外層 layout 提供，手機版隱藏，桌面版顯示 */}
+      {!embedded && (
       <div className="hidden md:flex w-[80px] bg-[#FAFAFA] flex-col items-center py-8 gap-6 flex-shrink-0">
         {/* 導航選項 */}
         {sidebarTabs.map((tab) => (
@@ -3701,46 +4046,33 @@ export default function CourseObjectives({
                 </>
               )}
               {tab.id === 'teamwork' && (
-                // 團隊分工圖標 - 剪貼板任務清單
+                // 團隊分工圖標 — 與原「社群管理」相同（雙人）
                 <>
-                  {/* 剪貼板主體 */}
                   <path
-                    d="M9 5H7C5.89543 5 5 5.89543 5 7V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V7C19 5.89543 18.1046 5 17 5H15"
+                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* 剪貼板頂部夾子 */}
-                  <path
-                    d="M9 3C9 2.44772 9.44772 2 10 2H14C14.5523 2 15 2.44772 15 3V5H9V3Z"
+                  <circle
+                    cx="9"
+                    cy="7"
+                    r="4"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* 清單項目線條 */}
                   <path
-                    d="M9 9H15"
+                    d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                   <path
-                    d="M9 12H15"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M9 15H13"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  {/* 勾選標記 */}
-                  <path
-                    d="M9 17L11 19L15 15"
+                    d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
@@ -3789,33 +4121,51 @@ export default function CourseObjectives({
                 </>
               )}
               {tab.id === 'management' && (
-                // 社群管理圖標
+                // 社群管理圖標 — 三人（左、中、右）
                 <>
+                  <circle
+                    cx="6.5"
+                    cy="8.5"
+                    r="2.25"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                   <path
-                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                    d="M2.5 21v-1.25a3.75 3.75 0 0 1 3.75-3.75"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <circle
-                    cx="9"
+                    cx="12"
                     cy="7"
-                    r="4"
+                    r="3"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
-                    d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13"
+                    d="M5.5 21v-1.5a6.5 6.5 0 0 1 13 0V21"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle
+                    cx="17.5"
+                    cy="8.5"
+                    r="2.25"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
-                    d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88"
+                    d="M21.5 21v-1.25a3.75 3.75 0 0 0-3.75-3.75"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
@@ -3827,77 +4177,116 @@ export default function CourseObjectives({
           </button>
         ))}
       </div>
+      )}
 
-      {/* 主要內容區 */}
-      <div className="flex-1 flex flex-col">
-        {/* 返回按鈕和活動名稱 */}
-        <div className="px-4 sm:px-6 md:px-16 pt-6 md:pt-8 pb-4">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="text-gray-600"
-            >
-              <path
-                d="M19 12H5M12 19l-7-7 7-7"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <h2 className="text-lg font-semibold text-gray-800">{activityName}</h2>
-          </button>
-        </div>
-
-        {/* 主要內容區 */}
-        <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-6 md:px-12 py-4 md:py-8 overflow-y-auto">
-          <div className="flex flex-col md:flex-row gap-8">
-            {/* 左側表單區域 */}
-            <div className="flex-1 max-w-3xl">
+      {/* 主要內容區（共備僅一個進行中時不再顯示頂層返回／活動名稱，改由左側功能列切換頁面） */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 bg-[#FEFBFF] px-4 sm:px-6 md:px-12 pt-6 md:pt-8 pb-4 md:pb-8 overflow-y-auto overflow-x-hidden">
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* 左側表單區域（拉寬、無 max-w 限制） */}
+            <div className="flex-1 min-w-0">
               {/* 標題 */}
-              <h1 className="text-2xl font-bold text-[#6D28D9] mb-6 flex items-center gap-3">
-                {activeTab === 'objectives' && (
-                  <>
-                    <span>課程目標</span>
-                    {currentVersion && (
-                      <span className="text-lg font-normal text-gray-600">({currentVersion})</span>
-                    )}
-                  </>
+              {/* 主標題「進行共備」＋可點擊版本號 → 開啟版本管理 */}
+              <h1 className="text-2xl font-bold text-[#6D28D9] mb-6 flex items-center flex-wrap gap-x-2 gap-y-1">
+                <span>進行共備</span>
+                {onOpenVersionManagement ? (
+                  <button
+                    type="button"
+                    onClick={onOpenVersionManagement}
+                    className="text-lg font-semibold text-[#6D28D9] hover:underline decoration-2 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-purple-400 rounded px-0.5"
+                    title="開啟版本管理"
+                  >
+                    {currentVersion || 'v1'}
+                  </button>
+                ) : (
+                  currentVersion && (
+                    <span className="text-lg font-normal text-gray-600">({currentVersion})</span>
+                  )
                 )}
-                {activeTab === 'activity' && (
-                  <>
-                    <span>活動與評量設計</span>
-                    {currentVersion && (
-                      <span className="text-lg font-normal text-gray-600">({currentVersion})</span>
-                    )}
-                  </>
-                )}
-                {activeTab === 'specification' && '雙向細目表'}
-                {activeTab === 'preview' && '預覽教案'}
               </h1>
 
               {/* 標籤頁 */}
-              <div className="flex gap-4 mb-8 border-b border-gray-200">
-                {tabs.map((tab) => (
+              <div className="mb-8 border-b border-gray-200">
+                {/* 主階段列 */}
+                <div className="flex gap-4">
+                  {/* 1 課程目標 */}
                   <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => setActiveTab('objectives')}
                     className={`px-4 py-2 font-medium transition-colors ${
-                      activeTab === tab.id
+                      activeTab === 'objectives'
                         ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
                         : 'text-gray-600 hover:text-gray-800'
                     }`}
                   >
-                    {tab.label}
+                    1 課程目標
                   </button>
-                ))}
+
+                  {/* 2 活動與評量設計 */}
+                  <button
+                    onClick={() => setActiveTab('activity')}
+                    className={`px-4 py-2 font-medium transition-colors ${
+                      activeTab === 'activity'
+                        ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    2 活動與評量設計
+                  </button>
+
+                  {/* 3 教案檢核與總覽（點擊預設進入雙向細目表） */}
+                  <button
+                    onClick={() => {
+                      if (activeTab !== 'specification' && activeTab !== 'preview') {
+                        setActiveTab('specification')
+                      }
+                    }}
+                    className={`px-4 py-2 font-medium transition-colors ${
+                      activeTab === 'specification' || activeTab === 'preview'
+                        ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    3 教案檢核與總覽
+                  </button>
+
+                  {/* 歷史活動（不動） */}
+                  <button
+                    onClick={() => setActiveTab('history')}
+                    className={`px-4 py-2 font-medium transition-colors ${
+                      activeTab === 'history'
+                        ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    歷史活動
+                  </button>
+                </div>
+
+                {/* 第 3 階段的子頁籤（僅在 specification / preview 時顯示） */}
+                {(activeTab === 'specification' || activeTab === 'preview') && (
+                  <div className="flex gap-4 pl-4 mt-0 border-t border-gray-100 bg-gray-50/60">
+                    <button
+                      onClick={() => setActiveTab('specification')}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                        activeTab === 'specification'
+                          ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      雙向細目表
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('preview')}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                        activeTab === 'preview'
+                          ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      預覽教案
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* 表單內容 */}
@@ -7057,9 +7446,9 @@ export default function CourseObjectives({
                 </div>
               )}
 
-              {/* 活動與評量設計 */}
+              {/* 活動與評量設計（min-w-0 避免內層 min-w 撐破 flex，與課程目標同寬） */}
               {activeTab === 'activity' && (
-                <div className="space-y-6">
+                <div className="space-y-6 min-w-0 max-w-full">
                   {/* 新增活動按鈕 */}
                   <div className="flex justify-end">
                     <button
@@ -7082,8 +7471,8 @@ export default function CourseObjectives({
 
                   {/* 表格樣式 */}
                   {activityRows.length > 0 && (
-                    <div className="border border-gray-300 rounded-lg overflow-x-auto">
-                      <div className="min-w-[800px] sm:min-w-[900px]">
+                    <div className="border border-gray-300 rounded-lg overflow-x-auto w-full min-w-0 max-w-full">
+                      <div className="min-w-[908px] sm:min-w-[1008px]">
                         {/* 表頭行 */}
                         <div className="flex border-b border-gray-300 bg-gray-100">
                           <div className="w-10 flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center justify-center px-2 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
@@ -7101,11 +7490,9 @@ export default function CourseObjectives({
                           <div className="w-[150px] flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center px-4 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
                             評量方式
                           </div>
-                          <div className="w-16 flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center justify-center px-2 py-2" style={{ borderRight: '1px solid #d1d5db' }}>
+                          <div className="w-[220px] flex-shrink-0 bg-gray-100 font-medium text-gray-700 text-sm flex items-center justify-center px-2 py-2">
                             備註
                           </div>
-                          {/* 桌面版編輯和刪除按鈕欄位（表頭） */}
-                          <div className="hidden sm:flex w-16 flex-shrink-0 bg-gray-100"></div>
                         </div>
 
                         {/* 已加入的列 - 表格樣式 */}
@@ -7232,9 +7619,9 @@ export default function CourseObjectives({
                               </div>
                             </div>
 
-                            {/* 備註欄位 */}
-                            <div className="w-16 flex-shrink-0 flex flex-col items-start px-2 py-2">
-                              <div className="w-full px-0 py-0">
+                            {/* 備註 + 操作按鈕（文字左、按鈕右並排） */}
+                            <div className="w-[220px] flex-shrink-0 flex flex-row items-start gap-2 px-2 py-2">
+                              <div className="flex-1 min-w-0 px-0 py-0">
                                 <textarea
                                   data-row-id={`activity-row-${index}`}
                                   value={row.notes}
@@ -7254,11 +7641,10 @@ export default function CourseObjectives({
                                   style={{ height: 'auto', padding: '0' }}
                                 />
                               </div>
-                              <div className="flex flex-col gap-1 mt-2 self-center sm:hidden">
+                              <div className="flex flex-col gap-1 shrink-0 pt-0.5">
                                 <button
+                                  type="button"
                                   onClick={() => {
-                                    // 編輯功能：打開 modal 並載入該行的資料
-                                    // 計算排序後的索引，用於確定序號預設值
                                     const sortedRows = sortActivityRows(activityRows)
                                     const sortedIndex = sortedRows.findIndex(r => r.id === row.id)
                                     setNewActivityData({
@@ -7269,57 +7655,23 @@ export default function CourseObjectives({
                                       assessmentMethod: row.assessmentMethod,
                                       notes: row.notes,
                                     })
-                                    // 設置編輯模式，不刪除該行
                                     setEditingActivityId(row.id)
                                     setIsAddActivityModalOpen(true)
                                   }}
-                                  className="px-2 py-1 bg-[rgba(138,99,210,0.9)] text-white text-xs rounded hover:bg-[rgba(138,99,210,1)] transition-colors"
+                                  className="px-2 py-1 bg-[rgba(138,99,210,0.9)] text-white text-xs rounded hover:bg-[rgba(138,99,210,1)] transition-colors whitespace-nowrap"
                                 >
                                   編輯
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setActivityRows(activityRows.filter((_, i) => i !== index))
                                   }}
-                                  className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+                                  className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors whitespace-nowrap"
                                 >
                                   刪除
                                 </button>
                               </div>
-                            </div>
-
-                            {/* 桌面版編輯和刪除按鈕欄位 */}
-                            <div className="hidden sm:flex w-16 flex-shrink-0 items-center justify-center flex-col gap-1">
-                              <button
-                                onClick={() => {
-                                  // 編輯功能：打開 modal 並載入該行的資料
-                                  // 計算排序後的索引，用於確定序號預設值
-                                  const sortedRows = sortActivityRows(activityRows)
-                                  const sortedIndex = sortedRows.findIndex(r => r.id === row.id)
-                                  setNewActivityData({
-                                    sequenceNumber: row.sequenceNumber || (sortedIndex >= 0 ? (sortedIndex + 1).toString() : ''),
-                                    selectedLearningObjectives: row.selectedLearningObjectives,
-                                    activityFlow: row.activityFlow,
-                                    time: row.time,
-                                    assessmentMethod: row.assessmentMethod,
-                                    notes: row.notes,
-                                  })
-                                  // 設置編輯模式，不刪除該行
-                                  setEditingActivityId(row.id)
-                                  setIsAddActivityModalOpen(true)
-                                }}
-                                className="px-2 py-1 bg-[rgba(138,99,210,0.9)] text-white text-xs rounded hover:bg-[rgba(138,99,210,1)] transition-colors"
-                              >
-                                編輯
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActivityRows(activityRows.filter((_, i) => i !== index))
-                                }}
-                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
-                              >
-                                刪除
-                              </button>
                             </div>
                           </div>
                         ))}
@@ -7327,14 +7679,25 @@ export default function CourseObjectives({
                     </div>
                   )}
 
-                  {/* 儲存按鈕 */}
-                  <div className="flex justify-end pt-4">
-                    <button 
-                      onClick={handleSave}
-                      className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-bold hover:bg-[rgba(138,99,210,1)] transition-colors"
+                  {/* 同一列：結束共備（白底紫字、較醒目）置中；儲存（實心紫）最右 */}
+                  <div className="flex items-center w-full pt-4 gap-2">
+                    <div className="flex-1 min-w-0" aria-hidden />
+                    <button
+                      type="button"
+                      onClick={() => void handleEndCoPrep()}
+                      className="px-6 py-2 shrink-0 bg-white border-2 border-[rgba(138,99,210,0.95)] text-[#6D28D9] rounded-lg font-semibold hover:bg-purple-50 transition-colors shadow-sm"
                     >
-                      儲存
+                      結束共備
                     </button>
+                    <div className="flex-1 flex justify-end min-w-0">
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-bold hover:bg-[rgba(138,99,210,1)] transition-colors"
+                      >
+                        儲存
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -7344,7 +7707,12 @@ export default function CourseObjectives({
                 <div className="space-y-6">
                   {/* 學習表現與活動、學習目標對應表 */}
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">學習表現與活動、學習目標對應表</h3>
+                    <div className="mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <h3 className="text-lg font-semibold text-gray-800 shrink-0">學習表現與活動、學習目標對應表</h3>
+                      <p className="text-sm text-gray-500 leading-relaxed">
+                        點擊空白欄位可進行勾選，再次點擊即可取消勾選。
+                      </p>
+                    </div>
                     {addedLearningPerformances.length > 0 && activityRows.length > 0 ? (
                       <div className="border border-gray-300">
                         {addedLearningPerformances.flatMap((performance, perfIndex) =>
@@ -7745,7 +8113,7 @@ export default function CourseObjectives({
                   {/* 底部按鈕 */}
                   <div className="flex justify-between pt-6">
                     <button
-                      onClick={onBack}
+                      onClick={handleHeaderBack}
                       className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
                     >
                       返回
@@ -7764,16 +8132,74 @@ export default function CourseObjectives({
                   </div>
                 </div>
               )}
+
+              {activeTab === 'history' && (
+                <div className="space-y-4 max-w-5xl">
+                  {activities.length === 0 ? (
+                    <p className="text-gray-500 py-8">尚無活動紀錄</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {activities.map((act) => {
+                        const cardTitle = activityDisplayLabel(act)
+                        const intro = buildHistoryActivityIntro(act)
+                        const designerName =
+                          (act.designer && act.designer.trim()) || act.creatorName || ''
+                        const hasMod =
+                          act.lastModifiedDate &&
+                          act.lastModifiedTime &&
+                          act.lastModifiedDate.trim() !== ''
+                        const dateStr = hasMod
+                          ? {
+                              d: act.lastModifiedDate!,
+                              t: act.lastModifiedTime!,
+                            }
+                          : { d: act.createdDate, t: act.createdTime }
+                        return (
+                          <ActivityCard
+                            key={act.id}
+                            activityName={cardTitle}
+                            introduction={intro}
+                            createdDate={dateStr.d}
+                            createdTime={dateStr.t}
+                            creatorName={designerName || undefined}
+                            personLabel="設計者"
+                            hidePersonAvatar
+                            hideEdit
+                            actionPlacement="footer"
+                            timeCaption="最後修改"
+                            onDownloadLessonPlan={() => {
+                              void handleHistoryLessonDownload(act.id, cardTitle)
+                            }}
+                            onPreviewLessonPlan={() => {
+                              setHistoryPreviewActivityId(act.id)
+                            }}
+                            onDelete={() => {
+                              onHistoryDelete?.(act.id)
+                              void onActivitiesRefresh?.()
+                              if (historyPreviewActivityId === act.id) {
+                                setHistoryPreviewActivityId(null)
+                              }
+                            }}
+                            onCardClick={() => {
+                              setHistoryPreviewActivityId(act.id)
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             {/* 右側區域 - 想法收斂結果（僅在課程目標和活動與評量設計標籤頁顯示） */}
             {(activeTab === 'objectives' || activeTab === 'activity') && (
-              <div className="w-full md:w-64 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="w-full md:w-64 flex-shrink-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 md:sticky md:top-0 md:self-start md:max-h-[calc(100vh-180px)]">
                 {/* 標題欄 */}
                 <div className="bg-gradient-to-r from-purple-400 to-purple-600 px-6 py-4 rounded-t-lg">
                   <h2 className="text-white font-semibold text-lg">想法收斂結果</h2>
                 </div>
                 {/* 內容區域 - 手機版水平滾動，桌面版垂直滾動 */}
-                <div className="flex-1 p-6 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden max-h-[600px]">
+                <div className="flex-1 p-6 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden" style={{ maxHeight: 'calc(100vh - 230px)' }}>
                   {convergenceResults.length === 0 ? (
                     <p className="text-gray-500 text-center py-8">尚無收斂結果</p>
                   ) : (
@@ -8051,6 +8477,38 @@ export default function CourseObjectives({
           </div>
         </div>
       </div>
+
+      <HistoryLessonPreviewModal
+        open={historyPreviewActivityId !== null}
+        activityId={historyPreviewActivityId}
+        subtitle={
+          historyPreviewActivityId
+            ? activityDisplayLabel(
+                activities.find((a) => a.id === historyPreviewActivityId) ?? {
+                  name: '',
+                }
+              ) || undefined
+            : undefined
+        }
+        onClose={() => setHistoryPreviewActivityId(null)}
+      />
+
+      <CoPrepOnboardingModal
+        open={showCoPrepOnboarding}
+        onDismiss={() => {
+          setShowCoPrepOnboarding(false)
+          try {
+            const raw = localStorage.getItem('user')
+            if (raw) {
+              const u = JSON.parse(raw) as { id?: string; userId?: string }
+              const uid = u.id || u.userId
+              if (uid) markCoPrepOnboardingSeen(String(uid))
+            }
+          } catch {
+            // ignore
+          }
+        }}
+      />
     </div>
   )
 }

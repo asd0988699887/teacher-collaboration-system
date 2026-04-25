@@ -3,6 +3,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
 
 // PUT: 更新想法
@@ -24,9 +25,18 @@ export async function PUT(
       )
     }
 
-    // 檢查想法是否存在
+    // 檢查想法是否存在，並取得目前內容（用於記錄修改前值）
     const ideas = await query(
-      'SELECT creator_id, community_id FROM ideas WHERE id = ?',
+      `SELECT
+        i.creator_id,
+        i.community_id,
+        i.is_convergence,
+        i.activity_id,
+        i.stage,
+        i.title,
+        i.content
+      FROM ideas i
+      WHERE i.id = ?`,
       [ideaId]
     ) as any[]
 
@@ -37,16 +47,20 @@ export async function PUT(
       )
     }
 
+    const currentIdea = ideas[0]
+
     // 判斷是否只更新位置或旋轉（允許所有用戶操作）
-    const isOnlyPositionOrRotation = 
+    const isOnlyPositionOrRotation =
       (position !== undefined || rotation !== undefined) &&
       activityId === undefined &&
       stage === undefined &&
       title === undefined &&
       content === undefined
 
-    // 如果不是只更新位置/旋轉，則需要檢查權限（只有建立者可以修改其他欄位）
-    if (!isOnlyPositionOrRotation && ideas[0].creator_id !== userId) {
+    // 收斂節點：允許所有成員修改內容
+    // 一般節點：只有建立者可以修改內容（位置/旋轉例外）
+    const isConvergenceNode = currentIdea.is_convergence === 1 || currentIdea.is_convergence === true
+    if (!isOnlyPositionOrRotation && !isConvergenceNode && currentIdea.creator_id !== userId) {
       return NextResponse.json(
         { error: '只有建立者可以修改想法的內容' },
         { status: 403 }
@@ -57,9 +71,9 @@ export async function PUT(
     if (activityId !== undefined && activityId !== null) {
       const activities = await query(
         'SELECT id FROM activities WHERE id = ? AND community_id = ?',
-        [activityId, ideas[0].community_id]
+        [activityId, currentIdea.community_id]
       ) as any[]
-      
+
       if (activities.length === 0) {
         return NextResponse.json(
           { error: '指定的共備活動不存在或不屬於該社群' },
@@ -71,6 +85,13 @@ export async function PUT(
     // 更新想法資訊
     const updateFields: string[] = []
     const updateValues: any[] = []
+
+    // 判斷是否有內容欄位變動（用於記錄修改歷史）
+    const hasContentChange =
+      (activityId !== undefined && activityId !== currentIdea.activity_id) ||
+      (stage !== undefined && stage !== currentIdea.stage) ||
+      (title !== undefined && title !== currentIdea.title) ||
+      (content !== undefined && content !== currentIdea.content)
 
     if (activityId !== undefined) {
       updateFields.push('activity_id = ?')
@@ -97,6 +118,13 @@ export async function PUT(
       updateValues.push(rotation)
     }
 
+    // 若有內容欄位變動，記錄最後編輯者資訊
+    if (hasContentChange) {
+      updateFields.push('last_edited_by = ?')
+      updateValues.push(userId)
+      updateFields.push('last_edited_at = NOW()')
+    }
+
     if (updateFields.length === 0) {
       return NextResponse.json(
         { error: '沒有需要更新的欄位' },
@@ -111,9 +139,36 @@ export async function PUT(
       updateValues
     )
 
-    // 查詢更新後的想法
+    // 若有內容欄位變動，插入修改紀錄
+    if (hasContentChange) {
+      const historyId = uuidv4()
+      await query(
+        `INSERT INTO idea_edit_history
+          (id, idea_id, editor_id, edited_at,
+           old_activity_id, new_activity_id,
+           old_stage, new_stage,
+           old_title, new_title,
+           old_content, new_content)
+        VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          historyId,
+          ideaId,
+          userId,
+          activityId !== undefined ? currentIdea.activity_id : null,
+          activityId !== undefined ? (activityId || null) : null,
+          stage !== undefined ? currentIdea.stage : null,
+          stage !== undefined ? stage : null,
+          title !== undefined ? currentIdea.title : null,
+          title !== undefined ? title : null,
+          content !== undefined ? currentIdea.content : null,
+          content !== undefined ? content : null,
+        ]
+      )
+    }
+
+    // 查詢更新後的想法（含最後編輯者）
     const updatedIdeas = await query(
-      `SELECT 
+      `SELECT
         i.id,
         i.activity_id AS activityId,
         i.stage,
@@ -127,10 +182,15 @@ export async function PUT(
         i.converged_idea_ids AS convergedIdeaIds,
         i.created_at AS createdDate,
         DATE_FORMAT(i.created_at, '%H:%i') AS createdTime,
+        i.creator_id AS creatorId,
+        i.last_edited_by AS lastEditedById,
+        i.last_edited_at AS lastEditedAt,
         u.nickname AS creatorName,
-        u.account AS creatorAccount
+        u.account AS creatorAccount,
+        eu.nickname AS lastEditedByName
       FROM ideas i
       INNER JOIN users u ON i.creator_id = u.id
+      LEFT JOIN users eu ON i.last_edited_by = eu.id
       WHERE i.id = ?`,
       [ideaId]
     ) as any[]
@@ -157,9 +217,21 @@ export async function PUT(
       }
     }
 
+    // 格式化 lastEditedAt
+    let lastEditedAt: string | undefined = undefined
+    if (updatedIdeas[0].lastEditedAt) {
+      const dt = new Date(updatedIdeas[0].lastEditedAt)
+      const y = dt.getFullYear()
+      const m = String(dt.getMonth() + 1).padStart(2, '0')
+      const d = String(dt.getDate()).padStart(2, '0')
+      const hh = String(dt.getHours()).padStart(2, '0')
+      const mm = String(dt.getMinutes()).padStart(2, '0')
+      lastEditedAt = `${y}/${m}/${d} ${hh}:${mm}`
+    }
+
     const formattedIdea = {
       id: updatedIdeas[0].id,
-      activityId: updatedIdeas[0].activityId || undefined, // 新增 activityId，但不顯示在卡片上
+      activityId: updatedIdeas[0].activityId || undefined,
       stage: updatedIdeas[0].stage || '',
       title: updatedIdeas[0].title,
       content: updatedIdeas[0].content || '',
@@ -180,8 +252,11 @@ export async function PUT(
           })()
         : '',
       createdTime: updatedIdeas[0].createdTime || '',
+      creatorId: updatedIdeas[0].creatorId || '',
       creatorName: updatedIdeas[0].creatorName || '',
       creatorAccount: updatedIdeas[0].creatorAccount || '',
+      lastEditedByName: updatedIdeas[0].lastEditedByName || undefined,
+      lastEditedAt,
     }
 
     return NextResponse.json(formattedIdea)
@@ -244,5 +319,3 @@ export async function DELETE(
     )
   }
 }
-
-

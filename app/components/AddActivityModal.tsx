@@ -14,8 +14,6 @@ interface AddActivityModalProps {
   editMode?: boolean
   initialData?: {
     name: string
-    isPublic: boolean
-    password: string
     introduction: string
   }
   onManageVersion?: () => void
@@ -44,14 +42,10 @@ export default function AddActivityModal({
       // 如果是編輯模式且有初始資料，使用初始資料；否則清空
       if (editMode && initialData) {
         setActivityName(initialData.name)
-        setIsPublic(initialData.isPublic)
-        setPassword(initialData.password)
         setIntroduction(initialData.introduction)
       } else {
         // 重置所有表單欄位
         setActivityName('')
-        setIsPublic(null)
-        setPassword('')
         setIntroduction('')
       }
       // Focus on the first input field when the modal opens
@@ -72,8 +66,8 @@ export default function AddActivityModal({
     if (activityName.trim()) {
       onAdd({
         name: activityName.trim(),
-        isPublic: isPublic ?? false,
-        password: password.trim(),
+        isPublic: true,
+        password: '',
         introduction: introduction.trim(),
       })
     }
@@ -81,10 +75,6 @@ export default function AddActivityModal({
 
   const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
     setActivityName(e.target.value)
-  }
-
-  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setPassword(e.target.value)
   }
 
   const handleIntroductionChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -131,54 +121,6 @@ export default function AddActivityModal({
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-400 text-gray-800"
             />
           </div>
-
-          {/* 是否公開 */}
-          <div className="mb-4">
-            <label className="block text-gray-700 font-medium mb-2">
-              是否公開:
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="isPublic"
-                  checked={isPublic === true}
-                  onChange={() => {
-                    setIsPublic(true)
-                    setPassword('') // 選擇「是」時清空密碼
-                  }}
-                  className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                />
-                <span className="text-gray-700">是</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="isPublic"
-                  checked={isPublic === false}
-                  onChange={() => setIsPublic(false)}
-                  className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                />
-                <span className="text-gray-700">否</span>
-              </label>
-            </div>
-          </div>
-
-          {/* 密碼 - 只在選擇「否」時顯示 */}
-          {isPublic === false && (
-            <div className="mb-4">
-              <label className="block text-gray-700 font-medium mb-2">
-                密碼:
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={handlePasswordChange}
-                placeholder="輸入密碼（選填）"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-400 text-gray-800"
-              />
-            </div>
-          )}
 
           {/* 活動介紹 */}
           <div className="mb-6">
