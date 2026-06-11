@@ -1,14 +1,19 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, ShadingType, PageOrientation, VerticalAlign } from 'docx'
-import ActivityCard from './ActivityCard'
-import HistoryLessonPreviewModal, { mapLessonPlanApiToPreview } from './HistoryLessonPreviewModal'
 import { activityDisplayLabel } from '@/lib/activityDisplay'
+import {
+  generateLessonPlanWordDocument,
+  type LessonPlanWordData,
+} from '@/lib/generateLessonPlanWord'
 import CoPrepOnboardingModal from './CoPrepOnboardingModal'
+import EndCoPrepChoiceModal from './EndCoPrepChoiceModal'
+import CompletedLessonPlansModal from './CompletedLessonPlansModal'
 import { hasSeenCoPrepOnboarding, markCoPrepOnboardingSeen } from '@/lib/coPrepOnboardingStorage'
+import type { CompletedLessonPlanItem } from '@/lib/lessonPlanSnapshot'
 
 interface ConvergenceResult {
   id: string
@@ -41,18 +46,6 @@ export interface ActivityForHistory {
   coPrepCompleted?: boolean
 }
 
-function buildHistoryActivityIntro(a: {
-  schoolLevel?: string
-  implementationGrade?: string
-  courseDomain?: string
-  unitName?: string
-}) {
-  const parts = [a.schoolLevel, a.implementationGrade, a.courseDomain, a.unitName]
-    .map((s) => (typeof s === 'string' ? s.trim() : ''))
-    .filter(Boolean)
-  return parts.length > 0 ? parts.join('') : '（尚無教案摘要）'
-}
-
 interface CourseObjectivesProps {
   activityName: string
   activityId?: string
@@ -77,6 +70,10 @@ interface CourseObjectivesProps {
   onActivitiesRefresh?: () => void | Promise<void>
   /** 嵌入模式：由外層 layout 提供 header 與 sidebar，本元件只渲染內容區 */
   embedded?: boolean
+  /** 歷史活動唯讀：僅供瀏覽，不可編輯 */
+  readOnly?: boolean
+  /** 歷史活動本次進入之教案編輯模式（隱藏結束共備等） */
+  historyLessonEditMode?: boolean
 }
 
 /** Word 匯出時可覆寫的欄位（歷史活動下載教案用） */
@@ -129,6 +126,8 @@ export default function CourseObjectives({
   onCoPrepCompleted,
   onActivitiesRefresh,
   embedded = false,
+  readOnly = false,
+  historyLessonEditMode = false,
 }: CourseObjectivesProps) {
   const [lessonPlanTitle, setLessonPlanTitle] = useState('')
   const [courseDomain, setCourseDomain] = useState('')
@@ -566,13 +565,13 @@ export default function CourseObjectives({
   const [checkedPerformances, setCheckedPerformances] = useState<Set<string>>(new Set())
   const [checkedContents, setCheckedContents] = useState<Set<string>>(new Set())
   
-  // 自動保存勾選狀態的節流計時器
-  const saveSpecificationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // 教案全表單自動儲存節流計時器
+  const saveLessonPlanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [isLessonPlanLoaded, setIsLessonPlanLoaded] = useState(false)
   
   // 標籤頁狀態
   const [activeTab, setActiveTab] = useState('objectives')
   /** 歷史活動：唯讀教案預覽視窗（不離開本頁） */
-  const [historyPreviewActivityId, setHistoryPreviewActivityId] = useState<string | null>(null)
 
   // 根據學段生成年級選項
   const getGradeOptions = () => {
@@ -658,6 +657,12 @@ export default function CourseObjectives({
 
   // 進行共備新手導覽
   const [showCoPrepOnboarding, setShowCoPrepOnboarding] = useState(false)
+  const [showCoPrepOnboardingReopenHint, setShowCoPrepOnboardingReopenHint] = useState(false)
+  const [showEndCoPrepChoice, setShowEndCoPrepChoice] = useState(false)
+  const [endCoPrepProcessing, setEndCoPrepProcessing] = useState(false)
+  const [showCompletedLessonPlans, setShowCompletedLessonPlans] = useState(false)
+  const [completedLessonPlans, setCompletedLessonPlans] = useState<CompletedLessonPlanItem[]>([])
+  const [completedLessonPlansLoading, setCompletedLessonPlansLoading] = useState(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
@@ -672,6 +677,13 @@ export default function CourseObjectives({
       // ignore
     }
   }, [])
+
+  useEffect(() => {
+    if (!showCoPrepOnboardingReopenHint) return
+    const timer = window.setTimeout(() => setShowCoPrepOnboardingReopenHint(false), 2800)
+    return () => window.clearTimeout(timer)
+  }, [showCoPrepOnboardingReopenHint])
+
   const [newActivityData, setNewActivityData] = useState<{
     sequenceNumber: string
     selectedLearningObjectives: string[]
@@ -2220,7 +2232,12 @@ export default function CourseObjectives({
   // 載入教案資料
   useEffect(() => {
     const loadLessonPlan = async () => {
-      if (!activityId) return
+      if (!activityId) {
+        setIsLessonPlanLoaded(false)
+        return
+      }
+
+      setIsLessonPlanLoaded(false)
 
       try {
         const response = await fetch(`/api/lesson-plans/${activityId}`)
@@ -2411,11 +2428,40 @@ export default function CourseObjectives({
         }
       } catch (error) {
         console.error('載入教案資料錯誤:', error)
+      } finally {
+        setIsLessonPlanLoaded(true)
       }
     }
 
     loadLessonPlan()
   }, [activityId, lessonPlanReloadKey])
+
+  const loadCompletedLessonPlans = useCallback(async () => {
+    if (!activityId) {
+      setCompletedLessonPlans([])
+      return
+    }
+    setCompletedLessonPlansLoading(true)
+    try {
+      const response = await fetch(`/api/activities/${activityId}/completed-lesson-plans`)
+      const data = await response.json()
+      if (response.ok && Array.isArray(data.items)) {
+        setCompletedLessonPlans(data.items)
+      } else {
+        setCompletedLessonPlans([])
+      }
+    } catch (error) {
+      console.error('載入已完成教案錯誤:', error)
+      setCompletedLessonPlans([])
+    } finally {
+      setCompletedLessonPlansLoading(false)
+    }
+  }, [activityId])
+
+  useEffect(() => {
+    if (!activityId || readOnly) return
+    void loadCompletedLessonPlans()
+  }, [activityId, readOnly, loadCompletedLessonPlans])
 
   // 當節數或學段改變時，根據學段自動計算分鐘數
   // 國小：1 節課 = 40 分鐘
@@ -2822,7 +2868,7 @@ export default function CourseObjectives({
 
   // 生成 Word 文件 - 完全按照指定的表格結構
   const generateWord = async (override?: LessonPlanWordOverride) => {
-    const o = {
+    const data: LessonPlanWordData = {
       lessonPlanTitle: override?.lessonPlanTitle ?? lessonPlanTitle,
       designer: override?.designer ?? designer,
       courseDomain: override?.courseDomain ?? courseDomain,
@@ -2839,657 +2885,7 @@ export default function CourseObjectives({
       addedLearningContents: override?.addedLearningContents ?? addedLearningContents,
       activityRows: override?.activityRows ?? activityRows,
     }
-    const children: (Paragraph | Table)[] = []
-
-    // 添加標題「12年國教素養導向教學方案格式」
-    children.push(
-      new Paragraph({
-        children: [new TextRun({ 
-          text: '12年國教素養導向教學方案格式',
-          bold: true,
-          size: 32, // 16pt = 32 half-points
-          color: '000000',
-        })],
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 240, before: 0 }, // 標題後留一些間距
-      })
-    )
-
-    // 定義邊框樣式（根據模板：外框較粗，內框較細）
-    // Word XML 中 sz="12" 對應約 1.5pt，sz="4" 對應約 0.5pt
-    // docx 庫中 size 單位是 1/20 point，所以 0.75pt = 15, 0.1pt = 2
-    // 外框調整為 0.75pt（size: 15），內框調整為 0.1pt（size: 2）
-    const outerBorderStyle = {
-      top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-    }
-    
-    const innerBorderStyle = {
-      top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-    }
-
-    // 外框 cell 樣式（用於表格最外圍的 cell）
-    // 第一行和最後一行的 cell：top/bottom 使用外框，left/right 使用內框
-    // 第一列和最後一列的 cell：left/right 使用外框，top/bottom 使用內框
-    // 角落的 cell：所有邊都使用外框
-    const outerTopBorderStyle = {
-      top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-    }
-    
-    const outerBottomBorderStyle = {
-      top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-    }
-    
-    const outerLeftBorderStyle = {
-      top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-    }
-    
-    const outerRightBorderStyle = {
-      top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-    }
-    
-    const outerCornerTopLeftStyle = {
-      top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-    }
-    
-    const outerCornerTopRightStyle = {
-      top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-    }
-    
-    const outerCornerBottomLeftStyle = {
-      top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-    }
-    
-    const outerCornerBottomRightStyle = {
-      top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-      left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-      right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-    }
-
-    // 標籤欄位樣式（移除底色設定，保持白色）
-    // 使用內框樣式，因為標題欄位在表格內部
-    const labelCellStyle = {
-      borders: innerBorderStyle,
-      // 移除 shading 設定，讓標題欄位保持白色背景
-    }
-
-    // 內容欄位樣式（白底，使用內框樣式）
-    const contentCellStyle = {
-      borders: innerBorderStyle,
-    }
-
-    // 文字樣式（約 12pt）
-    const textStyle = { size: 24, color: '000000' } // 12pt = 24 half-points, 黑色文字（非粗體）
-    
-    // 標題欄位文字樣式（黑色粗體字）
-    const headerTextStyle = { size: 24, color: '000000', bold: true } // 12pt = 24 half-points, 黑色粗體文字
-
-    // ========================
-    // 【表格一：教案基本資料】
-    // ========================
-    // 10列、4欄，欄寬比例：18%, 42%, 15%, 25%
-    
-    const teachingTimeText = o.teachingTimeLessons && o.teachingTimeMinutes
-      ? `${o.teachingTimeLessons} 節課,共 ${o.teachingTimeMinutes} 分鐘`
-      : o.teachingTimeLessons
-      ? `${o.teachingTimeLessons} 節課`
-      : o.teachingTimeMinutes
-      ? `${o.teachingTimeMinutes} 分鐘`
-      : ''
-    
-    const coreCompetencyText = o.addedCoreCompetencies.length > 0
-      ? o.addedCoreCompetencies.map(c => c.content).join('\n')
-      : ''
-    
-    const learningPerformanceText = o.addedLearningPerformances.length > 0
-      ? o.addedLearningPerformances.flatMap(p => p.content.map(c => `${c.code}: ${c.description}`)).join('\n')
-      : ''
-    
-    const learningContentText = o.addedLearningContents.length > 0
-      ? o.addedLearningContents.flatMap(c => c.content.map(cont => `${cont.code}: ${cont.description}`)).join('\n')
-      : ''
-
-    // 建立表格一的 10 列
-    const table1Rows: TableRow[] = [
-      // Row 0: 教案標題 + 設計者（4欄）- 第一行，使用外框樣式
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '教案標題', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' }, // 教案標題右邊是內框
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: o.lessonPlanTitle || '', ...textStyle })] })],
-            width: { size: 42, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '設計者', ...headerTextStyle })] })],
-            width: { size: 15, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' }, // 設計者左邊是內框
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: o.designer || '', ...textStyle })] })],
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            borders: outerCornerTopRightStyle, // 右上角，使用外框
-          }),
-        ],
-      }),
-      // Row 1: 課程領域 + 授課時間（4欄）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '課程領域', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: o.courseDomain || '', ...textStyle })] })],
-            width: { size: 42, type: WidthType.PERCENTAGE },
-            ...contentCellStyle,
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '授課時間', ...headerTextStyle })] })],
-            width: { size: 15, type: WidthType.PERCENTAGE },
-            ...labelCellStyle,
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: teachingTimeText, ...textStyle })] })],
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 2: 單元名稱（第1欄標籤，第2-4欄合併）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '單元名稱', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: o.unitName || '', ...textStyle })] })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 3: 實施年級（第1欄標籤，第2-4欄合併，顯示學段 + 年級）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '實施年級', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ 
-                text: o.schoolLevel && o.implementationGrade 
-                  ? `${o.schoolLevel} ${o.implementationGrade}年級` 
-                  : (o.schoolLevel || (o.implementationGrade ? `${o.implementationGrade}年級` : '')), 
-                ...textStyle 
-              })] 
-            })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 4: 核心素養（第1欄標籤，第2-4欄合併）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '核心素養', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: coreCompetencyText, ...textStyle })],
-              spacing: { after: 300, before: 300 }, // 增加上下間距，提高欄位高度（1.5倍）
-            })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 5: 學習表現（第1欄標籤，第2-4欄合併）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '學習表現', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: learningPerformanceText, ...textStyle })],
-              spacing: { after: 300, before: 300 }, // 增加上下間距，提高欄位高度（1.5倍）
-            })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 6: 學習內容（第1欄標籤，第2-4欄合併）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '學習內容', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: learningContentText, ...textStyle })],
-              spacing: { after: 300, before: 300 }, // 增加上下間距，提高欄位高度（1.5倍）
-            })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 7: 教材來源（第1欄標籤，第2-4欄合併）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '教材來源', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: o.materialSource || '', ...textStyle })] })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 8: 教學設備/資源（第1欄標籤，第2-4欄合併）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '教學設備/資源', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerLeftBorderStyle, // 左側，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: o.teachingEquipment || '', ...textStyle })],
-              spacing: { after: 200, before: 200 }, // 增加上下間距，提高欄位高度
-            })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerRightBorderStyle, // 右側，使用外框
-          }),
-        ],
-      }),
-      // Row 9: 學習目標（第1欄標籤，第2-4欄合併）- 最後一行，使用外框樣式
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: '學習目標', ...headerTextStyle })] })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: outerCornerBottomLeftStyle, // 左下角，使用外框
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ 
-                text: o.learningObjectives.length > 0 
-                  ? o.learningObjectives.map(obj => obj.content).join('\n')
-                  : '', 
-                ...textStyle 
-              })],
-              spacing: { after: 300, before: 300 }, // 增加上下間距，提高欄位高度（1.5倍）
-            })],
-            columnSpan: 3,
-            width: { size: 82, type: WidthType.PERCENTAGE },
-            borders: outerCornerBottomRightStyle, // 右下角，使用外框
-          }),
-        ],
-      }),
-    ]
-
-    // 表格一 - 使用百分比寬度，確保適應頁面寬度
-    children.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: table1Rows,
-      })
-    )
-
-    // 留一點空白
-    children.push(
-      new Paragraph({
-        text: '',
-        spacing: { after: 200 },
-      })
-    )
-
-    // ========================
-    // 【表格二：學習活動設計】
-    // ========================
-    // 5列、5欄，欄寬比例：第1-2欄合計47%（第1欄稍寬，第2欄稍窄），第3欄12%，第4欄12%，第5欄29%
-    
-    const activityTableHeaderStyle = {
-      borders: outerBorderStyle,
-      // 移除 shading 設定，讓標題欄位保持白色背景
-    }
-
-    // 建立表格二的 5 列
-    const table2Rows: TableRow[] = [
-      // Row 0: 學習活動設計（5欄合併成1格，置中）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: '學習活動設計', ...headerTextStyle })],
-              alignment: AlignmentType.CENTER,
-            })],
-            columnSpan: 6,
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' }, // 學習活動設計下面是內框
-              left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-            },
-            // 移除 shading 設定，讓標題欄位保持白色背景
-          }),
-        ],
-      }),
-      // Row 1: 標題列（#、學習目標、活動流程、時間、評量方式、備註）
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: '#', ...headerTextStyle })],
-              alignment: AlignmentType.CENTER,
-            })],
-            width: { size: 6, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: '活動目標', ...headerTextStyle })],
-              alignment: AlignmentType.CENTER,
-            })],
-            width: { size: 15, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: '活動流程', ...headerTextStyle })],
-              alignment: AlignmentType.CENTER,
-            })],
-            width: { size: 40, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: '時間', ...headerTextStyle })],
-              alignment: AlignmentType.CENTER,
-            })],
-            width: { size: 8, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: '評量方式', ...headerTextStyle })],
-              alignment: AlignmentType.CENTER,
-            })],
-            width: { size: 18, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-            },
-          }),
-          new TableCell({
-            children: [new Paragraph({ 
-              children: [new TextRun({ text: '備註', ...headerTextStyle })],
-              alignment: AlignmentType.CENTER,
-            })],
-            width: { size: 13, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              left: { style: BorderStyle.SINGLE, size: 2, color: '000000' },
-              right: { style: BorderStyle.SINGLE, size: 15, color: '000000' },
-            },
-          }),
-        ],
-      }),
-    ]
-
-    // Row 2: 活動資料列
-    if (o.activityRows.length > 0) {
-      // 如果有活動資料，為每個活動建立一行
-      const sortedRows = sortActivityRows(o.activityRows)
-      sortedRows.forEach((row, index) => {
-        // 取得選中的學習目標文字
-        const selectedObjectives = row.selectedLearningObjectives
-          .map(idx => {
-            const objIdx = parseInt(idx)
-            return o.learningObjectives[objIdx]?.content || ''
-          })
-          .filter(Boolean)
-          .join('、')
-        
-        const isLastRow = index === sortedRows.length - 1
-        
-        table2Rows.push(
-          new TableRow({
-            children: [
-              new TableCell({
-                children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.sequenceNumber || (index + 1).toString(), ...textStyle })],
-                  alignment: AlignmentType.CENTER,
-                  spacing: { after: 100, before: 100 },
-                })],
-                width: { size: 6, type: WidthType.PERCENTAGE },
-                borders: isLastRow ? outerCornerBottomLeftStyle : outerLeftBorderStyle, // 最後一行使用底部外框
-                verticalAlign: VerticalAlign.TOP,
-              }),
-              new TableCell({
-                children: [new Paragraph({ 
-                  children: [new TextRun({ text: selectedObjectives || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 },
-                })],
-                width: { size: 20, type: WidthType.PERCENTAGE },
-                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
-                verticalAlign: VerticalAlign.TOP,
-              }),
-              new TableCell({
-                children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.activityFlow || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 },
-                })],
-                width: { size: 35, type: WidthType.PERCENTAGE },
-                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
-                verticalAlign: VerticalAlign.TOP,
-              }),
-              new TableCell({
-                children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.time || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 },
-                })],
-                width: { size: 8, type: WidthType.PERCENTAGE },
-                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
-                verticalAlign: VerticalAlign.TOP,
-              }),
-              new TableCell({
-                children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.assessmentMethod || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 },
-                })],
-                width: { size: 18, type: WidthType.PERCENTAGE },
-                ...(isLastRow ? { borders: { ...contentCellStyle.borders, bottom: { style: BorderStyle.SINGLE, size: 15, color: '000000' } } } : contentCellStyle),
-                verticalAlign: VerticalAlign.TOP,
-              }),
-              new TableCell({
-                children: [new Paragraph({ 
-                  children: [new TextRun({ text: row.notes || '', ...textStyle })],
-                  spacing: { after: 100, before: 100 },
-                })],
-                width: { size: 13, type: WidthType.PERCENTAGE },
-                borders: isLastRow ? outerCornerBottomRightStyle : outerRightBorderStyle, // 最後一行使用底部外框
-                verticalAlign: VerticalAlign.TOP,
-              }),
-            ],
-          })
-        )
-      })
-    } else {
-      // 如果沒有活動資料，顯示一行空白（最小高度）
-      table2Rows.push(
-        new TableRow({
-          children: [
-            new TableCell({
-              children: [new Paragraph({ 
-                text: '',
-                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
-              })],
-              columnSpan: 2,
-              width: { size: 47, type: WidthType.PERCENTAGE },
-              borders: outerLeftBorderStyle, // 左側，使用外框
-              verticalAlign: VerticalAlign.TOP,
-            }),
-            new TableCell({
-              children: [new Paragraph({ 
-                text: '',
-                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
-              })],
-              width: { size: 12, type: WidthType.PERCENTAGE },
-              ...contentCellStyle,
-              verticalAlign: VerticalAlign.TOP,
-            }),
-            new TableCell({
-              children: [new Paragraph({ 
-                text: '',
-                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
-              })],
-              width: { size: 12, type: WidthType.PERCENTAGE },
-              ...contentCellStyle,
-              verticalAlign: VerticalAlign.TOP,
-            }),
-            new TableCell({
-              children: [new Paragraph({ 
-                text: '',
-                spacing: { after: 200, before: 200 }, // 最小間距，避免行高過大
-              })],
-              width: { size: 29, type: WidthType.PERCENTAGE },
-              borders: outerRightBorderStyle, // 右側，使用外框
-              verticalAlign: VerticalAlign.TOP,
-            }),
-          ],
-        })
-      )
-    }
-
-
-    // 表格二 - 使用百分比寬度，確保適應頁面寬度
-    children.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: table2Rows,
-      })
-    )
-
-    const doc = new Document({
-      sections: [
-        {
-          properties: {
-            page: {
-              size: {
-                orientation: PageOrientation.PORTRAIT,
-                width: 12240, // A4 寬度 (21cm = 11906 twips, 但使用 12240 以確保足夠)
-                height: 15840, // A4 高度 (29.7cm = 16838 twips, 但使用 15840 以確保足夠)
-              },
-              margin: {
-                top: 720, // 減少上邊距 (約 1.27cm，原本約 2.54cm)
-                right: 720, // 減少右邊距 (約 1.27cm，原本約 2.54cm)
-                bottom: 720, // 減少下邊距 (約 1.27cm，原本約 2.54cm)
-                left: 720, // 減少左邊距 (約 1.27cm，原本約 2.54cm)
-              },
-            },
-          },
-          children,
-        },
-      ],
-    })
-
-    return doc
+    return generateLessonPlanWordDocument(data)
   }
 
   // 使用 File System Access API 儲存 PDF
@@ -3508,71 +2904,6 @@ export default function CourseObjectives({
     const writable = await fileHandle.createWritable()
     await writable.write(blob)
     await writable.close()
-  }
-
-  /** 歷史活動：依活動 ID 從 API 載入並下載 Word 教案（與編輯中下載相同格式） */
-  const handleHistoryLessonDownload = async (historyActivityId: string, fileBaseName: string) => {
-    try {
-      const res = await fetch(`/api/lesson-plans/${historyActivityId}`)
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error((data as { error?: string }).error || '載入教案失敗')
-      }
-      const m = mapLessonPlanApiToPreview(data)
-      if (!m) {
-        alert('此活動尚無教案資料可下載')
-        return
-      }
-      const override: LessonPlanWordOverride = {
-        lessonPlanTitle: m.lessonPlanTitle,
-        designer: m.designer,
-        courseDomain: m.courseDomain,
-        teachingTimeLessons: m.teachingTimeLessons,
-        teachingTimeMinutes: m.teachingTimeMinutes,
-        unitName: m.unitName,
-        schoolLevel: m.schoolLevel,
-        implementationGrade: m.implementationGrade,
-        materialSource: m.materialSource,
-        teachingEquipment: m.teachingEquipment,
-        learningObjectives: m.learningObjectives,
-        addedCoreCompetencies: m.addedCoreCompetencies,
-        addedLearningPerformances: m.addedLearningPerformances.map((g) => ({
-          ...g,
-          content: g.content || [],
-        })),
-        addedLearningContents: m.addedLearningContents.map((g) => ({
-          ...g,
-          content: g.content || [],
-        })),
-        activityRows: m.activityRows.map((r) => ({
-          id: r.id,
-          sequenceNumber: r.sequenceNumber,
-          selectedLearningObjectives: r.selectedLearningObjectives,
-          activityFlow: r.activityFlow,
-          time: r.time,
-          assessmentMethod: r.assessmentMethod,
-          notes: r.notes,
-        })),
-      }
-      const safeBase =
-        (fileBaseName && fileBaseName.replace(/[\\/:*?"<>|]/g, '_').trim()) ||
-        m.lessonPlanTitle.replace(/[\\/:*?"<>|]/g, '_').trim() ||
-        '教案'
-      const fileName = `${safeBase}_${new Date().toISOString().split('T')[0]}.docx`
-      const doc = await generateWord(override)
-      const blob = await Packer.toBlob(doc)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-    } catch (e: unknown) {
-      console.error(e)
-      alert(e instanceof Error ? e.message : '下載教案失敗')
-    }
   }
 
   /** 結束共備前：檢查「課程目標」分頁應填項目是否齊全 */
@@ -3595,8 +2926,174 @@ export default function CourseObjectives({
     return missing
   }
 
-  // 儲存表單資料並新增版本記錄
+  const formContentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!readOnly) return
+    setActiveTab((prev) =>
+      prev === 'specification' || prev === 'preview' ? prev : 'preview'
+    )
+  }, [readOnly])
+
+  useEffect(() => {
+    if (!readOnly) return
+    const root = formContentRef.current
+    if (!root) return
+
+    const lockForm = () => {
+      root.querySelectorAll('input, textarea, select').forEach((el) => {
+        if (el instanceof HTMLInputElement) {
+          if (el.type === 'checkbox' || el.type === 'radio') {
+            el.disabled = true
+          } else if (el.type !== 'button' && el.type !== 'submit') {
+            el.readOnly = true
+          }
+        } else if (el instanceof HTMLTextAreaElement) {
+          el.readOnly = true
+        } else if (el instanceof HTMLSelectElement) {
+          el.disabled = true
+        }
+      })
+      const actionLabels = ['新增', '刪除', '儲存為新版本', '結束共備', '編輯', '新增活動']
+      root.querySelectorAll('button').forEach((btn) => {
+        const text = btn.textContent?.trim() ?? ''
+        if (actionLabels.some((label) => text === label || text.startsWith(label))) {
+          btn.hidden = true
+        }
+      })
+    }
+
+    lockForm()
+    const observer = new MutationObserver(lockForm)
+    observer.observe(root, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [readOnly, activeTab])
+
+  const buildLessonPlanFormData = useCallback((isAutoSave: boolean, userId: string) => ({
+    userId,
+    isAutoSave,
+    lessonPlanTitle,
+    courseDomain,
+    designer,
+    unitName,
+    schoolLevel,
+    implementationGrade,
+    teachingTimeLessons,
+    teachingTimeMinutes,
+    materialSource,
+    teachingEquipment,
+    learningObjectives: learningObjectives.map((obj) => obj.content).join('|||'),
+    addedCoreCompetencies,
+    addedLearningPerformances,
+    addedLearningContents,
+    activityRows,
+    assessmentTools,
+    references,
+    checkedPerformances: Array.from(checkedPerformances),
+    checkedContents: Array.from(checkedContents),
+  }), [
+    lessonPlanTitle,
+    courseDomain,
+    designer,
+    unitName,
+    schoolLevel,
+    implementationGrade,
+    teachingTimeLessons,
+    teachingTimeMinutes,
+    materialSource,
+    teachingEquipment,
+    learningObjectives,
+    addedCoreCompetencies,
+    addedLearningPerformances,
+    addedLearningContents,
+    activityRows,
+    assessmentTools,
+    references,
+    checkedPerformances,
+    checkedContents,
+  ])
+
+  const autoSaveLessonPlan = useCallback(async () => {
+    if (readOnly || !activityId) return
+
+    const userData = localStorage.getItem('user')
+    let userId = ''
+    if (userData) {
+      try {
+        const user = JSON.parse(userData)
+        userId = user.id || user.account || ''
+      } catch {
+        // 忽略解析錯誤
+      }
+    }
+
+    if (!userId) return
+
+    try {
+      const response = await fetch(`/api/lesson-plans/${activityId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(buildLessonPlanFormData(true, userId)),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('自動儲存教案失敗:', errorData)
+      } else {
+        console.log('✅ 教案已自動儲存（不建立新版本）')
+      }
+    } catch (error) {
+      console.error('自動儲存教案錯誤:', error)
+    }
+  }, [readOnly, activityId, buildLessonPlanFormData])
+
+  useEffect(() => {
+    if (readOnly || !activityId || !isLessonPlanLoaded) return
+
+    if (saveLessonPlanTimeoutRef.current) {
+      clearTimeout(saveLessonPlanTimeoutRef.current)
+    }
+
+    saveLessonPlanTimeoutRef.current = setTimeout(() => {
+      void autoSaveLessonPlan()
+    }, 1500)
+
+    return () => {
+      if (saveLessonPlanTimeoutRef.current) {
+        clearTimeout(saveLessonPlanTimeoutRef.current)
+      }
+    }
+  }, [
+    readOnly,
+    activityId,
+    isLessonPlanLoaded,
+    lessonPlanTitle,
+    courseDomain,
+    designer,
+    unitName,
+    schoolLevel,
+    implementationGrade,
+    teachingTimeLessons,
+    teachingTimeMinutes,
+    materialSource,
+    teachingEquipment,
+    learningObjectives,
+    addedCoreCompetencies,
+    addedLearningPerformances,
+    addedLearningContents,
+    activityRows,
+    assessmentTools,
+    references,
+    checkedPerformances,
+    checkedContents,
+    autoSaveLessonPlan,
+  ])
+
+  // 手動儲存為新版本
   const handleSave = async () => {
+    if (readOnly) return
     if (!activityId) {
       alert('無法儲存：缺少活動 ID')
       return
@@ -3621,31 +3118,7 @@ export default function CourseObjectives({
       return
     }
 
-    // 收集所有表單資料
-    const formData = {
-      userId,
-      // 明確標記為手動儲存，需要建立版本記錄
-      isAutoSave: false,
-      lessonPlanTitle,
-      courseDomain,
-      designer,
-      unitName,
-      schoolLevel,
-      implementationGrade,
-      teachingTimeLessons,
-      teachingTimeMinutes,
-      materialSource,
-      teachingEquipment,
-      learningObjectives: learningObjectives.map(obj => obj.content).join('|||'), // 將陣列轉換為字串，使用 '|||' 分隔不同項目，避免與內容中的換行符混淆
-      addedCoreCompetencies,
-      addedLearningPerformances,
-      addedLearningContents,
-      activityRows,
-      assessmentTools,
-      references,
-      checkedPerformances: Array.from(checkedPerformances),
-      checkedContents: Array.from(checkedContents),
-    }
+    const formData = buildLessonPlanFormData(false, userId)
 
     try {
       // 呼叫 API 儲存教案資料
@@ -3678,7 +3151,7 @@ export default function CourseObjectives({
       }
       
       // 顯示成功訊息
-      alert('教案資料儲存成功！')
+      alert('已儲存為新版本！')
       
       // 通知父組件版本已建立（如果需要的話）
       if (onVersionCreated) {
@@ -3702,24 +3175,7 @@ export default function CourseObjectives({
     }
   }
 
-  /** 結束共備：驗證 → 儲存教案 → 標記活動完成（列入歷史活動） */
-  const handleEndCoPrep = async () => {
-    const missingObj = getEndCoPrepMissingCourseObjectiveFields()
-    if (missingObj.length > 0) {
-      alert(
-        `無法結束共備：課程目標尚有未填寫或未完成項目。\n\n請先至「課程目標」分頁完成下列項目：\n• ${missingObj.join('\n• ')}`
-      )
-      return
-    }
-    if (activityRows.length < 1) {
-      alert('無法結束共備：請在「活動與評量設計」至少新增一項活動。')
-      return
-    }
-    if (!activityId) {
-      alert('無法結束共備：缺少活動 ID')
-      return
-    }
-
+  const getEndCoPrepUser = () => {
     const userData = localStorage.getItem('user')
     let userId = ''
     let userNickname = '使用者'
@@ -3732,69 +3188,90 @@ export default function CourseObjectives({
         // ignore
       }
     }
+    return { userId, userNickname }
+  }
+
+  const validateEndCoPrepRequirements = () => {
+    if (readOnly) return false
+    const missingObj = getEndCoPrepMissingCourseObjectiveFields()
+    if (missingObj.length > 0) {
+      alert(
+        `無法結束共備：課程目標尚有未填寫或未完成項目。\n\n請先至「課程目標」分頁完成下列項目：\n• ${missingObj.join('\n• ')}`
+      )
+      return false
+    }
+    if (activityRows.length < 1) {
+      alert('無法結束共備：請在「活動與評量設計」至少新增一項活動。')
+      return false
+    }
+    if (!activityId) {
+      alert('無法結束共備：缺少活動 ID')
+      return false
+    }
+    const { userId } = getEndCoPrepUser()
+    if (!userId) {
+      alert('無法結束共備：請先登入')
+      return false
+    }
+    return true
+  }
+
+  const saveLessonPlanBeforeEndCoPrep = async (userId: string, userNickname: string) => {
+    if (!activityId) throw new Error('缺少活動 ID')
+
+    const saveRes = await fetch(`/api/lesson-plans/${activityId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildLessonPlanFormData(false, userId)),
+    })
+    if (!saveRes.ok) {
+      const errorData = await saveRes.json().catch(() => ({}))
+      const errorMessage = errorData.details
+        ? `${errorData.error}: ${errorData.details}`
+        : errorData.error || '儲存失敗'
+      throw new Error(errorMessage)
+    }
+    const result = await saveRes.json()
+    if (result.data?.versionNumber) {
+      const versionNumber = `v${result.data.versionNumber}`
+      setCurrentVersion(versionNumber)
+      const storageKey = `currentVersion_${activityId}`
+      localStorage.setItem(storageKey, versionNumber)
+    }
+    if (onVersionCreated && result.data?.versionNumber) {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      const hours = String(now.getHours()).padStart(2, '0')
+      const minutes = String(now.getMinutes()).padStart(2, '0')
+      onVersionCreated(activityId, {
+        versionNumber: `v${result.data.versionNumber}`,
+        lastModifiedDate: `${year}/${month}/${day}`,
+        lastModifiedTime: `${hours}:${minutes}`,
+        lastModifiedUser: userNickname,
+      })
+    }
+  }
+
+  /** 點擊結束共備：先驗證，再開啟選項視窗 */
+  const handleEndCoPrepClick = () => {
+    if (!validateEndCoPrepRequirements()) return
+    setShowEndCoPrepChoice(true)
+  }
+
+  /** 結束此活動：儲存教案 → 標記活動完成（列入歷史活動） */
+  const handleConfirmEndActivity = async () => {
+    if (!activityId) return
+    const { userId, userNickname } = getEndCoPrepUser()
     if (!userId) {
       alert('無法結束共備：請先登入')
       return
     }
 
-    const formData = {
-      userId,
-      isAutoSave: false,
-      lessonPlanTitle,
-      courseDomain,
-      designer,
-      unitName,
-      schoolLevel,
-      implementationGrade,
-      teachingTimeLessons,
-      teachingTimeMinutes,
-      materialSource,
-      teachingEquipment,
-      learningObjectives: learningObjectives.map((obj) => obj.content).join('|||'),
-      addedCoreCompetencies,
-      addedLearningPerformances,
-      addedLearningContents,
-      activityRows,
-      assessmentTools,
-      references,
-      checkedPerformances: Array.from(checkedPerformances),
-      checkedContents: Array.from(checkedContents),
-    }
-
+    setEndCoPrepProcessing(true)
     try {
-      const saveRes = await fetch(`/api/lesson-plans/${activityId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-      if (!saveRes.ok) {
-        const errorData = await saveRes.json().catch(() => ({}))
-        const errorMessage = errorData.details
-          ? `${errorData.error}: ${errorData.details}`
-          : errorData.error || '儲存失敗'
-        throw new Error(errorMessage)
-      }
-      const result = await saveRes.json()
-      if (result.data?.versionNumber) {
-        const versionNumber = `v${result.data.versionNumber}`
-        setCurrentVersion(versionNumber)
-        const storageKey = `currentVersion_${activityId}`
-        localStorage.setItem(storageKey, versionNumber)
-      }
-      if (onVersionCreated && result.data?.versionNumber) {
-        const now = new Date()
-        const year = now.getFullYear()
-        const month = String(now.getMonth() + 1).padStart(2, '0')
-        const day = String(now.getDate()).padStart(2, '0')
-        const hours = String(now.getHours()).padStart(2, '0')
-        const minutes = String(now.getMinutes()).padStart(2, '0')
-        onVersionCreated(activityId, {
-          versionNumber: `v${result.data.versionNumber}`,
-          lastModifiedDate: `${year}/${month}/${day}`,
-          lastModifiedTime: `${hours}:${minutes}`,
-          lastModifiedUser: userNickname,
-        })
-      }
+      await saveLessonPlanBeforeEndCoPrep(userId, userNickname)
 
       const completeRes = await fetch(`/api/activities/${activityId}/complete`, {
         method: 'POST',
@@ -3806,108 +3283,57 @@ export default function CourseObjectives({
         throw new Error(completeData.error || completeData.details || '結束共備失敗')
       }
 
-      alert('共備已結束，此活動已移至「歷史活動」。')
-      setActiveTab('history')
+      setShowEndCoPrepChoice(false)
+      alert('共備已結束，此活動已移至首頁「歷史活動」。')
       await onCoPrepCompleted?.()
       await onActivitiesRefresh?.()
     } catch (error: unknown) {
       console.error('結束共備錯誤:', error)
       alert(error instanceof Error ? error.message : '結束共備失敗')
+    } finally {
+      setEndCoPrepProcessing(false)
     }
   }
 
-  // 自動保存雙向細目表勾選狀態（不建立新版本）
-  const autoSaveSpecification = useCallback(async () => {
+  /** 產生新教案：封存目前教案並重置為空白 */
+  const handleConfirmNewLessonPlan = async () => {
     if (!activityId) return
-
-    // 獲取當前使用者資訊
-    const userData = localStorage.getItem('user')
-    let userId = ''
-    if (userData) {
-      try {
-        const user = JSON.parse(userData)
-        userId = user.id || user.account || ''
-      } catch (e) {
-        // 忽略解析錯誤
-      }
-    }
-
-    if (!userId) return
-
-    // 收集勾選狀態資料（需要包含必要的關聯資料以便 API 正確處理）
-    const formData = {
-      userId,
-      // 明確標記為自動保存，不建立版本記錄
-      isAutoSave: true,
-      // 只傳遞勾選狀態相關的資料，其他使用現有值
-      checkedPerformances: Array.from(checkedPerformances),
-      checkedContents: Array.from(checkedContents),
-      // API 需要這些資料來正確映射 ID
-      addedLearningPerformances,
-      addedLearningContents,
-      activityRows,
-    }
-
-    try {
-      // 呼叫 API 儲存勾選狀態（API 會處理只更新勾選狀態的部分）
-      const response = await fetch(`/api/lesson-plans/${activityId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        // 如果是教案不存在的錯誤，靜默處理（教案尚未建立）
-        if (errorData.error && errorData.error.includes('無法建立新教案')) {
-          console.log('⚠️ 教案尚未建立，跳過自動保存勾選狀態')
-        } else {
-          console.error('自動保存勾選狀態失敗:', errorData)
-        }
-        // 不顯示錯誤訊息，避免打擾用戶
-      } else {
-        console.log('✅ 雙向細目表勾選狀態已自動保存（不建立版本）')
-      }
-    } catch (error: any) {
-      console.error('自動保存勾選狀態錯誤:', error)
-      // 不顯示錯誤訊息，避免打擾用戶
-    }
-  }, [activityId, checkedPerformances, checkedContents, addedLearningPerformances, addedLearningContents, activityRows])
-
-  // 當勾選狀態改變時，自動保存（使用節流，500ms 後保存）
-  // 注意：只在勾選狀態改變時觸發，不依賴其他資料變化
-  useEffect(() => {
-    // 如果沒有勾選任何項目，不觸發自動保存
-    if (checkedPerformances.size === 0 && checkedContents.size === 0) {
+    const { userId, userNickname } = getEndCoPrepUser()
+    if (!userId) {
+      alert('無法產生新教案：請先登入')
       return
     }
 
-    // 清除之前的計時器
-    if (saveSpecificationTimeoutRef.current) {
-      clearTimeout(saveSpecificationTimeoutRef.current)
-    }
+    setEndCoPrepProcessing(true)
+    try {
+      await saveLessonPlanBeforeEndCoPrep(userId, userNickname)
 
-    // 設置新的計時器
-    saveSpecificationTimeoutRef.current = setTimeout(() => {
-      autoSaveSpecification()
-    }, 500) // 500ms 後保存，避免頻繁請求
-
-    // 清理函數
-    return () => {
-      if (saveSpecificationTimeoutRef.current) {
-        clearTimeout(saveSpecificationTimeoutRef.current)
+      const archiveRes = await fetch(`/api/activities/${activityId}/completed-lesson-plans`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      const archiveData = await archiveRes.json().catch(() => ({}))
+      if (!archiveRes.ok) {
+        throw new Error(archiveData.error || archiveData.details || '產生新教案失敗')
       }
+
+      setShowEndCoPrepChoice(false)
+      setIsLessonPlanLoaded(false)
+      setLessonPlanReloadKey((k) => k + 1)
+      setActiveTab('objectives')
+      await loadCompletedLessonPlans()
+      alert('已將目前教案存入「已完成教案」，並建立新的空白教案。')
+    } catch (error: unknown) {
+      console.error('產生新教案錯誤:', error)
+      alert(error instanceof Error ? error.message : '產生新教案失敗')
+    } finally {
+      setEndCoPrepProcessing(false)
     }
-  }, [checkedPerformances, checkedContents, autoSaveSpecification])
+  }
 
   const handleHeaderBack = () => {
-    if (activeTab !== 'history') {
-      setActiveTab('history')
-    } else {
-      onBack()
-    }
+    onBack()
   }
 
   const tabs = [
@@ -3915,14 +3341,13 @@ export default function CourseObjectives({
     { id: 'activity', label: '活動與評量設計' },
     { id: 'specification', label: '雙向細目表' },
     { id: 'preview', label: '預覽教案' },
-    { id: 'history', label: '歷史活動' },
   ]
 
   const sidebarTabs = [
     { id: 'activities', label: '共備活動' },
     { id: 'ideas', label: '想法牆' },
     { id: 'resources', label: '資源' },
-    { id: 'teamwork', label: '團隊分工' },
+    { id: 'teamwork', label: '任務看板' },
     { id: 'history', label: '活動歷程' },
     { id: 'management', label: '社群管理' },
   ]
@@ -4186,9 +3611,9 @@ export default function CourseObjectives({
             {/* 左側表單區域（拉寬、無 max-w 限制） */}
             <div className="flex-1 min-w-0">
               {/* 標題 */}
-              {/* 主標題「進行共備」＋可點擊版本號 → 開啟版本管理 */}
-              <h1 className="text-2xl font-bold text-[#6D28D9] mb-6 flex items-center flex-wrap gap-x-2 gap-y-1">
-                <span>進行共備</span>
+              {/* 主標題「教案製作」＋可點擊版本號 → 開啟版本管理 */}
+              <h1 className="text-2xl font-bold text-[#6D28D9] mb-6 flex items-center flex-wrap gap-x-3 gap-y-2">
+                <span>{readOnly ? '教案檢核與總覽' : '教案製作'}</span>
                 {onOpenVersionManagement ? (
                   <button
                     type="button"
@@ -4203,12 +3628,66 @@ export default function CourseObjectives({
                     <span className="text-lg font-normal text-gray-600">({currentVersion})</span>
                   )
                 )}
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    data-coprep-onboarding-reopen
+                    onClick={() => setShowCoPrepOnboarding(true)}
+                    className={`px-3 py-2 text-sm font-medium text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors whitespace-nowrap ${
+                      showCoPrepOnboardingReopenHint ? 'community-onboarding-reopen-highlight' : ''
+                    }`}
+                    title="操作說明"
+                  >
+                    新手導覽
+                  </button>
+                  {showCoPrepOnboardingReopenHint && (
+                    <p
+                      className="community-onboarding-reopen-tooltip absolute left-0 top-full mt-2 z-50 w-max max-w-[14rem] rounded-lg border border-purple-200 bg-white px-3 py-2 text-xs leading-relaxed text-purple-900 shadow-lg"
+                      role="status"
+                    >
+                      之後可從這裡重新查看導覽
+                    </p>
+                  )}
+                </div>
               </h1>
 
               {/* 標籤頁 */}
               <div className="mb-8 border-b border-gray-200">
+                {readOnly ? (
+                  <>
+                    <div className="flex gap-4">
+                      <span className="px-4 py-2 font-medium text-[#6D28D9] border-b-2 border-[#6D28D9]">
+                        教案檢核與總覽
+                      </span>
+                    </div>
+                    <div className="flex gap-4 pl-4 mt-0 border-t border-gray-100 bg-gray-50/60">
+                      <button
+                        onClick={() => setActiveTab('specification')}
+                        className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                          activeTab === 'specification'
+                            ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        雙向細目表
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('preview')}
+                        className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                          activeTab === 'preview'
+                            ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        預覽教案
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
                 {/* 主階段列 */}
-                <div className="flex gap-4">
+                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-4 min-w-0">
                   {/* 1 課程目標 */}
                   <button
                     onClick={() => setActiveTab('objectives')}
@@ -4248,18 +3727,16 @@ export default function CourseObjectives({
                   >
                     3 教案檢核與總覽
                   </button>
+                </div>
 
-                  {/* 歷史活動（不動） */}
-                  <button
-                    onClick={() => setActiveTab('history')}
-                    className={`px-4 py-2 font-medium transition-colors ${
-                      activeTab === 'history'
-                        ? 'text-[#6D28D9] border-b-2 border-[#6D28D9]'
-                        : 'text-gray-600 hover:text-gray-800'
-                    }`}
-                  >
-                    歷史活動
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedLessonPlans(true)}
+                  className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-purple-300 hover:bg-purple-50 hover:text-[#6D28D9]"
+                  title="查看先前已完成的教案"
+                >
+                  已完成教案
+                </button>
                 </div>
 
                 {/* 第 3 階段的子頁籤（僅在 specification / preview 時顯示） */}
@@ -4287,10 +3764,13 @@ export default function CourseObjectives({
                     </button>
                   </div>
                 )}
+                  </>
+                )}
               </div>
 
               {/* 表單內容 */}
-              {activeTab === 'objectives' && (
+              <div ref={formContentRef}>
+              {!readOnly && activeTab === 'objectives' && (
                 <div className="space-y-6">
                   {/* 教案標題 */}
                   <div>
@@ -7434,20 +6914,20 @@ export default function CourseObjectives({
                   )}
                 </div>
 
-                  {/* 儲存按鈕 */}
+                  {/* 儲存為新版本按鈕 */}
                   <div className="flex justify-end pt-4">
                     <button 
                       onClick={handleSave}
                       className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-bold hover:bg-[rgba(138,99,210,1)] transition-colors"
                     >
-                      儲存
+                      儲存為新版本
                     </button>
                   </div>
                 </div>
               )}
 
               {/* 活動與評量設計（min-w-0 避免內層 min-w 撐破 flex，與課程目標同寬） */}
-              {activeTab === 'activity' && (
+              {!readOnly && activeTab === 'activity' && (
                 <div className="space-y-6 min-w-0 max-w-full">
                   {/* 新增活動按鈕 */}
                   <div className="flex justify-end">
@@ -7679,23 +7159,25 @@ export default function CourseObjectives({
                     </div>
                   )}
 
-                  {/* 同一列：結束共備（白底紫字、較醒目）置中；儲存（實心紫）最右 */}
+                  {/* 同一列：結束共備（白底紫字、較醒目）置中；儲存為新版本（實心紫）最右 */}
                   <div className="flex items-center w-full pt-4 gap-2">
                     <div className="flex-1 min-w-0" aria-hidden />
+                    {!historyLessonEditMode && (
                     <button
                       type="button"
-                      onClick={() => void handleEndCoPrep()}
+                      onClick={() => void handleEndCoPrepClick()}
                       className="px-6 py-2 shrink-0 bg-white border-2 border-[rgba(138,99,210,0.95)] text-[#6D28D9] rounded-lg font-semibold hover:bg-purple-50 transition-colors shadow-sm"
                     >
                       結束共備
                     </button>
+                    )}
                     <div className="flex-1 flex justify-end min-w-0">
                       <button
                         type="button"
                         onClick={handleSave}
                         className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-bold hover:bg-[rgba(138,99,210,1)] transition-colors"
                       >
-                        儲存
+                        儲存為新版本
                       </button>
                     </div>
                   </div>
@@ -8132,67 +7614,11 @@ export default function CourseObjectives({
                   </div>
                 </div>
               )}
+              </div>
 
-              {activeTab === 'history' && (
-                <div className="space-y-4 max-w-5xl">
-                  {activities.length === 0 ? (
-                    <p className="text-gray-500 py-8">尚無活動紀錄</p>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {activities.map((act) => {
-                        const cardTitle = activityDisplayLabel(act)
-                        const intro = buildHistoryActivityIntro(act)
-                        const designerName =
-                          (act.designer && act.designer.trim()) || act.creatorName || ''
-                        const hasMod =
-                          act.lastModifiedDate &&
-                          act.lastModifiedTime &&
-                          act.lastModifiedDate.trim() !== ''
-                        const dateStr = hasMod
-                          ? {
-                              d: act.lastModifiedDate!,
-                              t: act.lastModifiedTime!,
-                            }
-                          : { d: act.createdDate, t: act.createdTime }
-                        return (
-                          <ActivityCard
-                            key={act.id}
-                            activityName={cardTitle}
-                            introduction={intro}
-                            createdDate={dateStr.d}
-                            createdTime={dateStr.t}
-                            creatorName={designerName || undefined}
-                            personLabel="設計者"
-                            hidePersonAvatar
-                            hideEdit
-                            actionPlacement="footer"
-                            timeCaption="最後修改"
-                            onDownloadLessonPlan={() => {
-                              void handleHistoryLessonDownload(act.id, cardTitle)
-                            }}
-                            onPreviewLessonPlan={() => {
-                              setHistoryPreviewActivityId(act.id)
-                            }}
-                            onDelete={() => {
-                              onHistoryDelete?.(act.id)
-                              void onActivitiesRefresh?.()
-                              if (historyPreviewActivityId === act.id) {
-                                setHistoryPreviewActivityId(null)
-                              }
-                            }}
-                            onCardClick={() => {
-                              setHistoryPreviewActivityId(act.id)
-                            }}
-                          />
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             {/* 右側區域 - 想法收斂結果（僅在課程目標和活動與評量設計標籤頁顯示） */}
-            {(activeTab === 'objectives' || activeTab === 'activity') && (
+            {!readOnly && (activeTab === 'objectives' || activeTab === 'activity') && (
               <div className="w-full md:w-64 flex-shrink-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 md:sticky md:top-0 md:self-start md:max-h-[calc(100vh-180px)]">
                 {/* 標題欄 */}
                 <div className="bg-gradient-to-r from-purple-400 to-purple-600 px-6 py-4 rounded-t-lg">
@@ -8478,24 +7904,9 @@ export default function CourseObjectives({
         </div>
       </div>
 
-      <HistoryLessonPreviewModal
-        open={historyPreviewActivityId !== null}
-        activityId={historyPreviewActivityId}
-        subtitle={
-          historyPreviewActivityId
-            ? activityDisplayLabel(
-                activities.find((a) => a.id === historyPreviewActivityId) ?? {
-                  name: '',
-                }
-              ) || undefined
-            : undefined
-        }
-        onClose={() => setHistoryPreviewActivityId(null)}
-      />
-
       <CoPrepOnboardingModal
         open={showCoPrepOnboarding}
-        onDismiss={() => {
+        onDismiss={(options) => {
           setShowCoPrepOnboarding(false)
           try {
             const raw = localStorage.getItem('user')
@@ -8507,7 +7918,27 @@ export default function CourseObjectives({
           } catch {
             // ignore
           }
+          if (options?.showReopenHint) {
+            setShowCoPrepOnboardingReopenHint(true)
+          }
         }}
+      />
+
+      <EndCoPrepChoiceModal
+        open={showEndCoPrepChoice}
+        onClose={() => {
+          if (!endCoPrepProcessing) setShowEndCoPrepChoice(false)
+        }}
+        onEndActivity={() => void handleConfirmEndActivity()}
+        onNewLessonPlan={() => void handleConfirmNewLessonPlan()}
+        isProcessing={endCoPrepProcessing}
+      />
+
+      <CompletedLessonPlansModal
+        open={showCompletedLessonPlans}
+        onClose={() => setShowCompletedLessonPlans(false)}
+        items={completedLessonPlans}
+        isLoading={completedLessonPlansLoading}
       />
     </div>
   )

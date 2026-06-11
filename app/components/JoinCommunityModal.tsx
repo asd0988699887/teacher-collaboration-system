@@ -54,7 +54,7 @@ export default function JoinCommunityModal({
         >
           {/* 標題 */}
           <h2 className="text-xl font-bold text-gray-900 mb-4 text-center">
-            邀請碼加入社群
+            邀請碼加入活動
           </h2>
 
           {/* 說明文字 */}

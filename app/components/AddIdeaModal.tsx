@@ -28,6 +28,33 @@ interface Activity {
   lessonPlanTitle?: string
 }
 
+function FieldHint({ text, wide }: { text: string; wide?: boolean }) {
+  return (
+    <span className="group relative ml-1 inline-flex align-middle">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label={text}
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full text-gray-400 outline-none hover:text-purple-500 focus:text-purple-500"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.5 9.5a2.5 2.5 0 0 1 4.2 1.8c0 1.5-2.2 2-2.2 3.7V15" strokeLinecap="round" />
+          <circle cx="12" cy="18" r="0.75" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute left-[calc(100%+6px)] top-1/2 z-[110] hidden -translate-y-1/2 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-left text-xs font-normal leading-relaxed text-gray-600 shadow-md group-hover:block group-focus-within:block ${
+          wide ? 'w-56' : 'w-52'
+        }`}
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
+
 export default function AddIdeaModal({
   isOpen,
   onClose,
@@ -229,8 +256,12 @@ export default function AddIdeaModal({
             <div className="space-y-6">
               {/* 階段（可輸入或從既有階段選擇） */}
               <div ref={stageDropdownRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
                   階段
+                  <FieldHint
+                    wide
+                    text="階段用於標示想法所屬的討論分類，例如：核心素養、學習重點。相同階段的想法後續可進行收斂整理。"
+                  />
                 </label>
                 <div className="relative">
                   <input
@@ -266,8 +297,9 @@ export default function AddIdeaModal({
 
               {/* 標題 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
                   標題
+                  <FieldHint text="標題是這個想法要強調的重點，用於讓成員快速理解想法內容。" />
                 </label>
                 <input
                   type="text"

@@ -41,7 +41,41 @@ export async function GET(
       [communityId]
     ) as any[]
 
-    console.log('想法趨勢統計 - 社群成員數:', members.length)
+    // 1b. 納入有在想法牆貢獻、但可能未在 community_members 的使用者
+    const ideaContributors = await query(
+      `SELECT DISTINCT
+        i.creator_id AS userId,
+        u.nickname,
+        u.account
+      FROM ideas i
+      INNER JOIN users u ON i.creator_id = u.id
+      WHERE i.community_id = ?`,
+      [communityId]
+    ) as any[]
+
+    const participantMap = new Map<string, { userId: string; nickname: string; account: string }>()
+    for (const member of members) {
+      participantMap.set(String(member.userId), {
+        userId: member.userId,
+        nickname: member.nickname,
+        account: member.account,
+      })
+    }
+    for (const contributor of ideaContributors) {
+      const key = String(contributor.userId)
+      if (!participantMap.has(key)) {
+        participantMap.set(key, {
+          userId: contributor.userId,
+          nickname: contributor.nickname,
+          account: contributor.account,
+        })
+      }
+    }
+    const participants = Array.from(participantMap.values())
+
+    const uid = (id: unknown) => String(id)
+
+    console.log('想法趨勢統計 - 社群成員數:', members.length, '含想法貢獻者:', participants.length)
 
     // 2. 先檢查該社群的所有想法（用於判斷日期範圍）
     const allIdeasCheck = await query(
@@ -190,12 +224,12 @@ export async function GET(
     const statsMap = new Map<string, Map<string, number>>()
     
     // 初始化所有日期和使用者的統計為0
-    members.forEach((member: any) => {
+    participants.forEach((member: any) => {
       const userStatsMap = new Map<string, number>()
       allDates.forEach(date => {
         userStatsMap.set(date, 0)
       })
-      statsMap.set(member.userId, userStatsMap)
+      statsMap.set(uid(member.userId), userStatsMap)
     })
 
     // 填充實際統計資料
@@ -210,7 +244,7 @@ export async function GET(
         date = date.split('T')[0]
       }
       
-      const userId = stat.userId
+      const userId = uid(stat.userId)
       const count = parseInt(stat.createdCount) || 0
       
       console.log('填充統計資料:', { 
@@ -232,15 +266,15 @@ export async function GET(
           console.warn(`  ⚠ 日期 ${date} 不在 allDates 中，allDates 包含:`, allDates.slice(0, 5), '...')
         }
       } else {
-        console.warn(`  ⚠ userId ${userId} 不在 members 列表中`)
-        console.log(`  成員列表中的 userIds:`, members.map((m: any) => m.userId))
+        console.warn(`  ⚠ userId ${userId} 不在參與者列表中`)
+        console.log(`  參與者列表中的 userIds:`, participants.map((m: any) => m.userId))
       }
     })
 
     // 6. 構建返回資料（改為累計統計）
-    const userStats = members.map((member: any) => {
+    const userStats = participants.map((member: any) => {
       const userId = member.userId
-      const userStatsMap = statsMap.get(userId) || new Map()
+      const userStatsMap = statsMap.get(uid(userId)) || new Map()
       
       // 計算累計數量（從最早日期到當前日期）
       let cumulativeCount = 0
@@ -321,7 +355,7 @@ export async function GET(
         replyIdeas: allIdeasCheck[0]?.replyIdeas || 0,
         earliestDate: allIdeasCheck[0]?.earliestDate || null,
         latestDate: allIdeasCheck[0]?.latestDate || null,
-        membersCount: members.length,
+        membersCount: participants.length,
         dailyStatsCount: dailyStats.length,
         useAllData, // 調試資訊：是否使用所有資料
       },

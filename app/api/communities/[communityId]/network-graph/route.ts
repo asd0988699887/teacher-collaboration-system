@@ -33,6 +33,40 @@ export async function GET(
       [communityId]
     ) as any[]
 
+    // 1b. 納入有在想法牆貢獻、但可能未在 community_members 的使用者
+    const ideaContributors = await query(
+      `SELECT DISTINCT
+        i.creator_id AS userId,
+        u.nickname,
+        u.account
+      FROM ideas i
+      INNER JOIN users u ON i.creator_id = u.id
+      WHERE i.community_id = ?`,
+      [communityId]
+    ) as any[]
+
+    const participantMap = new Map<string, { userId: string; nickname: string; account: string }>()
+    for (const member of members) {
+      participantMap.set(String(member.userId), {
+        userId: member.userId,
+        nickname: member.nickname,
+        account: member.account,
+      })
+    }
+    for (const contributor of ideaContributors) {
+      const key = String(contributor.userId)
+      if (!participantMap.has(key)) {
+        participantMap.set(key, {
+          userId: contributor.userId,
+          nickname: contributor.nickname,
+          account: contributor.account,
+        })
+      }
+    }
+    const participants = Array.from(participantMap.values())
+
+    const uid = (id: unknown) => String(id)
+
     // 2. 統計每個使用者建立的節點數（新增想法，parent_id IS NULL）
     const createdStats = await query(
       `SELECT 
@@ -100,17 +134,17 @@ export async function GET(
     // 建立統計資料 Map 以便快速查找
     const createdMap = new Map<string, number>()
     createdStats.forEach((stat: any) => {
-      createdMap.set(stat.userId, parseInt(stat.createdCount) || 0)
+      createdMap.set(uid(stat.userId), parseInt(stat.createdCount) || 0)
     })
 
     const replyMap = new Map<string, number>()
     replyStats.forEach((stat: any) => {
-      replyMap.set(stat.userId, parseInt(stat.replyCount) || 0)
+      replyMap.set(uid(stat.userId), parseInt(stat.replyCount) || 0)
     })
 
     const receivedReplyMap = new Map<string, number>()
     receivedReplyStats.forEach((stat: any) => {
-      receivedReplyMap.set(stat.userId, parseInt(stat.receivedReplyCount) || 0)
+      receivedReplyMap.set(uid(stat.userId), parseInt(stat.receivedReplyCount) || 0)
     })
 
     // 7. 獲取保存的節點位置（如果有）
@@ -131,25 +165,25 @@ export async function GET(
 
     const positionMap = new Map<string, { x: number; y: number }>()
     savedPositions.forEach((pos: any) => {
-      positionMap.set(pos.user_id, {
+      positionMap.set(uid(pos.user_id), {
         x: parseFloat(pos.position_x),
         y: parseFloat(pos.position_y),
       })
     })
 
     // 構建節點資料
-    const nodes = members.map((member: any) => {
+    const nodes = participants.map((member: any) => {
       const userId = member.userId
-      const savedPosition = positionMap.get(userId)
+      const savedPosition = positionMap.get(uid(userId))
       
       return {
         id: userId,
         label: member.nickname || member.account || '未知使用者',
         userName: member.nickname || member.account || '未知使用者',
         userAccount: member.account || '',
-        createdCount: createdMap.get(userId) || 0,
-        replyCount: replyMap.get(userId) || 0,
-        receivedReplyCount: receivedReplyMap.get(userId) || 0,
+        createdCount: createdMap.get(uid(userId)) || 0,
+        replyCount: replyMap.get(uid(userId)) || 0,
+        receivedReplyCount: receivedReplyMap.get(uid(userId)) || 0,
         // 如果有保存的位置，添加到節點資料中
         savedPosition: savedPosition || null,
       }
@@ -157,8 +191,8 @@ export async function GET(
 
     // 構建邊資料
     const edges = edgeStats.map((edge: any) => {
-      const fromMember = members.find((m: any) => m.userId === edge.fromUserId)
-      const toMember = members.find((m: any) => m.userId === edge.toUserId)
+      const fromMember = participants.find((m: any) => uid(m.userId) === uid(edge.fromUserId))
+      const toMember = participants.find((m: any) => uid(m.userId) === uid(edge.toUserId))
 
       return {
         from: edge.fromUserId,
@@ -208,14 +242,14 @@ export async function GET(
     // 構建每個使用者的詳細統計
     const userStatistics: Record<string, any> = {}
     
-    members.forEach((member: any) => {
+    participants.forEach((member: any) => {
       const userId = member.userId
       
       // 回覆過的節點列表
       const replyTable = replyTableStats
-        .filter((stat: any) => stat.userId === userId)
+        .filter((stat: any) => uid(stat.userId) === uid(userId))
         .map((stat: any) => {
-          const repliedToMember = members.find((m: any) => m.userId === stat.repliedToUserId)
+          const repliedToMember = participants.find((m: any) => uid(m.userId) === uid(stat.repliedToUserId))
           return {
             userId: stat.repliedToUserId,
             userName: repliedToMember?.nickname || repliedToMember?.account || '未知使用者',
@@ -226,9 +260,9 @@ export async function GET(
 
       // 被回覆的節點列表
       const receivedReplyTable = receivedReplyTableStats
-        .filter((stat: any) => stat.userId === userId)
+        .filter((stat: any) => uid(stat.userId) === uid(userId))
         .map((stat: any) => {
-          const repliedByMember = members.find((m: any) => m.userId === stat.repliedByUserId)
+          const repliedByMember = participants.find((m: any) => uid(m.userId) === uid(stat.repliedByUserId))
           return {
             userId: stat.repliedByUserId,
             userName: repliedByMember?.nickname || repliedByMember?.account || '未知使用者',
@@ -238,9 +272,9 @@ export async function GET(
         .sort((a: any, b: any) => b.receivedReplyCount - a.receivedReplyCount)
 
       userStatistics[userId] = {
-        createdCount: createdMap.get(userId) || 0,
-        replyCount: replyMap.get(userId) || 0,
-        receivedReplyCount: receivedReplyMap.get(userId) || 0,
+        createdCount: createdMap.get(uid(userId)) || 0,
+        replyCount: replyMap.get(uid(userId)) || 0,
+        receivedReplyCount: receivedReplyMap.get(uid(userId)) || 0,
         replyTable, // 回覆過的節點列表
         receivedReplyTable, // 被回覆的節點列表
       }

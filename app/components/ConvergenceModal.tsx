@@ -45,9 +45,38 @@ interface ConvergenceModalProps {
   communityId?: string
   userId?: string | null
   userAccount?: string
+  /** 是否為社群管理員：僅管理員可選取節點、開始收斂、編輯收斂結果 */
+  isAdmin?: boolean
 }
 
-export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId, userId, userAccount }: ConvergenceModalProps) {
+function FieldHint({ text, wide }: { text: string; wide?: boolean }) {
+  return (
+    <span className="group relative ml-1 inline-flex align-middle">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label={text}
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full text-gray-400 outline-none hover:text-purple-500 focus:text-purple-500"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.5 9.5a2.5 2.5 0 0 1 4.2 1.8c0 1.5-2.2 2-2.2 3.7V15" strokeLinecap="round" />
+          <circle cx="12" cy="18" r="0.75" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute left-[calc(100%+6px)] top-1/2 z-[110] hidden -translate-y-1/2 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-left text-xs font-normal leading-relaxed text-gray-600 shadow-md group-hover:block group-focus-within:block ${
+          wide ? 'w-56' : 'w-52'
+        }`}
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
+
+export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId, userId, userAccount, isAdmin = false }: ConvergenceModalProps) {
   // 定義一組色調差異明顯的顏色（用於區分不同使用者，與社群管理保持一致）
   const USER_COLORS = [
     'rgba(138,99,210,0.9)',  // 紫色
@@ -97,8 +126,9 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
   const [isLoadingComments, setIsLoadingComments] = useState(false)
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
 
-  // 計算每個 idea 被收斂的次數（用於顯示已收斂紀錄，不限制再次使用）
+  // 計算每個 idea 被收斂的次數（每個節點僅能收斂一次，已收斂者不可再選）
   const convergedCountMap = new Map<string, number>()
   ideas.forEach(idea => {
     if (idea.isConvergence && idea.convergedIdeaIds) {
@@ -108,7 +138,7 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
     }
   })
 
-  // 根據選擇的階段篩選想法，排除收斂節點本身；已被收斂過的節點仍可再次選取
+  // 根據選擇的階段篩選想法，排除收斂節點本身
   const filteredIdeas = selectedStage 
     ? ideas.filter(idea => 
         idea.stage === selectedStage && 
@@ -184,7 +214,37 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
     loadComments()
   }, [selectedStage, communityId])
 
+  // 當階段選擇改變時，載入管理員先前儲存的草稿（勾選節點與收斂結果文字）
+  useEffect(() => {
+    const loadDraft = async () => {
+      if (!selectedStage || !communityId) return
+
+      try {
+        const response = await fetch(
+          `/api/communities/${communityId}/convergence-draft?stage=${encodeURIComponent(selectedStage)}`
+        )
+        const data = await response.json()
+
+        if (response.ok) {
+          const ids: string[] = Array.isArray(data.selectedIdeaIds) ? data.selectedIdeaIds : []
+          setSelectedIdeaIds(new Set(ids))
+          setConvergenceContent(typeof data.convergenceContent === 'string' ? data.convergenceContent : '')
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('載入收斂草稿錯誤:', error)
+        }
+      }
+    }
+
+    loadDraft()
+  }, [selectedStage, communityId])
+
   const handleIdeaToggle = (ideaId: string) => {
+    // 非管理員不可選取；已被收斂過的節點不可再次選取
+    if (!isAdmin) return
+    if ((convergedCountMap.get(ideaId) ?? 0) > 0) return
+
     const newSelected = new Set(selectedIdeaIds)
     if (newSelected.has(ideaId)) {
       newSelected.delete(ideaId)
@@ -234,7 +294,51 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
     }
   }
 
+  const handleSaveDraft = async () => {
+    if (!isAdmin) {
+      alert('只有社群管理員可以儲存收斂內容')
+      return
+    }
+    if (!selectedStage) {
+      alert('請先選擇收斂階段')
+      return
+    }
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    setIsSavingDraft(true)
+    try {
+      const response = await fetch(`/api/communities/${communityId}/convergence-draft`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage: selectedStage,
+          selectedIdeaIds: Array.from(selectedIdeaIds),
+          convergenceContent,
+          userId,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || '儲存失敗')
+      }
+      alert('已儲存，其他成員進入後即可看到您勾選的節點與收斂結果並參與討論。')
+    } catch (error: any) {
+      console.error('儲存收斂草稿錯誤:', error)
+      alert(error.message || '儲存失敗，請稍後再試')
+    } finally {
+      setIsSavingDraft(false)
+    }
+  }
+
   const handleSubmit = () => {
+    if (!isAdmin) {
+      alert('只有社群管理員可以進行想法收斂')
+      return
+    }
     if (!selectedStage || selectedIdeaIds.size === 0) {
       alert('請選擇收斂階段並至少勾選一個想法節點')
       return
@@ -286,10 +390,18 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
           </div>
 
           <div className="p-6 flex-1 overflow-y-auto">
+            {/* 非管理員提示：僅可瀏覽與留言 */}
+            {!isAdmin && (
+              <div className="mb-6 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-700">
+                僅社群管理員可進行想法收斂與修改收斂結果，您可以瀏覽收斂內容並在討論區留言。
+              </div>
+            )}
+
             {/* 收斂階段選擇 */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
                 收斂階段
+                <FieldHint text="收斂階段用於選擇要整理的想法類別，系統會篩選此類別底下的想法節點。" />
               </label>
               <select
                 value={selectedStage}
@@ -322,23 +434,29 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
                     <div className="space-y-2">
                       {filteredIdeas.map((idea) => {
                         const timesConverged = convergedCountMap.get(idea.id) ?? 0
+                        const isConverged = timesConverged > 0
+                        // 非管理員或已收斂節點皆不可勾選
+                        const isDisabled = !isAdmin || isConverged
                         return (
                         <label
                           key={idea.id}
-                          className="flex items-start space-x-3 p-3 hover:bg-white rounded cursor-pointer transition-colors"
+                          className={`flex items-start space-x-3 p-3 rounded transition-colors ${
+                            isDisabled ? 'cursor-not-allowed opacity-70' : 'hover:bg-white cursor-pointer'
+                          }`}
                         >
                           <input
                             type="checkbox"
                             checked={selectedIdeaIds.has(idea.id)}
+                            disabled={isDisabled}
                             onChange={() => handleIdeaToggle(idea.id)}
-                            className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                            className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500 disabled:cursor-not-allowed"
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-medium text-gray-900">{idea.title}</span>
-                              {timesConverged > 0 && (
+                              {isConverged && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-purple-100 text-purple-700 shrink-0">
-                                  已收斂 {timesConverged} 次
+                                  已收斂
                                 </span>
                               )}
                             </div>
@@ -360,22 +478,30 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
 
             {/* 收斂結果輸入 */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
                 收斂結果
+                <FieldHint
+                  wide
+                  text="收斂結果是依據成員共同討論出的共識進行總結，可作為後續教案設計或任務執行的參考。"
+                />
               </label>
               <textarea
                 value={convergenceContent}
                 onChange={(e) => setConvergenceContent(e.target.value)}
-                placeholder="請輸入收斂後的內容..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                readOnly={!isAdmin}
+                placeholder={isAdmin ? '請輸入收斂後的內容...' : '尚無收斂結果內容'}
+                className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none ${
+                  !isAdmin ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''
+                }`}
                 rows={4}
               />
             </div>
 
             {/* 討論區 */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
                 討論區
+                <FieldHint text="討論區是成員針對收斂內容進行補充、確認或討論的地方。" />
               </label>
               
               {/* 載入中狀態 */}
@@ -450,13 +576,24 @@ export default function ConvergenceModal({ ideas, onClose, onSubmit, communityId
             >
               返回
             </button>
-            <button
-              onClick={handleSubmit}
-              disabled={!selectedStage || selectedIdeaIds.size === 0}
-              className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg hover:bg-[rgba(138,99,210,1)] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              開始收斂
-            </button>
+            {isAdmin && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveDraft}
+                  disabled={!selectedStage || isSavingDraft}
+                  className="px-8 py-2 border border-[rgba(138,99,210,0.9)] text-[rgba(138,99,210,1)] rounded-lg hover:bg-purple-50 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSavingDraft ? '儲存中...' : '儲存'}
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!selectedStage || selectedIdeaIds.size === 0}
+                  className="px-8 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg hover:bg-[rgba(138,99,210,1)] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  開始收斂
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

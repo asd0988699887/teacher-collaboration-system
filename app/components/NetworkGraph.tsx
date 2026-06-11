@@ -57,13 +57,14 @@ interface NetworkGraphData {
 
 interface NetworkGraphProps {
   communityId: string
+  readOnly?: boolean
 }
 
 /**
  * 社群網絡圖組件
  * 顯示社群成員間的互動關係
  */
-export default function NetworkGraph({ communityId }: NetworkGraphProps) {
+export default function NetworkGraph({ communityId, readOnly = false }: NetworkGraphProps) {
   const [graphData, setGraphData] = useState<NetworkGraphData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -156,6 +157,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
 
   // 保存視圖狀態的函數
   const saveViewState = useCallback(async (zoom: number, panX: number, panY: number) => {
+    if (readOnly) return
     try {
       // 驗證並限制縮放比例（0.1 到 3 之間，避免太大導致跑版）
       const validZoom = Math.max(0.1, Math.min(3, zoom))
@@ -187,10 +189,11 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
     } catch (error: any) {
       console.error('保存視圖狀態錯誤:', error)
     }
-  }, [communityId])
+  }, [communityId, readOnly])
 
   // 保存節點位置的函數
   const saveNodePositions = useCallback(async () => {
+    if (readOnly) return
     if (!graphData) {
       console.warn('無法保存：graphData 為空')
       return
@@ -258,7 +261,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
       console.error('保存節點位置錯誤:', error)
       alert(`保存節點位置時發生錯誤: ${error.message || '未知錯誤'}`)
     }
-  }, [graphData, communityId])
+  }, [graphData, communityId, readOnly])
 
   // 載入網絡圖資料和視圖狀態
   useEffect(() => {
@@ -770,7 +773,7 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             }}
             width={containerSize.width}
             height={containerSize.height}
-            enableNodeDrag={true}
+            enableNodeDrag={!readOnly}
             enableZoomInteraction={true}
             maxZoom={2.5}
             minZoom={0.2}
@@ -960,13 +963,13 @@ export default function NetworkGraph({ communityId }: NetworkGraphProps) {
             </h3>
             <div className="space-y-2 text-sm">
               <p className="text-gray-600">
-                總共建立 <span className="font-semibold text-purple-600">{graphData.userStatistics[selectedNode.id].createdCount}</span> 個節點
+                總共建立 <span className="font-semibold text-gray-900">{graphData.userStatistics[selectedNode.id].createdCount}</span> 個節點
               </p>
               <p className="text-gray-600">
-                回覆過 <span className="font-semibold text-purple-600">{graphData.userStatistics[selectedNode.id].replyCount}</span> 個節點
+                回覆過 <span className="font-semibold text-gray-900">{graphData.userStatistics[selectedNode.id].replyCount}</span> 個節點
               </p>
               <p className="text-gray-600">
-                且建立的節點被 <span className="font-semibold text-purple-600">{graphData.userStatistics[selectedNode.id].receivedReplyCount}</span> 則節點回覆
+                且建立的節點被 <span className="font-semibold text-gray-900">{graphData.userStatistics[selectedNode.id].receivedReplyCount}</span> 則節點回覆
               </p>
             </div>
           </div>

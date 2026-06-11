@@ -51,6 +51,8 @@ interface EditIdeaModalProps {
   lastEditedByName?: string
   /** 最後編輯時間（已格式化：YYYY/MM/DD HH:mm） */
   lastEditedAt?: string
+  /** 唯讀模式：僅可檢視，不可儲存（用於非管理員查看收斂結果） */
+  readOnly?: boolean
 }
 
 /**
@@ -69,6 +71,7 @@ export default function EditIdeaModal({
   communityId,
   lastEditedByName,
   lastEditedAt,
+  readOnly = false,
 }: EditIdeaModalProps) {
   const [selectedActivityId, setSelectedActivityId] = useState<string>('')
   const [stage, setStage] = useState('')
@@ -200,6 +203,7 @@ export default function EditIdeaModal({
 
   // 處理儲存
   const handleSave = () => {
+    if (readOnly) return
     onSave({
       activityId: selectedActivityId || undefined,
       stage,
@@ -262,6 +266,11 @@ export default function EditIdeaModal({
 
           {/* 表單內容 - 可滾動區域 */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
+            {readOnly && isConvergence && (
+              <div className="mb-4 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-700">
+                僅社群管理員可修改收斂結果，您目前僅可檢視內容。
+              </div>
+            )}
             <div className="space-y-6">
               {/* 階段 */}
               <div>
@@ -272,7 +281,10 @@ export default function EditIdeaModal({
                   type="text"
                   value={stage}
                   onChange={(e) => setStage(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  readOnly={readOnly}
+                  className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    readOnly ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''
+                  }`}
                   placeholder="請輸入階段"
                 />
               </div>
@@ -286,7 +298,10 @@ export default function EditIdeaModal({
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  readOnly={readOnly}
+                  className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    readOnly ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''
+                  }`}
                   placeholder="請輸入標題"
                 />
               </div>
@@ -299,7 +314,10 @@ export default function EditIdeaModal({
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                  readOnly={readOnly}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none ${
+                    readOnly ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''
+                  }`}
                   rows={8}
                   placeholder="請輸入內容"
                 />
@@ -474,20 +492,32 @@ export default function EditIdeaModal({
 
             {/* 右側：取消和儲存 */}
             <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-6 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-6 py-2 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] text-white rounded-lg font-medium transition-colors"
-              >
-                儲存
-              </button>
+              {readOnly ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-6 py-2 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] text-white rounded-lg font-medium transition-colors"
+                >
+                  關閉
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-6 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="px-6 py-2 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] text-white rounded-lg font-medium transition-colors"
+                  >
+                    儲存
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

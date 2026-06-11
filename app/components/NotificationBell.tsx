@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 
 interface Notification {
   id: string
@@ -20,31 +20,39 @@ interface NotificationBellProps {
   communityId?: string
 }
 
+type NotificationScope = 'current' | 'all'
+
 export default function NotificationBell({ userId, communityId }: NotificationBellProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [allNotifications, setAllNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
+  const [filterScope, setFilterScope] = useState<NotificationScope>('current')
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const displayedNotifications = useMemo(() => {
+    if (!communityId || filterScope === 'all') {
+      return allNotifications
+    }
+    return allNotifications.filter((n) => n.communityId === communityId)
+  }, [allNotifications, communityId, filterScope])
+
+  const displayUnreadCount = useMemo(
+    () => displayedNotifications.filter((n) => !n.isRead).length,
+    [displayedNotifications]
+  )
+
+  const showCommunityName = !communityId || filterScope === 'all'
 
   // 載入通知
   const loadNotifications = async () => {
     try {
-      // 第一步：載入所有通知（用於顯示總未讀數）
       const allUrl = `/api/notifications?userId=${userId}`
       const allResponse = await fetch(allUrl)
       const allData = await allResponse.json()
 
       if (allResponse.ok) {
-        // 總是使用全部通知的未讀數量
-        const totalUnreadCount = allData.unreadCount
-
-        // 第二步：如果指定了 communityId，過濾顯示的通知列表
-        const displayNotifications = communityId
-          ? allData.notifications.filter((n: Notification) => n.communityId === communityId)
-          : allData.notifications
-
-        setNotifications(displayNotifications)
-        setUnreadCount(totalUnreadCount)
+        setAllNotifications(allData.notifications)
+        setUnreadCount(allData.unreadCount)
       }
     } catch (error) {
       console.error('載入通知失敗:', error)
@@ -57,12 +65,11 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
       await fetch(`/api/notifications/${notificationId}/read`, {
         method: 'PUT',
       })
-      
-      // 更新本地狀態
-      setNotifications(prev => 
-        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+
+      setAllNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
       )
-      setUnreadCount(prev => Math.max(0, prev - 1))
+      setUnreadCount((prev) => Math.max(0, prev - 1))
     } catch (error) {
       console.error('標記已讀失敗:', error)
     }
@@ -70,27 +77,47 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
 
   // 全部標記為已讀
   const markAllAsRead = async () => {
+    const scopeCommunityId = communityId && filterScope === 'current' ? communityId : undefined
+
     try {
       await fetch('/api/notifications/mark-all-read', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId, communityId }),
+        body: JSON.stringify({ userId, communityId: scopeCommunityId }),
       })
-      
-      // 更新本地狀態
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
-      setUnreadCount(0)
+
+      setAllNotifications((prev) =>
+        prev.map((n) => {
+          if (scopeCommunityId) {
+            return n.communityId === scopeCommunityId ? { ...n, isRead: true } : n
+          }
+          return { ...n, isRead: true }
+        })
+      )
+
+      if (scopeCommunityId) {
+        const markedUnread = allNotifications.filter(
+          (n) => n.communityId === scopeCommunityId && !n.isRead
+        ).length
+        setUnreadCount((prev) => Math.max(0, prev - markedUnread))
+      } else {
+        setUnreadCount(0)
+      }
     } catch (error) {
       console.error('全部標記已讀失敗:', error)
     }
   }
 
+  useEffect(() => {
+    setFilterScope('current')
+  }, [communityId])
+
   // 定時輪詢通知（每30秒）
   useEffect(() => {
     loadNotifications()
-    
+
     const interval = setInterval(() => {
       loadNotifications()
     }, 30000)
@@ -123,7 +150,7 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
     if (minutes < 60) return `${minutes}分鐘前`
     if (hours < 24) return `${hours}小時前`
     if (days < 7) return `${days}天前`
-    
+
     return date.toLocaleDateString('zh-TW')
   }
 
@@ -135,7 +162,6 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
         className="relative p-2 hover:bg-gray-100 rounded-full transition-colors"
         aria-label="通知"
       >
-        {/* 鈴鐺圖示 */}
         <svg
           className="w-6 h-6 text-gray-600"
           fill="none"
@@ -150,7 +176,6 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
           />
         </svg>
 
-        {/* 未讀數量徽章 */}
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -164,8 +189,9 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
           {/* 標題列 */}
           <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between gap-2">
             <h3 className="font-semibold text-gray-800 text-sm sm:text-base">通知</h3>
-            {unreadCount > 0 && (
+            {displayUnreadCount > 0 && (
               <button
+                type="button"
                 onClick={markAllAsRead}
                 className="text-xs sm:text-sm text-purple-600 hover:text-purple-700 whitespace-nowrap flex-shrink-0"
               >
@@ -174,14 +200,44 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
             )}
           </div>
 
+          {/* 活動內：切換此活動 / 所有活動 */}
+          {communityId && (
+            <div className="px-3 sm:px-4 py-2.5 border-b border-gray-100">
+              <div className="flex rounded-lg bg-gray-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setFilterScope('current')}
+                  className={`flex-1 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
+                    filterScope === 'current'
+                      ? 'bg-white text-purple-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  此活動
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterScope('all')}
+                  className={`flex-1 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
+                    filterScope === 'all'
+                      ? 'bg-white text-purple-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  所有活動
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 通知列表 */}
           <div className="overflow-y-auto flex-1">
-            {notifications.length === 0 ? (
+            {displayedNotifications.length === 0 ? (
               <div className="p-8 text-center text-gray-400">
                 <p>目前沒有通知</p>
               </div>
             ) : (
-              notifications.map((notification) => (
+              displayedNotifications.map((notification) => (
                 <div
                   key={notification.id}
                   onClick={() => {
@@ -194,21 +250,18 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
                   }`}
                 >
                   <div className="flex items-start gap-2 sm:gap-3">
-                    {/* 未讀指示點 */}
                     {!notification.isRead && (
                       <div className="w-2 h-2 bg-purple-600 rounded-full mt-2 flex-shrink-0"></div>
                     )}
-                    
+
                     <div className="flex-1 min-w-0">
-                      {/* 通知內容 */}
                       <p className="text-sm text-gray-800 mb-1 break-words whitespace-normal">
                         {notification.content}
                       </p>
-                      
-                      {/* 時間和社群 */}
+
                       <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
                         <span className="whitespace-nowrap">{formatTime(notification.createdAt)}</span>
-                        {notification.communityName && (
+                        {showCommunityName && notification.communityName && (
                           <>
                             <span>•</span>
                             <span className="break-words">{notification.communityName}</span>
@@ -226,4 +279,3 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
     </div>
   )
 }
-

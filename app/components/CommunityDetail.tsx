@@ -19,6 +19,8 @@ import {
 } from '@dnd-kit/sortable'
 import Header from './Header'
 import NotificationBell from './NotificationBell'
+import AnnouncementBoard from './AnnouncementBoard'
+import ChatRoom from './ChatRoom'
 import ResourceCard from './ResourceCard'
 import AddActivityModal from './AddActivityModal'
 import CourseObjectives from './CourseObjectives'
@@ -55,15 +57,21 @@ import {
 import { clearCoPrepOnboardingOnLogout } from '@/lib/coPrepOnboardingStorage'
 import IdeaWallOnboardingModal from './IdeaWallOnboardingModal'
 import KanbanOnboardingModal from './KanbanOnboardingModal'
+import CoPrepFeatureIntroCard from './CoPrepFeatureIntroCard'
 import { activityDisplayLabel } from '@/lib/activityDisplay'
+import { isTaskDueSoon, isTaskOverdue } from '@/lib/taskDeadline'
 
 interface CommunityDetailProps {
   communityName: string
   communityId?: string // 可選的社群ID
   onBack: () => void
+  /** 歷史活動：唯讀瀏覽，不可編輯 */
+  readOnly?: boolean
+  /** 歷史活動：本次進入允許編輯教案（不影響其他分頁唯讀） */
+  historyLessonEditMode?: boolean
 }
 
-type TabType = 'resources' | 'activities' | 'ideas' | 'teamwork' | 'history' | 'management' | 'links'
+type TabType = 'resources' | 'activities' | 'ideas' | 'teamwork' | 'history' | 'management'
 
 interface Resource {
   id: string
@@ -105,7 +113,11 @@ interface KanbanTask {
   startDate: string
   endDate: string
   assignees: string[]
-  createdAt?: string // ISO 日期字符串（可選，用於向後兼容）
+  createdAt?: string
+  status?: 'incomplete' | 'completed'
+  completionDescription?: string
+  attachmentPath?: string
+  attachmentName?: string
 }
 
 interface KanbanList {
@@ -140,8 +152,14 @@ interface Idea {
  * 社群詳情頁面組件
  * 對應 Figma 設計 (nodeId: 0:1) - 社群資源(空)
  */
-export default function CommunityDetail({ communityName, communityId: propCommunityId, onBack }: CommunityDetailProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('activities')
+export default function CommunityDetail({
+  communityName,
+  communityId: propCommunityId,
+  onBack,
+  readOnly = false,
+  historyLessonEditMode = false,
+}: CommunityDetailProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('teamwork')
   // 自定義水平卷軸狀態
   const [scrollInfo, setScrollInfo] = useState<{
     scrollLeft: number
@@ -159,13 +177,14 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   const prevHasHorizontalScrollRef = useRef(false) // 用於穩定 hasHorizontalScroll 狀態
   const [isMobile, setIsMobile] = useState(false) // 檢測是否為手機版
   const savedScrollLeftRef = useRef<number>(0) // 保存滾動位置
-  const prevActiveTabRef = useRef<TabType>('activities') // 追蹤上一個 tab
+  const prevActiveTabRef = useRef<TabType>('teamwork') // 追蹤上一個 tab
   const [resources, setResources] = useState<Resource[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [communityId, setCommunityId] = useState<string | null>(propCommunityId || null)
   const [userId, setUserId] = useState<string | null>(null)
   const [showIdeaWallOnboarding, setShowIdeaWallOnboarding] = useState(false)
+  const [showIdeaWallOnboardingReopenHint, setShowIdeaWallOnboardingReopenHint] = useState(false)
   const [showNetworkGraphOnboardingModal, setShowNetworkGraphOnboardingModal] = useState(false)
   const [showKanbanOnboarding, setShowKanbanOnboarding] = useState(false)
   const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false)
@@ -173,6 +192,16 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   const [isVersionControlModalOpen, setIsVersionControlModalOpen] = useState(false)
   const [versionControlActivityId, setVersionControlActivityId] = useState<string | null>(null)
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null)
+  const [isChatRoomOpen, setIsChatRoomOpen] = useState(false)
+  // 側邊欄下方「任務狀態」展開的分類（與團隊分工連動）
+  const [openTaskPanel, setOpenTaskPanel] = useState<'deadline' | 'mine' | 'incomplete' | 'completed' | null>(null)
+  const taskPanelRef = useRef<HTMLDivElement>(null)
+  // 社群資源頁右下角操作小幫手
+  const [isResourceHelperOpen, setIsResourceHelperOpen] = useState(true)
+  // 任務看板頁右下角操作小幫手
+  const [isTeamworkHelperOpen, setIsTeamworkHelperOpen] = useState(true)
+  // 成員管理頁右下角操作小幫手
+  const [isManagementHelperOpen, setIsManagementHelperOpen] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // 使用者頭像下拉選單狀態
@@ -184,12 +213,17 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   
   // 團隊分工 Kanban 列表狀態
   const [kanbanLists, setKanbanLists] = useState<KanbanList[]>([])
+  // 任務看板篩選條件
+  const [teamworkFilter, setTeamworkFilter] = useState<
+    'all' | 'incomplete' | 'completed' | 'mine'
+  >('all')
   const [isAddingList, setIsAddingList] = useState(false)
   const [newListTitle, setNewListTitle] = useState('')
+  const [editingListId, setEditingListId] = useState<string | null>(null)
+  const [editingListTitle, setEditingListTitle] = useState('')
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false)
   const [currentListId, setCurrentListId] = useState<string>('')
   const [editingTask, setEditingTask] = useState<{ taskId: string; listId: string } | null>(null)
-  const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   
   // 拖拽 sensors 配置
@@ -230,6 +264,18 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     
     loadUserData()
   }, [])
+
+  // 任務狀態明細：點擊側邊欄外側時關閉
+  useEffect(() => {
+    if (!openTaskPanel) return
+    const handler = (e: MouseEvent) => {
+      if (taskPanelRef.current && !taskPanelRef.current.contains(e.target as Node)) {
+        setOpenTaskPanel(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [openTaskPanel])
 
   // 如果沒有 communityId，根據 communityName 查詢
   useEffect(() => {
@@ -275,7 +321,14 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }, [communityId])
 
-  // 共備活動：自動進入「進行中」教案編輯；已結束共備者僅在歷史活動瀏覽，不當作預設編輯對象
+  // 歷史活動進入編輯模式：直接開啟共備活動（教案）分頁
+  useEffect(() => {
+    if (readOnly && historyLessonEditMode) {
+      setActiveTab('activities')
+    }
+  }, [readOnly, historyLessonEditMode])
+
+  // 共備活動：自動進入「進行中」教案編輯；已結束共備者切換至其他進行中活動
   useEffect(() => {
     if (activeTab !== 'activities' || !communityId) return
     if (activities.length === 0) {
@@ -283,23 +336,30 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       return
     }
     setViewingActivity((prev) => {
+      if (readOnly) {
+        const completed = activities.find((a) => a.coPrepCompleted)
+        if (completed) return completed
+        if (prev) {
+          const updated = activities.find((a) => a.id === prev.id)
+          return updated ?? activities[0] ?? null
+        }
+        return activities[0] ?? null
+      }
       if (prev) {
         const updated = activities.find((a) => a.id === prev.id)
         if (updated) {
           if (updated.coPrepCompleted) {
             const next = activities.find((a) => !a.coPrepCompleted)
-            // 無進行中活動時仍保留目前活動，才能用「預覽教案／歷史活動」瀏覽已結束教案
             return next ?? updated
           }
           return updated
         }
       }
       const inProgress = activities.find((a) => !a.coPrepCompleted)
-      // 全部已結束時仍開啟第一筆活動，避免共備活動頁只剩空白提示、看不到教案分頁
       return inProgress ?? activities[0] ?? null
     })
-  }, [activeTab, communityId, activities])
-  
+  }, [activeTab, communityId, activities, readOnly])
+
   // 追蹤 activeTab 變化，更新 prevActiveTabRef
   useEffect(() => {
     if (activeTab !== prevActiveTabRef.current) {
@@ -318,6 +378,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }, [activeTab, userId])
 
+  useEffect(() => {
+    if (!showIdeaWallOnboardingReopenHint) return
+    const timer = window.setTimeout(() => setShowIdeaWallOnboardingReopenHint(false), 2800)
+    return () => window.clearTimeout(timer)
+  }, [showIdeaWallOnboardingReopenHint])
+
   // 網絡圖：第一次切到該圖表時顯示單頁操作提示（networkGraph_onboarding_seen_${userId}）
   useEffect(() => {
     if (activeTab !== 'history' || activeHistoryChart !== 'network') {
@@ -331,17 +397,6 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       setShowNetworkGraphOnboardingModal(false)
     }
   }, [activeTab, activeHistoryChart, userId])
-
-  // 團隊分工：首次進入時顯示看板操作引導（kanban_onboarding_seen_${userId}）
-  useEffect(() => {
-    if (activeTab !== 'teamwork' || !userId) {
-      setShowKanbanOnboarding(false)
-      return
-    }
-    if (!hasSeenKanbanOnboarding(userId)) {
-      setShowKanbanOnboarding(true)
-    }
-  }, [activeTab, userId])
 
   // 持續監聽滾動事件，即時保存滾動位置
   useEffect(() => {
@@ -588,13 +643,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   }>>([])
 
   const tabs = [
-    { id: 'activities' as TabType, label: '共備活動', icon: '📝' },
+    { id: 'teamwork' as TabType, label: '任務看板', icon: '🎯' },
     { id: 'ideas' as TabType, label: '想法牆', icon: '💡' },
     { id: 'resources' as TabType, label: '資源', icon: '📁' },
-    { id: 'teamwork' as TabType, label: '團隊分工', icon: '🎯' },
     { id: 'history' as TabType, label: '活動歷程', icon: '📄' },
-    { id: 'management' as TabType, label: '社群管理', icon: '👥' },
-    { id: 'links' as TabType, label: '好站連結', icon: '🔗' },
+    { id: 'management' as TabType, label: '成員管理', icon: '👥' },
+    { id: 'activities' as TabType, label: '教案製作', icon: '📝' },
   ]
 
   const handleAddFileClick = () => {
@@ -747,6 +801,36 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     } catch (error: any) {
       console.error('下載資源錯誤:', error)
       alert(error.message || '下載資源失敗')
+    }
+  }
+
+  const handleShareResourceToPersonal = async (resource: Resource) => {
+    if (!communityId || !userId) {
+      alert('請先登入')
+      return
+    }
+
+    if (!window.confirm(`確定要將「${resource.fileName}」分享至個人資源嗎？`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/communities/${communityId}/resources/${resource.id}/share`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        }
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || '分享失敗')
+      }
+      alert('已成功分享至個人資源！')
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '分享失敗'
+      alert(message)
     }
   }
 
@@ -969,14 +1053,15 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       const data = await response.json()
 
       if (response.ok) {
-        // 如果沒有列表且該社群尚未初始化，建立預設的三個列表
+        // 如果沒有列表且該社群尚未初始化，建立預設的四個列表
         if (Array.isArray(data) && data.length === 0 && !kanbanInitializedRef.current.has(communityId)) {
           kanbanInitializedRef.current.add(communityId) // 標記為已初始化
           
           const defaultLists = [
-            { title: '待處理' },
-            { title: '進行中' },
-            { title: '已完成' },
+            { title: '核心素養' },
+            { title: '學習重點' },
+            { title: '活動與評量設計' },
+            { title: '教材與資源' },
           ]
 
           // 依序建立預設列表
@@ -1014,6 +1099,10 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           }
           setKanbanLists(data)
         }
+        // 檢查即將截止任務並發送提醒通知（3 天、2 天、1 天各一次）
+        fetch(`/api/communities/${communityId}/kanban/deadline-reminders`, { method: 'POST' }).catch(
+          (err) => console.error('截止提醒通知檢查失敗:', err)
+        )
       } else {
         console.error('載入 Kanban 資料失敗:', data.error)
       }
@@ -1094,6 +1183,57 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }
 
+  const handleStartEditListTitle = (listId: string, currentTitle: string) => {
+    setEditingListId(listId)
+    setEditingListTitle(currentTitle)
+  }
+
+  const handleCancelEditListTitle = () => {
+    setEditingListId(null)
+    setEditingListTitle('')
+  }
+
+  const handleSaveListTitle = async (listId: string, fallbackTitle: string) => {
+    const trimmed = editingListTitle.trim()
+    if (!trimmed || trimmed === fallbackTitle) {
+      handleCancelEditListTitle()
+      return
+    }
+
+    if (!communityId) {
+      alert('社群資訊錯誤')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/kanban`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'list',
+          id: listId,
+          title: trimmed,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '更新列表標題失敗')
+      }
+
+      setKanbanLists((prev) =>
+        prev.map((list) => (list.id === listId ? { ...list, title: trimmed } : list))
+      )
+      handleCancelEditListTitle()
+    } catch (error: any) {
+      console.error('更新列表標題錯誤:', error)
+      alert(error.message || '更新列表標題失敗')
+    }
+  }
+
   const handleAddTask = (listId: string) => {
     // 驗證 listId 是否為有效的 UUID（不是硬編碼的 '1', '2', '3'）
     if (!listId || listId === '1' || listId === '2' || listId === '3' || listId.length < 30) {
@@ -1119,7 +1259,9 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     content: string
     startDate: string
     endDate: string
-    assignees: string[] // 這裡是使用者ID陣列（從 AddTaskModal 傳入）
+    assignees: string[]
+    completionDescription?: string
+    attachmentFile?: File | null
   }) => {
     if (!communityId) {
       alert('社群資訊錯誤')
@@ -1145,7 +1287,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
             content: task.content,
             startDate: task.startDate,
             endDate: task.endDate,
-            assignees: assigneeIds, // 使用者ID陣列
+            assignees: assigneeIds,
+            completionDescription: task.completionDescription ?? '',
           }),
         })
 
@@ -1153,6 +1296,31 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
         if (!response.ok) {
           throw new Error(data.error || '更新任務失敗')
+        }
+
+        const hasSubmissionDraft =
+          task.completionDescription !== undefined ||
+          (task.attachmentFile && task.attachmentFile.size > 0)
+
+        if (hasSubmissionDraft) {
+          const formData = new FormData()
+          if (task.completionDescription !== undefined) {
+            formData.append('completionDescription', task.completionDescription)
+          }
+          if (task.attachmentFile && task.attachmentFile.size > 0) {
+            formData.append('file', task.attachmentFile)
+          }
+
+          const subRes = await fetch(
+            `/api/communities/${communityId}/kanban/tasks/${editingTask.taskId}/submission`,
+            { method: 'POST', body: formData }
+          )
+          const subData = await subRes.json().catch(() => ({}))
+          if (!subRes.ok) {
+            throw new Error(
+              (subData as { error?: string }).error || '儲存任務繳交（說明或附件）失敗'
+            )
+          }
         }
 
         // 重新載入 Kanban 資料
@@ -1343,6 +1511,13 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   }) => {
     if (!editingIdea || !userId) {
       alert('請先登入')
+      return
+    }
+
+    const isCurrentUserAdmin =
+      fullCommunityMembers.find((m) => m.userId === userId)?.role === 'admin'
+    if (editingIdea.isConvergence && !isCurrentUserAdmin) {
+      alert('只有社群管理員可以修改收斂結果')
       return
     }
 
@@ -1697,32 +1872,22 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   const handleEditTask = (taskId: string, listId: string) => {
     const list = kanbanLists.find((l) => l.id === listId)
     const task = list?.tasks.find((t) => t.id === taskId)
-    
-    if (task) {
-      // 將 assignees（暱稱陣列）轉換為使用者ID陣列
-      const assigneeIds = task.assignees.map((nickname: string) => {
-        // 根據暱稱找到對應的使用者ID
-        const member = communityMembers.find((m) => m.name === nickname)
-        return member ? member.id : null
-      }).filter((id: string | null) => id !== null) as string[]
 
+    if (task) {
       setEditingTask({ taskId, listId })
       setCurrentListId(listId)
       setIsAddTaskModalOpen(true)
-      setOpenTaskMenuId(null)
-      
-      // 注意：這裡需要等待模態框打開後再設置 initialData
-      // 但由於 AddTaskModal 已經有 useEffect 處理 initialData，我們需要在這裡設置
-      // 實際上，我們需要修改 AddTaskModal 的 props 來傳遞完整的任務資料
     }
   }
 
   const handleDragStart = (event: DragStartEvent) => {
+    if (readOnly) return
     const { active } = event
     setActiveTaskId(active.id as string)
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (readOnly) return
     const { active, over } = event
     setActiveTaskId(null)
 
@@ -1794,9 +1959,6 @@ export default function CommunityDetail({ communityName, communityId: propCommun
       return
     }
 
-    setOpenTaskMenuId(null)
-
-    // 使用瀏覽器原生確認對話框
     if (window.confirm('確定要刪除此任務嗎？此操作無法復原。')) {
       try {
         const response = await fetch(
@@ -1827,31 +1989,38 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     setEditingTask(null)
   }
 
-  // 點擊外部關閉任務選單
-  useEffect(() => {
-    if (!openTaskMenuId) return
+  const handleCompleteTask = async (
+    payload: { completionDescription: string; file: File | null }
+  ) => {
+    if (!communityId || !editingTask) {
+      alert('社群或任務資訊錯誤')
+      return
+    }
 
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
-      // 檢查點擊是否在選單內或三個點按鈕上
-      const isClickInsideMenu = target.closest('.task-menu-container')
-      const isClickOnMenuButton = target.closest('.task-menu-button')
-      
-      if (!isClickInsideMenu && !isClickOnMenuButton) {
-        setOpenTaskMenuId(null)
+    try {
+      const formData = new FormData()
+      formData.append('completionDescription', payload.completionDescription)
+      if (payload.file) {
+        formData.append('file', payload.file)
       }
-    }
 
-    // 使用 setTimeout 確保在當前事件處理完成後再添加監聽器
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside)
-    }, 0)
+      const response = await fetch(
+        `/api/communities/${communityId}/kanban/tasks/${editingTask.taskId}/complete`,
+        { method: 'POST', body: formData }
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || '完成任務失敗')
+      }
 
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('mousedown', handleClickOutside)
+      await loadKanban()
+      setIsAddTaskModalOpen(false)
+      setEditingTask(null)
+      alert('任務已完成！')
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : '完成任務失敗')
     }
-  }, [openTaskMenuId])
+  }
 
   // 計算多久前創立的任務
   const getTimeAgo = (createdAt: string): string => {
@@ -1882,21 +2051,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     }
   }
 
-  // 格式化日期範圍
-  const formatDateRange = (startDate: string, endDate: string): string => {
-    // 處理日期格式：可能是 ISO 格式或 YYYY-MM-DD 格式
-    const formatDate = (dateStr: string): string => {
-      if (!dateStr) return ''
-      // 如果是 ISO 格式，提取日期部分
-      const date = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
-      // 轉換為 YYYY/MM/DD 格式
-      return date.replace(/-/g, '/')
-    }
-    
-    if (!startDate && !endDate) return ''
-    if (!startDate) return formatDate(endDate)
-    if (!endDate) return formatDate(startDate)
-    return `${formatDate(startDate)}~${formatDate(endDate)}`
+  // 任務狀態側邊欄彈窗：任務名稱(yyyy/mm/dd截止)
+  const formatTaskPanelLabel = (task: KanbanTask): string => {
+    const name = task.title || task.content || '(未命名任務)'
+    if (!task.endDate) return name
+    const datePart = task.endDate.includes('T') ? task.endDate.split('T')[0] : task.endDate
+    return `${name}(${datePart.replace(/-/g, '/')}截止)`
   }
 
   // 獲取成員信息（根據使用者ID）
@@ -2029,8 +2189,43 @@ export default function CommunityDetail({ communityName, communityId: propCommun
     return USER_COLORS[index]
   }
 
-  // 共備活動：一進社群就要看到教案共編畫面（含預覽教案、歷史活動）；尚無活動時顯示空白編輯器
+  // 共備活動：一進社群即顯示教案共編畫面（第三張圖樣式）
   const showCoPrepLessonEditor = activeTab === 'activities' && !!communityId
+
+  // 側邊欄任務狀態摘要（與「團隊分工」看板資料連動）
+  const allKanbanTasks = kanbanLists.flatMap((list) => list.tasks)
+  const completedTasks = allKanbanTasks.filter((t) => t.status === 'completed')
+  const incompleteTasks = allKanbanTasks.filter((t) => t.status !== 'completed')
+  const myIncompleteTasks = incompleteTasks.filter(
+    (t) => userId != null && Array.isArray(t.assignees) && t.assignees.includes(userId)
+  )
+  const overdueTasks = incompleteTasks.filter((t) => isTaskOverdue(t.endDate, t.status))
+  const dueSoonTasks = incompleteTasks.filter((t) => isTaskDueSoon(t.endDate, t.status))
+  const deadlineReminderCount = overdueTasks.length + dueSoonTasks.length
+
+  // 任務看板篩選：依 teamworkFilter 判斷單張任務是否顯示
+  const isAssignedToMe = (task: KanbanTask) =>
+    userId != null && Array.isArray(task.assignees) && task.assignees.includes(userId)
+  const matchesTeamworkFilter = (task: KanbanTask): boolean => {
+    const completed = task.status === 'completed'
+    switch (teamworkFilter) {
+      case 'mine':
+        return isAssignedToMe(task)
+      case 'incomplete':
+        return !completed
+      case 'completed':
+        return completed
+      case 'all':
+      default:
+        return true
+    }
+  }
+  const teamworkFilterOptions: { key: typeof teamworkFilter; label: string }[] = [
+    { key: 'all', label: '全部' },
+    { key: 'completed', label: '共同已完成' },
+    { key: 'incomplete', label: '共同未完成' },
+    { key: 'mine', label: '個人任務' },
+  ]
 
   // 全域 header（社群名稱返回鈕 + 通知 + 帳號），在主 layout 與共備活動頁共用同一份
   const globalHeader = (
@@ -2078,8 +2273,16 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         <h2 className="text-lg font-semibold text-gray-800">{communityName}</h2>
       </button>
 
-      {/* 右側：通知和用戶頭像 */}
+      {/* 右側：公告欄、通知和用戶頭像 */}
       <div className="flex items-center gap-6">
+        <AnnouncementBoard
+          communityId={communityId || undefined}
+          userId={userId}
+          userNickname={userNickname}
+          isAdmin={fullCommunityMembers.find((m) => m.userId === userId)?.role === 'admin'}
+          getAvatarColor={(uid) => getUserColor(uid)}
+          readOnly={readOnly}
+        />
         {userId && (
           <NotificationBell
             userId={userId}
@@ -2138,8 +2341,9 @@ export default function CommunityDetail({ communityName, communityId: propCommun
   return (
     <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
       {/* 左側導航欄 - 固定，捲動時不跟著動；手機版隱藏，桌面版顯示 */}
-      <div className="hidden md:flex fixed left-0 top-0 h-screen w-[80px] bg-[#FAFAFA] flex-col items-center py-8 gap-6 z-10">
-        {/* 導航選項 */}
+      <div className="hidden md:flex fixed left-0 top-0 h-screen w-[80px] bg-[#FAFAFA] flex-col z-10">
+        {/* 上方：原有功能 icon（可上下捲動，下方騰出空間給任務狀態） */}
+        <div className="flex-1 min-h-0 w-full overflow-y-auto flex flex-col items-center gap-6 py-8">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -2376,47 +2580,212 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                   />
                 </>
               )}
-              {tab.id === 'links' && (
-                // 好站連結圖標 — 鏈條
-                <>
-                  <path
-                    d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
             </svg>
           </button>
         ))}
+
+        {/* 聊天室入口 */}
+        <button
+          onClick={() => setIsChatRoomOpen((prev) => !prev)}
+          className={`w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
+            isChatRoomOpen
+              ? 'bg-purple-100 text-purple-600'
+              : 'text-gray-600 hover:bg-gray-200'
+          }`}
+          title="聊天室"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+        </button>
+        </div>
+
+        {/* 下方：任務狀態資訊區（與「團隊分工」看板連動） */}
+        <div ref={taskPanelRef} className="relative shrink-0 w-full border-t border-gray-200 bg-[#FAFAFA] px-1.5 py-3">
+          <div className="mb-3.5 text-center text-xs font-bold text-gray-800">任務狀態</div>
+          <div className="flex flex-col gap-1.5">
+            {([
+              { key: 'deadline' as const, label: '截止提醒', count: deadlineReminderCount, color: 'text-red-600', activeBg: 'bg-red-50', activeRing: 'ring-red-200' },
+              { key: 'mine' as const, label: '未完成(個人)', count: myIncompleteTasks.length, color: 'text-purple-600', activeBg: 'bg-purple-50', activeRing: 'ring-purple-200' },
+              { key: 'incomplete' as const, label: '未完成(共同)', count: incompleteTasks.length, color: 'text-amber-600', activeBg: 'bg-amber-50', activeRing: 'ring-amber-200' },
+              { key: 'completed' as const, label: '已完成(共同)', count: completedTasks.length, color: 'text-green-600', activeBg: 'bg-green-50', activeRing: 'ring-green-200' },
+            ]).map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setOpenTaskPanel((prev) => (prev === item.key ? null : item.key))}
+                title={`${item.label}（${item.count}）`}
+                className={`flex w-full flex-col items-center rounded-lg py-1.5 transition-colors ${
+                  openTaskPanel === item.key ? `${item.activeBg} ring-1 ${item.activeRing}` : 'hover:bg-gray-100'
+                }`}
+              >
+                <span className={`text-base font-bold leading-none ${item.color}`}>{item.count}</span>
+                <span className="mt-1 px-0.5 text-center text-[9px] leading-tight text-gray-500">{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* 點擊分類後的簡短明細（顯示於側邊欄右側，不把完整清單塞進 sidebar） */}
+          {openTaskPanel === 'deadline' && (
+            <div className="absolute left-full bottom-0 z-50 ml-2 w-56 rounded-lg border border-gray-200 bg-white p-3 shadow-xl">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-gray-800">
+                  截止提醒（{deadlineReminderCount}）
+                </h4>
+                <button
+                  onClick={() => setOpenTaskPanel(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                  title="關閉"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mb-3">
+                <h5 className="mb-1.5 text-xs font-semibold text-gray-700">
+                  已截止（{overdueTasks.length}）
+                </h5>
+                {overdueTasks.length === 0 ? (
+                  <p className="py-1 text-center text-xs text-gray-400">目前沒有任務</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {overdueTasks.slice(0, 4).map((t) => (
+                      <li key={t.id} className="flex items-start gap-1.5 text-xs text-gray-700">
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                        <span className="truncate">{formatTaskPanelLabel(t)}</span>
+                      </li>
+                    ))}
+                    {overdueTasks.length > 4 && (
+                      <li className="pl-3 text-[11px] text-gray-400">…還有 {overdueTasks.length - 4} 項</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <h5 className="mb-1.5 text-xs font-semibold text-gray-700">
+                  即將截止（{dueSoonTasks.length}）
+                </h5>
+                {dueSoonTasks.length === 0 ? (
+                  <p className="py-1 text-center text-xs text-gray-400">目前沒有任務</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {dueSoonTasks.slice(0, 4).map((t) => (
+                      <li key={t.id} className="flex items-start gap-1.5 text-xs text-gray-700">
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                        <span className="truncate">{formatTaskPanelLabel(t)}</span>
+                      </li>
+                    ))}
+                    {dueSoonTasks.length > 4 && (
+                      <li className="pl-3 text-[11px] text-gray-400">…還有 {dueSoonTasks.length - 4} 項</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  setOpenTaskPanel(null)
+                  handleTabChange('teamwork')
+                }}
+                className="mt-2 w-full text-center text-[11px] text-purple-600 hover:underline"
+              >
+                前往任務看板
+              </button>
+            </div>
+          )}
+
+          {openTaskPanel && openTaskPanel !== 'deadline' && (() => {
+            const panelMap = {
+              mine: { title: '我的待完成', tasks: myIncompleteTasks },
+              incomplete: { title: '全部未完成', tasks: incompleteTasks },
+              completed: { title: '已完成', tasks: completedTasks },
+            }
+            const current = panelMap[openTaskPanel]
+            const shown = current.tasks.slice(0, 6)
+            return (
+              <div className="absolute left-full bottom-0 z-50 ml-2 w-56 rounded-lg border border-gray-200 bg-white p-3 shadow-xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-gray-800">
+                    {current.title}（{current.tasks.length}）
+                  </h4>
+                  <button
+                    onClick={() => setOpenTaskPanel(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                    title="關閉"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+                {current.tasks.length === 0 ? (
+                  <p className="py-2 text-center text-xs text-gray-400">目前沒有任務</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {shown.map((t) => (
+                      <li key={t.id} className="flex items-start gap-1.5 text-xs text-gray-700">
+                        <span
+                          className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+                            openTaskPanel === 'completed' ? 'bg-green-500' : 'bg-amber-500'
+                          }`}
+                        />
+                        <span className="truncate">{formatTaskPanelLabel(t)}</span>
+                      </li>
+                    ))}
+                    {current.tasks.length > shown.length && (
+                      <li className="pl-3 text-[11px] text-gray-400">…還有 {current.tasks.length - shown.length} 項</li>
+                    )}
+                  </ul>
+                )}
+                <button
+                  onClick={() => {
+                    setOpenTaskPanel(null)
+                    handleTabChange('teamwork')
+                  }}
+                  className="mt-2 w-full text-center text-[11px] text-purple-600 hover:underline"
+                >
+                  前往任務看板
+                </button>
+              </div>
+            )
+          })()}
+        </div>
       </div>
       <div className="flex-1 flex flex-col pb-16 md:pb-0 md:ml-[80px]">
         {/* Header */}
         {globalHeader}
 
+        {readOnly && !historyLessonEditMode && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800 text-center flex-shrink-0">
+            歷史活動（唯讀）— 僅供瀏覽，無法編輯
+          </div>
+        )}
+        {readOnly && historyLessonEditMode && (
+          <div className="bg-purple-50 border-b border-purple-200 px-4 py-2 text-sm text-purple-800 text-center flex-shrink-0">
+            歷史活動（編輯模式）— 僅本次瀏覽可編輯教案，離開後恢復唯讀
+          </div>
+        )}
+
         {/* 共備活動：embedded 模式，沿用此 layout 的 header 與 fixed sidebar */}
         {showCoPrepLessonEditor && (
           <CourseObjectives
             embedded={true}
+            readOnly={readOnly && !historyLessonEditMode}
+            historyLessonEditMode={readOnly && historyLessonEditMode}
             activityName={headerTitle}
             activityId={viewingActivity?.id}
             onSidebarClick={handleSidebarClickFromActivity}
             convergenceResults={convergenceResults}
-            activities={activities}
-            onHistoryDelete={handleDeleteActivity}
             onActivitiesRefresh={loadActivities}
             onCoPrepCompleted={loadActivities}
             onOpenVersionManagement={
-              viewingActivity ? () => handleManageVersion(viewingActivity.id) : () => {}
+              readOnly || !viewingActivity
+                ? undefined
+                : () => handleManageVersion(viewingActivity.id)
             }
             onVersionCreated={(activityId, versionData) => {
               console.log('版本已創建:', activityId, versionData)
@@ -2438,15 +2807,14 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               </div>
             ) : (
               <h1 className="text-2xl font-bold text-[#6D28D9]">
-                {activeTab === 'resources' && '社群資源'}
-                {activeTab === 'activities' && '共備活動'}
-                {activeTab === 'teamwork' && '團隊分工'}
+                {activeTab === 'resources' && '活動資源'}
+                {activeTab === 'activities' && '教案製作'}
+                {activeTab === 'teamwork' && '任務看板'}
                 {activeTab === 'history' && '活動歷程'}
-                {activeTab === 'management' && '社群管理'}
-                {activeTab === 'links' && '好站連結'}
+                {activeTab === 'management' && '成員管理'}
               </h1>
             )}
-            {activeTab === 'resources' && (
+            {activeTab === 'resources' && !readOnly && (
               <>
                 <input
                   ref={fileInputRef}
@@ -2459,14 +2827,14 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                   onClick={handleAddFileClick}
                   className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors"
                 >
-                  + 新增檔案
+                  新增檔案
                 </button>
               </>
             )}
           </div>
 
           {/* 內容區域 */}
-          {activeTab !== 'ideas' && activeTab !== 'links' && (
+          {activeTab !== 'ideas' && (
           <div className="bg-white rounded-lg shadow-sm min-h-[400px] p-8">
             {activeTab === 'resources' && (
               <>
@@ -2486,30 +2854,124 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                         uploadTime={resource.uploadTime}
                         uploaderName={resource.uploaderName}
                         uploaderId={resource.uploaderId}
-                        onDelete={() => handleDeleteResource(resource.id)}
+                        onDelete={readOnly ? undefined : () => handleDeleteResource(resource.id)}
                         onDownload={() => handleDownloadResource(resource.id)}
+                        onShare={readOnly || !userId ? undefined : () => handleShareResourceToPersonal(resource)}
+                        shareLabel="分享至個人資源"
+                        shareTitle="分享至個人資源"
                       />
                     ))}
                   </div>
                 )}
+
+                {/* 左下角操作小幫手 */}
+                <div className="fixed bottom-6 left-[calc(80px+1rem)] z-40 flex flex-col items-start">
+                  {isResourceHelperOpen && (
+                    <div className="mb-3 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h4 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                          <span className="text-purple-600">操作小幫手</span>
+                        </h4>
+                        <button
+                          onClick={() => setIsResourceHelperOpen(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                          title="關閉"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                      <ul className="space-y-2.5 text-sm leading-relaxed text-gray-600">
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span>點選右上角「<span className="font-medium text-gray-800">+ 新增檔案</span>」按鈕可上傳檔案</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span>點擊<span className="font-medium text-gray-800">檔案卡片</span>可以下載檔案</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span className="flex flex-wrap items-center gap-1">
+                            點擊
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline shrink-0 text-gray-400" aria-hidden>
+                              <path d="M2 4H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M12.6667 4V13.3333C12.6667 14 12 14.6667 11.3333 14.6667H4.66667C4 14.6667 3.33333 14 3.33333 13.3333V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M5.33333 4V2.66667C5.33333 2 6 1.33334 6.66667 1.33334H9.33333C10 1.33334 10.6667 2 10.6667 2.66667V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            可以刪除檔案
+                          </span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span className="flex flex-wrap items-center gap-1">
+                            點擊
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline shrink-0 text-gray-400" aria-hidden>
+                              <circle cx="18" cy="5" r="3" stroke="currentColor" strokeWidth="1.5" />
+                              <circle cx="6" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+                              <circle cx="18" cy="19" r="3" stroke="currentColor" strokeWidth="1.5" />
+                              <path d="M8.59 13.51L15.42 17.49M15.41 6.51L8.59 10.49" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            可分享至「<span className="font-medium text-gray-800">個人資源</span>」；也可從個人資源分享檔案至此
+                          </span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span>可上傳的檔案格式：圖片（jpg、png、gif、webp、svg）及文件（pdf、doc、docx、xls、xlsx、ppt、pptx、txt），單檔最大 10MB</span>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+                  <div className="flex flex-col items-center">
+                    {!isResourceHelperOpen && (
+                      <span className="mb-1.5 text-[13px] leading-none font-semibold text-[rgba(138,99,210,1)] whitespace-nowrap">
+                        需要幫助？
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setIsResourceHelperOpen((prev) => !prev)}
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(138,99,210,0.9)] text-white shadow-lg transition-colors hover:bg-[rgba(138,99,210,1)]"
+                      title="操作小幫手"
+                      aria-label="操作小幫手"
+                    >
+                      {isResourceHelperOpen ? (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      ) : (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                          <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </>
             )}
-            {activeTab === 'activities' && (
-              <div className="flex flex-col items-center justify-center h-full min-h-[280px] text-gray-500 px-4 text-center">
-                {activities.length === 0 ? (
-                  <p className="text-lg">目前沒有共備活動</p>
-                ) : activities.every((a) => a.coPrepCompleted) ? (
-                  <p className="text-base">
-                    目前沒有進行中的共備。請從左側進入共備後，於「歷史活動」分頁檢視已結束的教案。
-                  </p>
-                ) : (
-                  <p className="text-base">
-                    已為您開啟教案編輯頁。若要切換活動，請點選頂部分頁的「歷史活動」。
-                  </p>
-                )}
-              </div>
-            )}
             {activeTab === 'teamwork' && (
+              <>
+              {/* 任務篩選器：保留看板欄位，只顯示符合條件的任務卡片 */}
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-sm font-medium text-gray-500">篩選：</span>
+                {teamworkFilterOptions.map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setTeamworkFilter(opt.key)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      teamworkFilter === opt.key
+                        ? 'bg-[rgba(138,99,210,0.9)] text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCorners}
@@ -2519,7 +2981,8 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                 <div className="w-full overflow-x-auto">
                   <div className="flex gap-4 min-w-max p-4">
                     {/* 新增列表按鈕 */}
-                  {!isAddingList ? (
+                  {!readOnly && (
+                  !isAddingList ? (
                     <button
                       onClick={() => setIsAddingList(true)}
                       className="h-fit px-4 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)] transition-colors whitespace-nowrap"
@@ -2562,6 +3025,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                         </button>
                       </div>
                     </div>
+                  )
                   )}
 
                   {/* Kanban 列表 */}
@@ -2571,11 +3035,44 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                       className="w-48 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col"
                     >
                       {/* 列表標題和刪除按鈕 */}
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                        <h3 className="font-semibold text-gray-800">{list.title}</h3>
+                      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200">
+                        {editingListId === list.id && !readOnly ? (
+                          <input
+                            type="text"
+                            value={editingListTitle}
+                            onChange={(e) => setEditingListTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                handleSaveListTitle(list.id, list.title)
+                              } else if (e.key === 'Escape') {
+                                handleCancelEditListTitle()
+                              }
+                            }}
+                            onBlur={() => handleSaveListTitle(list.id, list.title)}
+                            className="min-w-0 flex-1 font-semibold text-gray-800 px-1 py-0.5 border border-purple-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-400"
+                            autoFocus
+                          />
+                        ) : (
+                          <h3
+                            className={`min-w-0 flex-1 font-semibold text-gray-800 truncate ${
+                              !readOnly ? 'cursor-text hover:text-purple-700' : ''
+                            }`}
+                            onClick={() => {
+                              if (!readOnly) {
+                                handleStartEditListTitle(list.id, list.title)
+                              }
+                            }}
+                            title={!readOnly ? '點擊可編輯欄位名稱' : undefined}
+                          >
+                            {list.title}
+                          </h3>
+                        )}
+                        {!readOnly && (
                         <button
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={() => handleDeleteList(list.id)}
-                          className="text-gray-400 hover:text-gray-600 transition-colors"
+                          className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
                           title="刪除列表"
                         >
                           <svg
@@ -2594,9 +3091,11 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                             />
                           </svg>
                         </button>
+                        )}
                       </div>
 
                       {/* 新增任務按鈕 - 緊貼在標題下方 */}
+                      {!readOnly && (
                       <div className="px-4 py-3">
                         <button
                           onClick={() => handleAddTask(list.id)}
@@ -2605,39 +3104,128 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                           新增任務
                         </button>
                       </div>
+                      )}
 
                       {/* 任務列表區域 */}
+                      {(() => {
+                        const visibleTasks = list.tasks.filter(matchesTeamworkFilter)
+                        return (
                       <SortableContext
-                        items={list.tasks.map(t => t.id)}
+                        items={visibleTasks.map(t => t.id)}
                         strategy={verticalListSortingStrategy}
                         id={list.id}
                       >
                         <DroppableList 
                           id={list.id} 
-                          isEmpty={list.tasks.length === 0}
+                          isEmpty={visibleTasks.length === 0}
                         >
-                          {list.tasks.map((task) => (
+                          {visibleTasks.map((task) => (
                             <DraggableTaskCard
                               key={task.id}
                               id={task.id}
                               task={task}
                               listId={list.id}
+                              readOnly={readOnly}
                               onEdit={() => handleEditTask(task.id, list.id)}
                               onDelete={() => handleDeleteTask(task.id, list.id)}
                               getUserColor={getUserColor}
                               getMemberInfo={getMemberInfo}
-                              formatDateRange={formatDateRange}
-                              openMenuId={openTaskMenuId}
-                              setOpenMenuId={setOpenTaskMenuId}
                             />
                           ))}
                         </DroppableList>
                       </SortableContext>
+                        )
+                      })()}
                     </div>
                   ))}
                 </div>
               </div>
               </DndContext>
+
+                {/* 左下角操作小幫手 */}
+                <div className="fixed bottom-6 left-[calc(80px+1rem)] z-40 flex flex-col items-start">
+                  {isTeamworkHelperOpen && (
+                    <div className="mb-3 w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h4 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                          <span className="text-purple-600">操作小幫手</span>
+                        </h4>
+                        <button
+                          onClick={() => setIsTeamworkHelperOpen(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                          title="關閉"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                      <ul className="space-y-2.5 text-sm leading-relaxed text-gray-600">
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span>
+                            預設的任務欄位為：
+                            <span className="font-medium text-gray-800">核心素養</span>、
+                            <span className="font-medium text-gray-800">學習重點</span>、
+                            <span className="font-medium text-gray-800">活動與評量設計</span>、
+                            <span className="font-medium text-gray-800">教材與資源</span>
+                          </span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span>點擊<span className="font-medium text-gray-800">任務欄位標題</span>可以進行編輯</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span><span className="font-medium text-gray-800">任務卡片</span>可以拖移到其他任務欄位</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span>
+                            未完成的任務卡片點擊
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-0.5 inline align-[-2px] shrink-0 text-gray-400" aria-hidden>
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            後，可以進行任務繳交；繳交完成後，狀態會變成<span className="font-medium text-gray-800">已完成</span>
+                          </span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                          <span>可以透過<span className="font-medium text-gray-800">上方篩選按鈕</span>，查看指派給自己的任務</span>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+                  <div className="flex flex-col items-center">
+                    {!isTeamworkHelperOpen && (
+                      <span className="mb-1.5 text-[13px] leading-none font-semibold text-[rgba(138,99,210,1)] whitespace-nowrap">
+                        需要幫助？
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setIsTeamworkHelperOpen((prev) => !prev)}
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(138,99,210,0.9)] text-white shadow-lg transition-colors hover:bg-[rgba(138,99,210,1)]"
+                      title="操作小幫手"
+                      aria-label="操作小幫手"
+                    >
+                      {isTeamworkHelperOpen ? (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      ) : (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                          <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
             {activeTab === 'history' && (
               <div className="flex-1 py-4 md:py-6 overflow-x-auto overflow-y-auto w-full" style={{ paddingLeft: '1vw', paddingRight: '1vw' }}>
@@ -2677,9 +3265,25 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                   </div>
 
                   {activeHistoryChart === 'network' && (
-                    <p className="text-sm text-gray-600 mb-3">
-                      顯示成員之間在想法互動中的連結關係，用來觀察誰和誰有互動。
-                    </p>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-gray-600">
+                        顯示成員之間在想法互動中的連結關係，用來觀察誰和誰有互動。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowNetworkGraphOnboardingModal(true)}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-100"
+                        title="網絡圖操作提示"
+                        aria-label="網絡圖操作提示"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                          <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                        操作提示
+                      </button>
+                    </div>
                   )}
 
                   {/* 根據選中的圖表類型顯示對應內容 */}
@@ -2690,7 +3294,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                       )}
                       {activeHistoryChart === 'network' && (
                         communityId ? (
-                          <NetworkGraph communityId={communityId} />
+                          <NetworkGraph communityId={communityId} readOnly={readOnly} />
                         ) : (
                           <div className="flex items-center justify-center h-96 text-gray-400">
                             <p className="text-lg">載入中...</p>
@@ -2706,6 +3310,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               </div>
             )}
             {activeTab === 'management' && (
+              <>
               <div className="flex-1 px-4 sm:px-6 md:px-8 py-4 md:py-6">
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   {/* 標題 */}
@@ -2755,7 +3360,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                           </div>
 
                           {/* 管理員操作按鈕（只對非自己的成員顯示） */}
-                          {canManage && (
+                          {canManage && !readOnly && (
                             <div className="flex items-center justify-end gap-2 sm:shrink-0">
                               <button
                                 type="button"
@@ -2792,75 +3397,76 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                   </div>
                 </div>
               </div>
+
+              {/* 左下角操作小幫手 */}
+              <div className="fixed bottom-6 left-[calc(80px+1rem)] z-40 flex flex-col items-start">
+                {isManagementHelperOpen && (
+                  <div className="mb-3 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h4 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                        <span className="text-purple-600">操作小幫手</span>
+                      </h4>
+                      <button
+                        onClick={() => setIsManagementHelperOpen(false)}
+                        className="text-gray-400 hover:text-gray-600"
+                        title="關閉"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                    <ul className="space-y-2.5 text-sm leading-relaxed text-gray-600">
+                      <li className="flex items-start gap-2">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                        <span>活動發起者為預設管理員</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                        <span>非活動發起者可被設為管理員</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                        <span>管理員才可進行想法收斂</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                        <span>管理員才可以新增公告</span>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+                <div className="flex flex-col items-center">
+                  {!isManagementHelperOpen && (
+                    <span className="mb-1.5 text-[13px] leading-none font-semibold text-[rgba(138,99,210,1)] whitespace-nowrap">
+                      需要幫助？
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setIsManagementHelperOpen((prev) => !prev)}
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(138,99,210,0.9)] text-white shadow-lg transition-colors hover:bg-[rgba(138,99,210,1)]"
+                    title="操作小幫手"
+                    aria-label="操作小幫手"
+                  >
+                    {isManagementHelperOpen ? (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    ) : (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+              </>
             )}
           </div>
-          )}
-
-          {/* 好站連結 */}
-          {activeTab === 'links' && (
-            <div className="bg-white rounded-lg shadow-sm min-h-[400px] p-8">
-              <p className="text-sm text-gray-500 mb-6">點擊卡片即可在新分頁開啟對應網站。</p>
-              <div className="space-y-3">
-                {[
-                  {
-                    name: 'CIRN 教育資源網',
-                    desc: '提供課程綱要、教案與教學資源，協助備課規劃。',
-                    url: 'https://cirn.moe.edu.tw/',
-                  },
-                  {
-                    name: 'NotebookLM',
-                    desc: '可整理教材、摘要重點，協助快速理解與備課。',
-                    url: 'https://notebooklm.google.com/',
-                  },
-                  {
-                    name: 'Gemini',
-                    desc: 'AI 工具，可協助教案設計、內容生成與靈感發想。',
-                    url: 'https://gemini.google.com/',
-                  },
-                  {
-                    name: '康軒數位資源',
-                    desc: '提供教材、教案與數位教學資源。',
-                    url: 'https://www.knsh.com.tw/',
-                  },
-                  {
-                    name: '南一數位資源',
-                    desc: '提供課本配套教材與教學輔助資源。',
-                    url: 'https://www.nani.com.tw/',
-                  },
-                  {
-                    name: '翰林數位資源',
-                    desc: '提供教學內容、題庫與教案參考。',
-                    url: 'https://www.hle.com.tw/',
-                  },
-                ].map((site) => (
-                  <a
-                    key={site.url}
-                    href={site.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4 transition-all hover:border-purple-300 hover:shadow-md hover:shadow-purple-100/60 hover:-translate-y-[1px]"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      {/* favicon */}
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600 group-hover:bg-purple-100 transition-colors">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="2" y1="12" x2="22" y2="12" />
-                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        </svg>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-gray-800 group-hover:text-purple-700 transition-colors">
-                          {site.name}
-                        </p>
-                        <p className="truncate text-xs text-gray-500 mt-0.5">{site.desc}</p>
-                      </div>
-                    </div>
-                    {/* 外部連結 icon 已移除 */}
-                  </a>
-                ))}
-              </div>
-            </div>
           )}
 
           {/* 想法牆（獨立容器，無白色背景） */}
@@ -2869,13 +3475,38 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               // 手機版：為底部導航欄留出空間，確保底部卷軸可見
               paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 80px)',
             }}>
-              {/* 想法收斂按鈕 */}
-              <button 
-                onClick={() => setIsConvergenceModalOpen(true)}
-                className="px-6 py-2.5 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] text-white rounded-lg font-medium transition-colors mb-2"
-              >
-                想法收斂
-              </button>
+              {/* 新手導覽、想法收斂 */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    data-idea-wall-onboarding-reopen
+                    onClick={() => setShowIdeaWallOnboarding(true)}
+                    className={`px-3 py-2 text-sm font-medium text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors whitespace-nowrap ${
+                      showIdeaWallOnboardingReopenHint ? 'community-onboarding-reopen-highlight' : ''
+                    }`}
+                    title="操作說明"
+                  >
+                    新手導覽
+                  </button>
+                  {showIdeaWallOnboardingReopenHint && (
+                    <p
+                      className="community-onboarding-reopen-tooltip absolute left-0 top-full mt-2 z-50 w-max max-w-[14rem] rounded-lg border border-purple-200 bg-white px-3 py-2 text-xs leading-relaxed text-purple-900 shadow-lg"
+                      role="status"
+                    >
+                      之後可從這裡重新查看導覽
+                    </p>
+                  )}
+                </div>
+                {!readOnly && (
+                <button 
+                  onClick={() => setIsConvergenceModalOpen(true)}
+                  className="px-6 py-2.5 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] text-white rounded-lg font-medium transition-colors"
+                >
+                  想法收斂
+                </button>
+                )}
+              </div>
               
               {/* 邊界線 */}
               <div className="border-t-2 border-gray-300 mb-4"></div>
@@ -2959,9 +3590,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                               creatorId={creatorId}
                               position={idea.position || { x: 50 + index * 200, y: 50 }}
                               rotation={idea.rotation || 0}
-                              onClick={() => handleEditIdea(idea.id)}
-                              onPositionChange={handleIdeaPositionChange}
-                              onRotationChange={handleIdeaRotationChange}
+                              readOnly={readOnly}
+                              onClick={() => {
+                                if (!readOnly) handleEditIdea(idea.id)
+                              }}
+                              onPositionChange={readOnly ? () => {} : handleIdeaPositionChange}
+                              onRotationChange={readOnly ? () => {} : handleIdeaRotationChange}
                               isConvergence={idea.isConvergence}
                             />
                           )
@@ -2976,6 +3610,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               </div>
 
               {/* 右下角浮動新增按鈕 - 手機版和桌面版都顯示 */}
+              {!readOnly && (
               <button
                 onClick={() => setIsAddIdeaModalOpen(true)}
                 className="fixed right-4 sm:right-8 w-12 h-12 sm:w-14 sm:h-14 bg-[rgba(138,99,210,0.9)] hover:bg-[rgba(138,99,210,1)] rounded-full shadow-lg flex items-center justify-center text-white text-2xl font-light transition-colors z-50"
@@ -2986,6 +3621,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
               >
                 +
               </button>
+              )}
             </div>
           )}
         </div>
@@ -3021,6 +3657,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
         isOpen={isAddTaskModalOpen}
         onClose={handleCloseAddTaskModal}
         onSubmit={handleSubmitTask}
+        onComplete={editingTask ? handleCompleteTask : undefined}
         communityMembers={communityMembers}
         editMode={!!editingTask}
         initialData={
@@ -3029,18 +3666,16 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                 const list = kanbanLists.find((l) => l.id === editingTask.listId)
                 const task = list?.tasks.find((t) => t.id === editingTask.taskId)
                 if (task) {
-                  // 將 assignees（暱稱陣列）轉換為使用者ID陣列
-                  const assigneeIds = task.assignees.map((nickname: string) => {
-                    const member = communityMembers.find((m) => m.name === nickname)
-                    return member ? member.id : null
-                  }).filter((id: string | null) => id !== null) as string[]
-
                   return {
                     category: task.title,
                     content: task.content,
                     startDate: task.startDate,
                     endDate: task.endDate,
-                    assignees: assigneeIds, // 轉換為使用者ID陣列
+                    assignees: task.assignees,
+                    status: task.status || 'incomplete',
+                    completionDescription: task.completionDescription || '',
+                    attachmentPath: task.attachmentPath || '',
+                    attachmentName: task.attachmentName || '',
                   }
                 }
                 return undefined
@@ -3083,6 +3718,12 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           communityId={communityId || undefined}
           lastEditedByName={editingIdea.lastEditedByName}
           lastEditedAt={editingIdea.lastEditedAt}
+          readOnly={
+            Boolean(
+              editingIdea.isConvergence &&
+                fullCommunityMembers.find((m) => m.userId === userId)?.role !== 'admin'
+            )
+          }
         />
       )}
 
@@ -3095,6 +3736,7 @@ export default function CommunityDetail({ communityName, communityId: propCommun
           communityId={communityId || undefined}
           userId={userId}
           userAccount={userAccount}
+          isAdmin={fullCommunityMembers.find((m) => m.userId === userId)?.role === 'admin'}
         />
       )}
 
@@ -3108,14 +3750,17 @@ export default function CommunityDetail({ communityName, communityId: propCommun
 
       <IdeaWallOnboardingModal
         open={showIdeaWallOnboarding}
-        onDismiss={() => {
+        onDismiss={(options) => {
           markIdeaWallOnboardingSeen(userId)
           setShowIdeaWallOnboarding(false)
+          if (options?.showReopenHint) {
+            setShowIdeaWallOnboardingReopenHint(true)
+          }
         }}
       />
 
       <KanbanOnboardingModal
-        open={showKanbanOnboarding}
+        open={false}
         onDismiss={() => {
           markKanbanOnboardingSeen(userId)
           setShowKanbanOnboarding(false)
@@ -3338,29 +3983,39 @@ export default function CommunityDetail({ communityName, communityId: propCommun
                   />
                 </>
               )}
-              {tab.id === 'links' && (
-                <>
-                  <path
-                    d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
             </svg>
             <span className="text-xs mt-1">{tab.label}</span>
           </button>
         ))}
+
+        {/* 聊天室入口 */}
+        <button
+          onClick={() => setIsChatRoomOpen((prev) => !prev)}
+          className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-colors ${
+            isChatRoomOpen ? 'bg-purple-100 text-purple-600' : 'text-gray-600'
+          }`}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg" className="text-gray-600">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+          <span className="text-xs mt-1">聊天室</span>
+        </button>
       </div>
+
+      {/* 聊天室視窗 */}
+      <ChatRoom
+        isOpen={isChatRoomOpen}
+        onClose={() => setIsChatRoomOpen(false)}
+        communityId={communityId || undefined}
+        userId={userId}
+        userNickname={userNickname}
+        getAvatarColor={(uid) => getUserColor(uid)}
+        readOnly={readOnly}
+      />
+
+      {!readOnly && activeTab === 'teamwork' && (
+        <CoPrepFeatureIntroCard userId={userId} communityId={communityId || undefined} />
+      )}
     </div>
   )
 }

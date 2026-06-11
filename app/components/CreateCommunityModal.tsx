@@ -14,6 +14,31 @@ interface CreateCommunityModalProps {
   }
 }
 
+function FieldHint({ text }: { text: string }) {
+  return (
+    <span className="group relative ml-1 inline-flex align-middle">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label={text}
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full text-gray-400 outline-none hover:text-purple-500 focus:text-purple-500"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.5 9.5a2.5 2.5 0 0 1 4.2 1.8c0 1.5-2.2 2-2.2 3.7V15" strokeLinecap="round" />
+          <circle cx="12" cy="18" r="0.75" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-[calc(100%+6px)] top-1/2 z-[60] hidden w-52 -translate-y-1/2 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-left text-xs font-normal leading-relaxed text-gray-600 shadow-md group-hover:block group-focus-within:block"
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
+
 export default function CreateCommunityModal({
   isOpen,
   onClose,
@@ -89,20 +114,21 @@ export default function CreateCommunityModal({
         >
           {/* 標題 */}
           <h2 className="text-2xl font-bold text-[#6D28D9] mb-6 text-center">
-            {editMode ? '修改社群' : '新增社群'}
+            {editMode ? '修改活動' : '新增活動'}
           </h2>
 
-          {/* 社群名稱 */}
+          {/* 活動名稱 */}
           <div className="mb-4">
-            <label className="block text-gray-700 font-medium mb-2">
-              社群名稱
+            <label className="mb-2 flex items-center text-gray-700 font-medium">
+              活動名稱
+              <FieldHint text="可填寫本次要共同備課的內容，或某個團體／學校名稱" />
             </label>
             <input
               ref={nameInputRef}
               type="text"
               value={communityName}
               onChange={handleNameChange}
-              placeholder="輸入社群名稱"
+              placeholder="輸入活動名稱"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
             />
           </div>
@@ -111,6 +137,9 @@ export default function CreateCommunityModal({
           <div className="mb-4">
             <label className="block text-gray-700 font-medium mb-2">
               邀請碼
+              <span className="text-sm font-normal text-gray-500">
+                (分享此邀請碼，邀請成員加入活動。)
+              </span>
             </label>
             <input
               type="text"
@@ -121,15 +150,16 @@ export default function CreateCommunityModal({
             />
           </div>
 
-          {/* 社群介紹 */}
+          {/* 活動介紹 */}
           <div className="mb-6">
-            <label className="block text-gray-700 font-medium mb-2">
-              社群介紹
+            <label className="mb-2 flex items-center text-gray-700 font-medium">
+              活動介紹
+              <FieldHint text="可簡要說明本次活動的主要任務，或告知加入活動成員條件或活動性質。" />
             </label>
             <textarea
               value={description}
               onChange={handleDescriptionChange}
-              placeholder="輸入社群介紹"
+              placeholder="輸入活動介紹"
               rows={4}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800 resize-none"
             />

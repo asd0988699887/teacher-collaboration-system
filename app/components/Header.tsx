@@ -38,15 +38,73 @@ const getUserColor = (userId: string | null): string => {
   return USER_COLORS[index]
 }
 
+function BrandLogo() {
+  return (
+    <div className="w-[24px] h-[24px] md:w-[30px] md:h-[30px] bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="text-white"
+      >
+        <path
+          d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle
+          cx="9"
+          cy="7"
+          r="4"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  )
+}
+
 /**
  * Header 組件
  * 包含 Logo 和使用者頭像
  */
 interface HeaderProps {
   communityId?: string // 可選的社群ID，用於過濾通知
+  /** 左側品牌標題；列表頁傳「共備活動」，詳情頁維持預設 */
+  brandTitle?: string
+  /** 外層列表頁：在標題右側顯示導覽切換 */
+  showOverviewNav?: boolean
+  usefulLinksActive?: boolean
+  personalResourcesActive?: boolean
+  onUsefulLinksToggle?: () => void
+  onPersonalResourcesToggle?: () => void
+  /** 外層列表頁：點擊左側「共備活動」回到總覽 */
+  onBrandClick?: () => void
 }
 
-export default function Header({ communityId }: HeaderProps = {}) {
+export default function Header({
+  communityId,
+  brandTitle = '共備社群',
+  showOverviewNav = false,
+  usefulLinksActive = false,
+  personalResourcesActive = false,
+  onUsefulLinksToggle,
+  onPersonalResourcesToggle,
+  onBrandClick,
+}: HeaderProps = {}) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const avatarRef = useRef<HTMLDivElement>(null)
@@ -118,42 +176,83 @@ export default function Header({ communityId }: HeaderProps = {}) {
     <header className="w-full bg-[#FAFAFA] px-4 sm:px-8 md:px-16 py-3 flex items-center justify-between relative">
       {/* Logo 區域 */}
       <div className="flex items-center gap-2 md:gap-4">
-        {/* 共備社群 Icon - 使用現代化的協作圖標 */}
-        <div className="w-[24px] h-[24px] md:w-[30px] md:h-[30px] bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="text-white"
+        {onBrandClick ? (
+          <button
+            type="button"
+            onClick={onBrandClick}
+            className="flex items-center gap-2 md:gap-4 rounded-lg hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
+            title="回到共備活動總覽"
           >
-            <path
-              d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle
-              cx="9"
-              cy="7"
-              r="4"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-        <span className="text-base md:text-lg font-semibold text-gray-800 whitespace-nowrap">共備社群</span>
+            <BrandLogo />
+            <span className="text-base md:text-lg font-semibold text-gray-800 whitespace-nowrap">
+              {brandTitle}
+            </span>
+          </button>
+        ) : (
+          <>
+            <BrandLogo />
+            <span className="text-base md:text-lg font-semibold text-gray-800 whitespace-nowrap">
+              {brandTitle}
+            </span>
+          </>
+        )}
+        {showOverviewNav && (
+          <nav className="ml-2 md:ml-4 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onUsefulLinksToggle}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                usefulLinksActive
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-purple-700'
+              }`}
+              aria-pressed={usefulLinksActive}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0"
+                aria-hidden
+              >
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              好站連結
+            </button>
+            <button
+              type="button"
+              onClick={onPersonalResourcesToggle}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                personalResourcesActive
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-purple-700'
+              }`}
+              aria-pressed={personalResourcesActive}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0"
+                aria-hidden
+              >
+                <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" />
+              </svg>
+              個人資源
+            </button>
+          </nav>
+        )}
       </div>
 
       {/* 右側使用者區域 */}

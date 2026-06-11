@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { toDatetimeLocalValue } from '@/lib/kanbanTaskDateTime'
 
 interface AddTaskModalProps {
   isOpen: boolean
@@ -11,7 +12,15 @@ interface AddTaskModalProps {
     startDate: string
     endDate: string
     assignees: string[]
-  }) => void
+    /** 編輯時一併儲存任務繳交草稿（不變更完成狀態） */
+    completionDescription?: string
+    attachmentFile?: File | null
+  }) => void | Promise<void>
+  /** 編輯模式：完成任務（需填寫完成說明） */
+  onComplete?: (payload: {
+    completionDescription: string
+    file: File | null
+  }) => void | Promise<void>
   communityMembers?: Array<{ id: string; name: string; avatar?: string }>
   editMode?: boolean
   initialData?: {
@@ -20,13 +29,45 @@ interface AddTaskModalProps {
     startDate: string
     endDate: string
     assignees: string[]
+    status?: 'incomplete' | 'completed'
+    completionDescription?: string
+    attachmentPath?: string
+    attachmentName?: string
   }
+}
+
+function FieldHint({ text, wide }: { text: string; wide?: boolean }) {
+  return (
+    <span className="group relative ml-1 inline-flex align-middle">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label={text}
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full text-gray-400 outline-none hover:text-purple-500 focus:text-purple-500"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.5 9.5a2.5 2.5 0 0 1 4.2 1.8c0 1.5-2.2 2-2.2 3.7V15" strokeLinecap="round" />
+          <circle cx="12" cy="18" r="0.75" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute left-[calc(100%+6px)] top-1/2 z-[110] hidden -translate-y-1/2 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-left text-xs font-normal leading-relaxed text-gray-600 shadow-md group-hover:block group-focus-within:block ${
+          wide ? 'w-56' : 'w-52'
+        }`}
+      >
+        {text}
+      </span>
+    </span>
+  )
 }
 
 export default function AddTaskModal({
   isOpen,
   onClose,
   onSubmit,
+  onComplete,
   communityMembers = [],
   editMode = false,
   initialData,
@@ -38,6 +79,12 @@ export default function AddTaskModal({
   const [assignees, setAssignees] = useState<string[]>(initialData?.assignees || [])
   const [assigneeInput, setAssigneeInput] = useState('')
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false)
+  const [completionDescription, setCompletionDescription] = useState('')
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+  const [existingAttachmentPath, setExistingAttachmentPath] = useState('')
+  const [existingAttachmentName, setExistingAttachmentName] = useState('')
+  const [isCompleting, setIsCompleting] = useState(false)
+  const [taskStatus, setTaskStatus] = useState<'incomplete' | 'completed'>('incomplete')
   
   // 拖移相關狀態
   const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -81,16 +128,25 @@ export default function AddTaskModal({
       if (editMode && initialData) {
         setCategory(initialData.category || '')
         setContent(initialData.content || '')
-        setStartDate(initialData.startDate || '')
-        setEndDate(initialData.endDate || '')
+        setStartDate(toDatetimeLocalValue(initialData.startDate))
+        setEndDate(toDatetimeLocalValue(initialData.endDate))
         setAssignees(initialData.assignees || [])
+        setCompletionDescription(initialData.completionDescription || '')
+        setExistingAttachmentPath(initialData.attachmentPath || '')
+        setExistingAttachmentName(initialData.attachmentName || '')
+        setTaskStatus(initialData.status === 'completed' ? 'completed' : 'incomplete')
       } else {
         setCategory('')
         setContent('')
         setStartDate('')
         setEndDate('')
         setAssignees([])
+        setCompletionDescription('')
+        setExistingAttachmentPath('')
+        setExistingAttachmentName('')
+        setTaskStatus('incomplete')
       }
+      setAttachmentFile(null)
       setAssigneeInput('')
       setShowAssigneeDropdown(false)
       // 重置位置到中心（但允許用戶拖移）
@@ -173,10 +229,32 @@ export default function AddTaskModal({
     setAssignees([])
     setAssigneeInput('')
     setShowAssigneeDropdown(false)
+    setCompletionDescription('')
+    setAttachmentFile(null)
+    setExistingAttachmentPath('')
+    setExistingAttachmentName('')
+  }
+
+  const handleCompleteTask = async () => {
+    if (!onComplete) return
+    if (!completionDescription.trim()) {
+      alert('請填寫完成任務說明')
+      return
+    }
+    setIsCompleting(true)
+    try {
+      await onComplete({
+        completionDescription: completionDescription.trim(),
+        file: attachmentFile,
+      })
+      resetForm()
+    } finally {
+      setIsCompleting(false)
+    }
   }
 
   // 處理提交
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!category.trim() || !content.trim()) {
@@ -184,15 +262,23 @@ export default function AddTaskModal({
       return
     }
 
-    onSubmit({
-      category,
-      content,
-      startDate,
-      endDate,
-      assignees,
-    })
-
-    resetForm()
+    try {
+      await onSubmit({
+        category,
+        content,
+        startDate,
+        endDate,
+        assignees,
+        ...(editMode
+          ? {
+              completionDescription: completionDescription.trim(),
+              attachmentFile,
+            }
+          : {}),
+      })
+    } catch {
+      // 儲存失敗時保留表單內容，由父層 alert
+    }
   }
 
   // 處理關閉
@@ -267,8 +353,9 @@ export default function AddTaskModal({
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* 任務類別 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
               任務類別
+              <FieldHint text="任務類別是此任務的重點，用於讓成員快速了解此任務的重點是甚麼。" />
             </label>
             <input
               type="text"
@@ -281,8 +368,12 @@ export default function AddTaskModal({
 
           {/* 任務內容 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
               任務內容
+              <FieldHint
+                wide
+                text="任務內容是此任務的詳細說明，可描述需要完成的事項、繳交內容或注意事項，讓被指派成員清楚知道要做什麼。"
+              />
             </label>
             <textarea
               value={content}
@@ -298,46 +389,22 @@ export default function AddTaskModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               任務時間
             </label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 relative">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  lang="en-US"
-                  className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6D28D9] focus:border-transparent text-gray-800 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${
-                    !startDate
-                      ? '[&::-webkit-datetime-edit-text]:opacity-0 [&::-webkit-datetime-edit-month-field]:opacity-0 [&::-webkit-datetime-edit-day-field]:opacity-0 [&::-webkit-datetime-edit-year-field]:opacity-0'
-                      : ''
-                  }`}
-                  style={{ colorScheme: 'light' }}
-                />
-                {!startDate && (
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                    yyyy/mm/dd
-                  </span>
-                )}
-              </div>
-              <span className="text-gray-500">~</span>
-              <div className="flex-1 relative">
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  lang="en-US"
-                  className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6D28D9] focus:border-transparent text-gray-800 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${
-                    !endDate
-                      ? '[&::-webkit-datetime-edit-text]:opacity-0 [&::-webkit-datetime-edit-month-field]:opacity-0 [&::-webkit-datetime-edit-day-field]:opacity-0 [&::-webkit-datetime-edit-year-field]:opacity-0'
-                      : ''
-                  }`}
-                  style={{ colorScheme: 'light' }}
-                />
-                {!endDate && (
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                    yyyy/mm/dd
-                  </span>
-                )}
-              </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="datetime-local"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6D28D9] focus:border-transparent text-gray-800 text-sm"
+                style={{ colorScheme: 'light' }}
+              />
+              <span className="hidden sm:inline text-gray-500 shrink-0">~</span>
+              <input
+                type="datetime-local"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6D28D9] focus:border-transparent text-gray-800 text-sm"
+                style={{ colorScheme: 'light' }}
+              />
             </div>
           </div>
 
@@ -450,6 +517,57 @@ export default function AddTaskModal({
             </div>
           </div>
 
+          {/* 任務繳交（僅編輯模式） */}
+          {editMode && onComplete && (
+            <div className="border-t border-gray-200 pt-4 mt-2 space-y-4">
+              <h3 className="text-base font-semibold text-gray-800">任務繳交</h3>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <span className="text-red-500 mr-0.5">*</span>
+                  完成任務說明
+                </label>
+                <textarea
+                  value={completionDescription}
+                  onChange={(e) => setCompletionDescription(e.target.value)}
+                  placeholder="請說明任務完成方式與成果"
+                  rows={4}
+                  readOnly={taskStatus === 'completed'}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#6D28D9] resize-none text-gray-800 disabled:bg-gray-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  附件上傳
+                </label>
+                <input
+                  type="file"
+                  disabled={taskStatus === 'completed'}
+                  onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-50 file:text-[#6D28D9] hover:file:bg-purple-100 disabled:opacity-50"
+                />
+                {attachmentFile && (
+                  <p className="mt-1 text-xs text-gray-500">已選擇：{attachmentFile.name}</p>
+                )}
+                {!attachmentFile && existingAttachmentPath && existingAttachmentName && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    目前已上傳：
+                    <a
+                      href={existingAttachmentPath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#6D28D9] hover:underline ml-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {existingAttachmentName}
+                    </a>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           </div>
           
           {/* 按鈕 - 固定在底部 */}
@@ -467,6 +585,16 @@ export default function AddTaskModal({
             >
               {editMode ? '儲存' : '新增'}
             </button>
+            {editMode && onComplete && taskStatus !== 'completed' && (
+              <button
+                type="button"
+                disabled={isCompleting}
+                onClick={() => void handleCompleteTask()}
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-lg font-medium transition-colors"
+              >
+                {isCompleting ? '處理中…' : '完成任務'}
+              </button>
+            )}
           </div>
         </form>
         </div>

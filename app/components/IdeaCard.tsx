@@ -66,7 +66,9 @@ export default function IdeaCard({
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 hover:shadow-md transition-shadow w-fit cursor-pointer"
+      className={`rounded-lg shadow-sm border border-gray-200 p-2 hover:shadow-md transition-shadow w-fit cursor-pointer ${
+        isConvergence ? 'bg-[#FFF8EC]' : 'bg-white'
+      }`}
     >
       {/* 階段（帶有燈泡圖標） */}
       <div className="flex items-center gap-1 mb-1">

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
 import { createNotificationsForCommunity } from '@/lib/notifications'
+import { fromMysqlToClientDateTime, toMysqlDateTime } from '@/lib/kanbanTaskDateTime'
 
 // GET: 讀取社群的 Kanban 資料（包含列表和任務）
 export async function GET(
@@ -28,24 +29,51 @@ export async function GET(
       [communityId]
     ) as any[]
 
-    // 查詢所有任務（包含指派資訊）
-    const tasks = await query(
-      `SELECT 
-        kt.id,
-        kt.list_id AS listId,
-        kt.title,
-        kt.content,
-        kt.start_date AS startDate,
-        kt.end_date AS endDate,
-        kt.sort_order AS sortOrder,
-        kt.created_at AS createdAt
-      FROM kanban_tasks kt
-      WHERE kt.list_id IN (
-        SELECT id FROM kanban_lists WHERE community_id = ?
-      )
-      ORDER BY kt.sort_order ASC, kt.created_at ASC`,
-      [communityId]
-    ) as any[]
+    // 查詢所有任務（包含指派資訊；若尚未 migration 則不含繳交欄位）
+    let tasks: any[]
+    try {
+      tasks = (await query(
+        `SELECT 
+          kt.id,
+          kt.list_id AS listId,
+          kt.title,
+          kt.content,
+          kt.start_date AS startDate,
+          kt.end_date AS endDate,
+          kt.sort_order AS sortOrder,
+          kt.created_at AS createdAt,
+          kt.status,
+          kt.completion_description AS completionDescription,
+          kt.attachment_path AS attachmentPath,
+          kt.attachment_name AS attachmentName
+        FROM kanban_tasks kt
+        WHERE kt.list_id IN (
+          SELECT id FROM kanban_lists WHERE community_id = ?
+        )
+        ORDER BY kt.sort_order ASC, kt.created_at ASC`,
+        [communityId]
+      )) as any[]
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (!/unknown column/i.test(msg)) throw err
+      tasks = (await query(
+        `SELECT 
+          kt.id,
+          kt.list_id AS listId,
+          kt.title,
+          kt.content,
+          kt.start_date AS startDate,
+          kt.end_date AS endDate,
+          kt.sort_order AS sortOrder,
+          kt.created_at AS createdAt
+        FROM kanban_tasks kt
+        WHERE kt.list_id IN (
+          SELECT id FROM kanban_lists WHERE community_id = ?
+        )
+        ORDER BY kt.sort_order ASC, kt.created_at ASC`,
+        [communityId]
+      )) as any[]
+    }
 
     // 查詢所有任務指派
     const assignees = await query(
@@ -79,26 +107,19 @@ export async function GET(
       if (!tasksMap.has(task.listId)) {
         tasksMap.set(task.listId, [])
       }
-      // 格式化日期：將資料庫日期轉換為 YYYY-MM-DD 格式
-      const formatDate = (dateStr: string | null): string => {
-        if (!dateStr) return ''
-        // 如果是 Date 物件或 ISO 字串，提取日期部分
-        const date = new Date(dateStr)
-        if (isNaN(date.getTime())) return ''
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        return `${year}-${month}-${day}`
-      }
-
+      const rawStatus = task.status === 'completed' ? 'completed' : 'incomplete'
       tasksMap.get(task.listId)!.push({
         id: task.id,
         title: task.title,
         content: task.content || '',
-        startDate: formatDate(task.startDate),
-        endDate: formatDate(task.endDate),
+        startDate: fromMysqlToClientDateTime(task.startDate),
+        endDate: fromMysqlToClientDateTime(task.endDate),
         assignees: assigneesMap.get(task.id) || [],
         createdAt: task.createdAt ? new Date(task.createdAt).toISOString() : '',
+        status: rawStatus,
+        completionDescription: task.completionDescription || '',
+        attachmentPath: task.attachmentPath || '',
+        attachmentName: task.attachmentName || '',
       })
     })
 
@@ -273,8 +294,8 @@ export async function POST(
         listId,
         title.trim(),
         content || null,
-        startDate || null,
-        endDate || null,
+        toMysqlDateTime(startDate),
+        toMysqlDateTime(endDate),
         nextSort
       ]
       
@@ -287,10 +308,20 @@ export async function POST(
       }
       
       try {
-        await query(
-          'INSERT INTO kanban_tasks (id, list_id, title, content, start_date, end_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          taskParams
-        )
+        try {
+          await query(
+            `INSERT INTO kanban_tasks (id, list_id, title, content, start_date, end_date, sort_order, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'incomplete')`,
+            taskParams
+          )
+        } catch (insertErr: unknown) {
+          const msg = insertErr instanceof Error ? insertErr.message : String(insertErr)
+          if (!/unknown column/i.test(msg)) throw insertErr
+          await query(
+            'INSERT INTO kanban_tasks (id, list_id, title, content, start_date, end_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            taskParams
+          )
+        }
 
         // 指派任務
         if (assignees && Array.isArray(assignees) && assignees.length > 0) {
@@ -310,10 +341,14 @@ export async function POST(
           id: taskId,
           title: title.trim(),
           content: content || '',
-          startDate: startDate || '',
-          endDate: endDate || '',
+          startDate: fromMysqlToClientDateTime(toMysqlDateTime(startDate)),
+          endDate: fromMysqlToClientDateTime(toMysqlDateTime(endDate)),
           assignees: assignees || [],
           createdAt: new Date().toISOString(),
+          status: 'incomplete',
+          completionDescription: '',
+          attachmentPath: '',
+          attachmentName: '',
         }
 
         // 創建通知給社群其他成員
@@ -367,7 +402,8 @@ export async function PUT(
     const resolvedParams = await params
     const { communityId } = resolvedParams
     const body = await request.json()
-    const { type, id, title, content, startDate, endDate, assignees } = body
+    const { type, id, title, content, startDate, endDate, assignees, status, completionDescription } =
+      body
 
     if (type === 'list') {
       // 更新列表
@@ -399,19 +435,41 @@ export async function PUT(
       }
       if (startDate !== undefined) {
         updateFields.push('start_date = ?')
-        updateValues.push(startDate || null)
+        updateValues.push(toMysqlDateTime(startDate))
       }
       if (endDate !== undefined) {
         updateFields.push('end_date = ?')
-        updateValues.push(endDate || null)
+        updateValues.push(toMysqlDateTime(endDate))
+      }
+      if (status === 'completed' || status === 'incomplete') {
+        updateFields.push('status = ?')
+        updateValues.push(status)
+      }
+      if (completionDescription !== undefined) {
+        updateFields.push('completion_description = ?')
+        updateValues.push(completionDescription || null)
       }
 
       if (updateFields.length > 0) {
         updateValues.push(id)
-        await query(
-          `UPDATE kanban_tasks SET ${updateFields.join(', ')} WHERE id = ?`,
-          updateValues
-        )
+        try {
+          await query(
+            `UPDATE kanban_tasks SET ${updateFields.join(', ')} WHERE id = ?`,
+            updateValues
+          )
+        } catch (updateErr: unknown) {
+          const msg = updateErr instanceof Error ? updateErr.message : String(updateErr)
+          if (/unknown column/i.test(msg) && completionDescription !== undefined) {
+            return NextResponse.json(
+              {
+                error:
+                  '無法儲存完成任務說明，請先執行 migration：add_kanban_task_submission.sql',
+              },
+              { status: 500 }
+            )
+          }
+          throw updateErr
+        }
       }
 
       // 更新指派（刪除舊的，建立新的）

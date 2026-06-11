@@ -1,7 +1,15 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import {
+  formatTaskDateRangeCompact,
+  formatTaskDateRangeFull,
+  hasTaskTime,
+} from '@/lib/kanbanTaskDateTime'
+
+export type KanbanTaskStatus = 'incomplete' | 'completed'
 
 interface DraggableTaskCardProps {
   id: string
@@ -12,32 +20,26 @@ interface DraggableTaskCardProps {
     startDate: string
     endDate: string
     assignees: string[]
-    createdAt?: string // 建立時間（ISO 字串）
+    createdAt?: string
+    status?: KanbanTaskStatus
   }
   listId: string
+  readOnly?: boolean
   onEdit: () => void
   onDelete: () => void
   getUserColor: (userId: string, nickname?: string) => string
   getMemberInfo: (userId: string) => { name: string; account: string }
-  formatDateRange: (startDate: string, endDate: string) => string
-  openMenuId: string | null
-  setOpenMenuId: (id: string | null) => void
 }
 
-/**
- * 可拖拽的任務卡片組件
- */
 export default function DraggableTaskCard({
   id,
   task,
   listId,
+  readOnly = false,
   onEdit,
   onDelete,
   getUserColor,
   getMemberInfo,
-  formatDateRange,
-  openMenuId,
-  setOpenMenuId,
 }: DraggableTaskCardProps) {
   const {
     attributes,
@@ -46,8 +48,9 @@ export default function DraggableTaskCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ 
+  } = useSortable({
     id,
+    disabled: readOnly,
     data: {
       type: 'task',
       task,
@@ -59,27 +62,89 @@ export default function DraggableTaskCard({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    cursor: isDragging ? 'grabbing' : 'grab',
+    cursor: readOnly ? 'default' : isDragging ? 'grabbing' : 'grab',
   }
+
+  const isCompleted = task.status === 'completed'
+  const [isExpanded, setIsExpanded] = useState(false)
+  const isCollapsed = isCompleted && !isExpanded
+  const dateRangeCompact = formatTaskDateRangeCompact(task.startDate, task.endDate)
+  const dateRangeFull = formatTaskDateRangeFull(task.startDate, task.endDate)
+  const showFullDateOnHover =
+    dateRangeFull !== '' &&
+    (hasTaskTime(task.startDate) || hasTaskTime(task.endDate))
+
+  useEffect(() => {
+    if (isCompleted) {
+      setIsExpanded(false)
+    }
+  }, [isCompleted, task.id])
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow relative"
+      {...(readOnly ? {} : { ...attributes, ...listeners })}
+      className={`bg-white border rounded-lg shadow-sm hover:shadow-md transition-all relative w-full min-w-0 ${
+        isCollapsed
+          ? 'border-green-200 bg-green-50/40 p-2'
+          : 'border-gray-200 p-3'
+      }`}
     >
-      {/* 三個點選項按鈕 */}
-      <div className="absolute top-2 right-2">
+      {isCollapsed ? (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="inline-flex shrink-0 items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-800">
+            已完成
+          </span>
+          <h4 className="flex-1 min-w-0 text-xs font-semibold text-gray-700 truncate">{task.title}</h4>
+          <button
+            type="button"
+            className="shrink-0 text-gray-400 hover:text-[#6D28D9] p-0.5 rounded hover:bg-white/80 transition-colors"
+            title="展開任務"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded(true)
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </div>
+      ) : (
+        <>
+      {/* 右上角：摺疊（已完成）/ 編輯 / 刪除 */}
+      {(isCompleted || !readOnly) && (
+      <div
+        className="absolute top-2 right-2 flex items-center gap-0.5"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {isCompleted && (
+          <button
+            type="button"
+            className="text-gray-400 hover:text-[#6D28D9] p-1 rounded hover:bg-purple-50 transition-colors"
+            title="摺疊任務"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded(false)
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+        )}
+        {!readOnly && (
+          <>
         <button
           type="button"
-          className="task-menu-button text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"
+          className="text-gray-400 hover:text-[#6D28D9] p-1 rounded hover:bg-purple-50 transition-colors"
+          title="編輯任務"
           onClick={(e) => {
             e.stopPropagation()
-            setOpenMenuId(openMenuId === task.id ? null : task.id)
+            onEdit()
           }}
-          onMouseDown={(e) => e.stopPropagation()}
         >
           <svg
             width="16"
@@ -88,99 +153,87 @@ export default function DraggableTaskCard({
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <circle cx="12" cy="5" r="2" fill="currentColor" />
-            <circle cx="12" cy="12" r="2" fill="currentColor" />
-            <circle cx="12" cy="19" r="2" fill="currentColor" />
+            <path
+              d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
-
-        {/* 選單下拉 - 顯示在右邊 */}
-        {openMenuId === task.id && (
-          <div
-            className="task-menu-container absolute left-full ml-2 top-0 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
-            onClick={(e) => e.stopPropagation()}
+        <button
+          type="button"
+          className="text-gray-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
+          title="刪除任務"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onEdit()
-              }}
-              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              編輯任務
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete()
-              }}
-              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              刪除任務
-            </button>
-          </div>
+            <path
+              d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+          </>
         )}
       </div>
+      )}
 
-      {/* 任務類別 */}
-      <h4 className="font-semibold text-gray-800 mb-1 pr-6">
-        {task.title}
-      </h4>
+      {/* 狀態列：與右上角按鈕同高，僅此列保留右側留白 */}
+      <div
+        className={`mb-2 min-w-0 ${
+          isCompleted || !readOnly ? 'pr-[4.5rem]' : ''
+        }`}
+      >
+        <span
+          className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${
+            isCompleted
+              ? 'bg-green-100 text-green-800'
+              : 'bg-gray-100 text-gray-700'
+          }`}
+        >
+          {isCompleted ? '已完成' : '未完成'}
+        </span>
+      </div>
+
+      {/* 任務類別：在按鈕列下方，使用卡片全寬 */}
+      <h4 className="font-semibold text-gray-800 mb-1 min-w-0 w-full">{task.title}</h4>
 
       {/* 任務內容 */}
-      <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-        {task.content}
-      </p>
+      <p className="text-sm text-gray-600 mb-2 line-clamp-2">{task.content}</p>
 
       {/* 任務時間 */}
-      {task.startDate || task.endDate ? (
-        <div className="text-xs text-gray-500 mb-2">
-          {formatDateRange(task.startDate, task.endDate)}
+      {dateRangeCompact ? (
+        <div
+          className="text-xs text-gray-500 mb-2 cursor-default"
+          title={showFullDateOnHover ? dateRangeFull : undefined}
+        >
+          {dateRangeCompact}
         </div>
       ) : null}
 
       {/* 底部信息 */}
       <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
-        {/* 任務負責人 */}
         <div className="flex items-center gap-1">
           {task.assignees.slice(0, 3).map((assigneeId) => {
             const member = getMemberInfo(assigneeId)
@@ -202,43 +255,38 @@ export default function DraggableTaskCard({
           )}
         </div>
 
-        {/* 顯示建立時間的相對時間 */}
         {task.createdAt && (
           <div className="text-xs text-gray-400">
             {(() => {
               const now = new Date()
               const created = new Date(task.createdAt)
-              const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000)
+              const diffInSeconds = Math.floor(
+                (now.getTime() - created.getTime()) / 1000
+              )
 
-              if (diffInSeconds < 0) {
-                // 如果時間差為負數（未來時間），顯示「剛剛」
-                return '剛剛'
-              } else if (diffInSeconds < 60) {
-                return '剛剛'
-              } else if (diffInSeconds < 3600) {
-                const minutes = Math.floor(diffInSeconds / 60)
-                return `${minutes}分鐘前`
-              } else if (diffInSeconds < 86400) {
-                const hours = Math.floor(diffInSeconds / 3600)
-                return `${hours}小時前`
-              } else if (diffInSeconds < 604800) {
-                const days = Math.floor(diffInSeconds / 86400)
-                return `${days}天前`
-              } else if (diffInSeconds < 2592000) {
-                const weeks = Math.floor(diffInSeconds / 604800)
-                return `${weeks}週前`
-              } else if (diffInSeconds < 31536000) {
-                const months = Math.floor(diffInSeconds / 2592000)
-                return `${months}個月前`
-              } else {
-                const years = Math.floor(diffInSeconds / 31536000)
-                return `${years}年前`
+              if (diffInSeconds < 0 || diffInSeconds < 60) return '剛剛'
+              if (diffInSeconds < 3600) {
+                return `${Math.floor(diffInSeconds / 60)}分鐘前`
               }
+              if (diffInSeconds < 86400) {
+                return `${Math.floor(diffInSeconds / 3600)}小時前`
+              }
+              if (diffInSeconds < 604800) {
+                return `${Math.floor(diffInSeconds / 86400)}天前`
+              }
+              if (diffInSeconds < 2592000) {
+                return `${Math.floor(diffInSeconds / 604800)}週前`
+              }
+              if (diffInSeconds < 31536000) {
+                return `${Math.floor(diffInSeconds / 2592000)}個月前`
+              }
+              return `${Math.floor(diffInSeconds / 31536000)}年前`
             })()}
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   )
 }
-

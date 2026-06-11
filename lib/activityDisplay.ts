@@ -12,3 +12,15 @@ export function activityDisplayLabel(
       : ''
   return t || activity.name
 }
+
+export function buildHistoryActivityIntro(a: {
+  schoolLevel?: string
+  implementationGrade?: string
+  courseDomain?: string
+  unitName?: string
+}) {
+  const parts = [a.schoolLevel, a.implementationGrade, a.courseDomain, a.unitName]
+    .map((s) => (typeof s === 'string' ? s.trim() : ''))
+    .filter(Boolean)
+  return parts.length > 0 ? parts.join('') : '（尚無教案摘要）'
+}

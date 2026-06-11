@@ -33,9 +33,6 @@ export default function CommunityButton({
         text-sm md:text-base
       "
     >
-      {/* Plus 符號 */}
-      <span className="text-base md:text-[18px] leading-[21px] font-bold">+</span>
-      
       {/* 按鈕文字 */}
       <span className="text-sm md:text-[16px] leading-[21px] font-bold whitespace-nowrap">{label}</span>
     </button>

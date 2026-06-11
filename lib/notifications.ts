@@ -12,23 +12,26 @@ interface CreateNotificationParams {
   action: 'create' | 'update' | 'reply'
   content: string
   relatedId?: string
+  /** 為 true 時通知社群所有成員（含 actorId） */
+  notifyAllMembers?: boolean
 }
 
 /**
  * 創建通知給社群內所有成員（排除操作者自己）
  */
 export async function createNotificationsForCommunity(params: CreateNotificationParams) {
-  const { communityId, actorId, type, action, content, relatedId } = params
+  const { communityId, actorId, type, action, content, relatedId, notifyAllMembers } = params
 
   console.log('🔔 準備創建通知:', { communityId, actorId, type, action, content })
 
   try {
-    // 查詢社群內所有成員（排除操作者自己）
-    const members = await query(
-      `SELECT user_id FROM community_members 
-       WHERE community_id = ? AND user_id != ?`,
-      [communityId, actorId]
-    ) as any[]
+    const members = (notifyAllMembers
+      ? await query(`SELECT user_id FROM community_members WHERE community_id = ?`, [communityId])
+      : await query(
+          `SELECT user_id FROM community_members 
+           WHERE community_id = ? AND user_id != ?`,
+          [communityId, actorId]
+        )) as any[]
 
     console.log('🔔 找到社群成員:', { count: members.length, memberIds: members.map(m => m.user_id) })
 

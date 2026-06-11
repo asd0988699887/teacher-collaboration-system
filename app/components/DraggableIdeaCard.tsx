@@ -19,6 +19,7 @@ interface DraggableIdeaCardProps {
   onPositionChange: (id: string, position: { x: number; y: number }) => void
   onRotationChange: (id: string, rotation: number) => void
   isConvergence?: boolean
+  readOnly?: boolean
 }
 
 /**
@@ -41,6 +42,7 @@ export default function DraggableIdeaCard({
   onPositionChange,
   onRotationChange,
   isConvergence,
+  readOnly = false,
 }: DraggableIdeaCardProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
@@ -66,6 +68,7 @@ export default function DraggableIdeaCard({
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (readOnly) return
     if (e.button !== 0) return
     
     e.preventDefault()
@@ -106,6 +109,7 @@ export default function DraggableIdeaCard({
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (readOnly) return
     if (e.touches.length !== 1) return
     
     e.preventDefault()
@@ -210,7 +214,7 @@ export default function DraggableIdeaCard({
     const handleMouseUp = () => {
       // 如果沒有拖移，且按住時間很短，則觸發點擊事件
       if (!isDragging && mouseDownPos && Date.now() - mouseDownTime < 200) {
-        onClick()
+        if (!readOnly) onClick()
       }
       
       setIsDragging(false)
@@ -282,7 +286,7 @@ export default function DraggableIdeaCard({
     const handleTouchEnd = () => {
       // 如果沒有拖移，且按住時間很短，則觸發點擊事件
       if (!isDragging && touchDownPos && Date.now() - touchDownTime < 200) {
-        onClick()
+        if (!readOnly) onClick()
       }
       
       setIsDragging(false)
@@ -306,7 +310,7 @@ export default function DraggableIdeaCard({
       document.removeEventListener('touchmove', handleTouchMove)
       document.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [isDragging, dragOffset, id, onPositionChange, mouseDownPos, mouseDownTime, onClick, touchDownPos, touchDownTime])
+  }, [isDragging, dragOffset, id, onPositionChange, mouseDownPos, mouseDownTime, onClick, touchDownPos, touchDownTime, readOnly])
 
   return (
     <div
@@ -319,7 +323,7 @@ export default function DraggableIdeaCard({
         top: `${position.y}px`,
         transform: `rotate(${rotation}deg)`,
         zIndex: isDragging ? 100 : 2,
-        cursor: isDragging ? 'grabbing' : 'pointer',
+        cursor: readOnly ? 'default' : isDragging ? 'grabbing' : 'pointer',
         userSelect: 'none',
         touchAction: 'none', // 防止觸控時的默認行為（如滾動）
       }}

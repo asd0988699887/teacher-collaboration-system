@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useOnboardingExitAnimation } from '@/lib/useOnboardingExitAnimation'
+
+export const IDEA_WALL_ONBOARDING_REOPEN_SELECTOR = '[data-idea-wall-onboarding-reopen]'
 
 export type IdeaWallOnboardingStepAnimation =
   | 'fab'
@@ -30,7 +33,7 @@ const STEPS: StepDef[] = [
   {
     title: '檢視想法',
     description: '點選任一想法節點卡片，即可開啟檢視／編輯視窗查看詳細內容。',
-    tip: '提示：「[ ]」內是階段，沒有「[ ]」的是標題；想法內容請點擊卡片查看。',
+    tip: '提示：[ ]內是階段，沒有[ ]的是標題；想法內容請點擊卡片查看。—— 相同階段才可進行收斂。',
     mediaSrc: '/onboarding/IdeaWall_ViewNode_Click.gif',
     animationType: 'viewCard',
   },
@@ -52,14 +55,14 @@ const STEPS: StepDef[] = [
   {
     title: '想法收斂',
     description: '點選「想法收斂」按鈕，開始整理並統整同階段的想法。',
-    tip: '提示：請先建立想法節點，才能開始進行想法收斂。',
+    tip: '提示：只有活動管理員可以進行想法節點的收斂；一般成員仍可查看收斂內容並參與討論。',
     mediaSrc: '/onboarding/Convergence_ClickButton.gif',
     animationType: 'convergenceButton',
   },
   {
     title: '填寫收斂內容',
     description: '選擇想收斂的「想法階段」，並輸入收斂結果內容。',
-    tip: '提示：若尚不確定收斂內容，可在下方留言區與夥伴討論。各階段的討論內容彼此獨立，會分開顯示。',
+    tip: '提示：收斂內容由活動管理員填寫；所有成員皆可於下方討論區留言，提供補充意見與討論。',
     mediaSrc: '/onboarding/Convergence_FillForm.gif',
     animationType: 'convergenceForm',
   },
@@ -67,11 +70,19 @@ const STEPS: StepDef[] = [
     title: '產生收斂結果',
     description:
       '完成收斂後，系統會產生「收斂節點」，並以紫色連線將被收斂的想法節點指向該收斂節點，方便回顧統整結果。',
-    tip: '提示：收斂節點的圖示為「實心燈泡」，與想法發散節點的「空心燈泡」圖示不同。',
+    tip: '提示：收斂節點以「實心燈泡＋奶油色底」呈現；一般想法節點則為「空心燈泡＋白底」。',
     mediaSrc: '/onboarding/Convergence_ResultLinks.gif',
     animationType: 'convergenceResult',
   },
 ]
+
+/** 各頁圖示框統一高度 */
+const ILLUSTRATION_FRAME =
+  'relative w-full h-[200px] shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 overflow-hidden'
+
+/** 導覽彈窗統一高度（避免各頁不一致與內容區捲軸） */
+const MODAL_FRAME =
+  'pointer-events-auto w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col h-[536px] max-h-[90vh]'
 
 function CursorIcon({ className }: { className?: string }) {
   return (
@@ -101,12 +112,12 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
   if (step.mediaSrc && !imgError) {
     return (
-      <div className="relative w-full min-h-[200px] rounded-xl bg-gray-50 overflow-hidden flex items-center justify-center border border-gray-100">
+      <div className={`${ILLUSTRATION_FRAME} bg-gray-50 flex items-center justify-center`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={step.mediaSrc}
           alt=""
-          className="max-h-[220px] w-auto object-contain"
+          className="max-h-[188px] w-auto object-contain"
           onError={() => setImgError(true)}
         />
       </div>
@@ -116,7 +127,7 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
   // —— CSS 示意動畫（GIF 不存在時）——
   if (step.animationType === 'fab') {
     return (
-      <div className="relative w-full h-[200px] rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 overflow-hidden">
+      <div className={ILLUSTRATION_FRAME}>
         {/* 乾淨畫布；右下角「＋」與實際想法牆 FAB 同：bottom-4 right-4、w-12 h-12 */}
         <div className="idea-wall-onboard-fab absolute bottom-4 right-4 z-[1] w-12 h-12 rounded-full bg-[rgba(138,99,210,0.95)] shadow-lg flex items-center justify-center text-white text-2xl font-light pointer-events-none">
           +
@@ -132,7 +143,7 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
   if (step.animationType === 'viewCard') {
     return (
-      <div className="relative w-full min-h-[200px] rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-4 overflow-hidden flex flex-col items-center">
+      <div className={`${ILLUSTRATION_FRAME} p-4 flex flex-col items-center justify-center`}>
         {/* 窄版範例卡片（與實際想法節點比例相近） */}
         <div className="relative w-full max-w-[200px] mt-1">
           <div className="rounded-lg border border-gray-200 bg-white shadow-md p-2.5 idea-wall-onboard-card-pulse">
@@ -162,7 +173,7 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
   if (step.animationType === 'extend') {
     return (
-      <div className="relative w-full min-h-[220px] rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-2.5">
+      <div className={`${ILLUSTRATION_FRAME} p-2 flex items-start justify-center`}>
         {/* 與 EditIdeaModal 一致的「檢視節點」版面；延伸想法為藍底白字 +，並加強視覺凸顯 */}
         <div className="rounded-lg border border-gray-200 bg-white shadow-xl flex flex-col max-w-md mx-auto overflow-hidden">
           <div className="px-3 py-1.5 border-b border-gray-200 shrink-0">
@@ -240,18 +251,18 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
   if (step.animationType === 'convergenceButton') {
     return (
-      <div className="relative w-full h-[210px] rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 overflow-hidden">
-        {/* 畫布區塊：放在下方，按鈕位於畫布上方（畫布外） */}
-        <div className="absolute left-3 right-3 bottom-3 top-16 rounded-xl border border-gray-200 bg-white" />
-        <div className="absolute left-4 top-[74px] text-[11px] text-gray-500 z-[1]">想法牆畫布</div>
-        <div className="absolute left-6 top-5 z-[2]">
+      <div className={`${ILLUSTRATION_FRAME} p-3 flex flex-col justify-center`}>
+        <div className="mb-2">
           <button
             type="button"
             tabIndex={-1}
-            className="px-4 py-2 rounded-xl bg-purple-600 text-white text-sm font-medium shadow-lg ring-4 ring-purple-200 pointer-events-none animate-pulse"
+            className="px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-medium shadow-lg ring-4 ring-purple-200 pointer-events-none animate-pulse"
           >
             想法收斂
           </button>
+        </div>
+        <div className="relative h-[72px] rounded-xl border border-gray-200 bg-white">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-500">想法牆畫布</div>
         </div>
         <div className="absolute left-0 top-0 idea-wall-onboard-cursor-convergence z-10 pointer-events-none">
           <CursorIcon />
@@ -262,25 +273,23 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
   if (step.animationType === 'convergenceForm') {
     return (
-      <div className="relative w-full min-h-[230px] rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-3">
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-3 space-y-2">
+      <div className={`${ILLUSTRATION_FRAME} p-2 flex items-center justify-center`}>
+        <div className="w-full rounded-lg border border-gray-200 bg-white shadow-sm p-2 space-y-1">
           <div>
-            <div className="text-[11px] text-gray-900 mb-1">收斂階段</div>
-            <div className="h-9 rounded-lg border border-gray-300 bg-white flex items-center justify-between px-3 text-xs text-gray-900">
+            <div className="text-[9px] text-gray-900 mb-0.5">收斂階段</div>
+            <div className="h-7 rounded-lg border border-gray-300 bg-white flex items-center justify-between px-2 text-[10px] text-gray-900">
               <span>請選擇想法階段</span>
-              <span>▼</span>
+              <span className="text-[9px]">▼</span>
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-gray-900 mb-1">收斂結果</div>
-            <div className="min-h-[56px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900">
-              <span className="inline-flex items-center gap-1">
-                <span>請自行輸入想法收斂結果。</span>
-              </span>
+            <div className="text-[9px] text-gray-900 mb-0.5">收斂結果</div>
+            <div className="min-h-[24px] rounded-lg border border-gray-300 bg-white px-2 py-1 text-[10px] leading-tight text-gray-900">
+              請自行輸入想法收斂結果。
             </div>
           </div>
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-            留言區：可與夥伴討論要收斂的內容
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[9px] leading-tight text-amber-900">
+            討論區：可與夥伴討論要收斂的內容
           </div>
         </div>
       </div>
@@ -289,7 +298,7 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
   if (step.animationType === 'convergenceResult') {
     return (
-      <div className="relative w-full min-h-[120px] rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-2 flex items-center justify-center">
+      <div className={`${ILLUSTRATION_FRAME} p-2 flex items-center justify-center`}>
         {/* 純 SVG 示意圖：卡片與箭頭在同一座標系，不再有 CSS/SVG 錯位 */}
         <svg
           className="w-full max-w-md"
@@ -346,7 +355,7 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
   // arrow
   return (
-    <div className="relative w-full min-h-[200px] rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-4 flex items-center justify-center">
+    <div className={`${ILLUSTRATION_FRAME} p-2 flex items-center justify-center`}>
       <div className="relative w-full max-w-sm">
         <div className="relative z-10 flex items-center justify-between w-full">
           <div className="w-[42%] rounded-lg border border-gray-300 bg-white shadow-sm p-2">
@@ -384,7 +393,7 @@ function StepIllustration({ stepIndex }: { stepIndex: number }) {
 
 interface IdeaWallOnboardingModalProps {
   open: boolean
-  onDismiss: () => void
+  onDismiss: (options?: { showReopenHint?: boolean }) => void
 }
 
 /**
@@ -392,20 +401,30 @@ interface IdeaWallOnboardingModalProps {
  */
 export default function IdeaWallOnboardingModal({ open, onDismiss }: IdeaWallOnboardingModalProps) {
   const [step, setStep] = useState(0)
+  const {
+    panelRef,
+    panelStyle,
+    isExiting,
+    isCompleting,
+    backdropFading,
+    beginExitAnimation,
+    shouldRender,
+  } = useOnboardingExitAnimation(open, 112)
 
   useEffect(() => {
     if (open) setStep(0)
   }, [open])
 
-  if (!open) return null
+  if (!shouldRender) return null
 
   const total = STEPS.length
   const isLast = step === total - 1
   const current = STEPS[step]
 
   const handleNext = () => {
+    if (isCompleting) return
     if (isLast) {
-      onDismiss()
+      beginExitAnimation(IDEA_WALL_ONBOARDING_REOPEN_SELECTOR, onDismiss)
     } else {
       setStep((s) => Math.min(s + 1, total - 1))
     }
@@ -415,13 +434,15 @@ export default function IdeaWallOnboardingModal({ open, onDismiss }: IdeaWallOnb
     setStep((s) => Math.max(s - 1, 0))
   }
 
-  return (
-    <>
-      <div className="fixed inset-0 z-[110] bg-black/50" aria-hidden />
+  const handleClose = () => {
+    onDismiss()
+  }
 
-      <div className="fixed inset-0 z-[111] flex items-center justify-center p-4 pointer-events-none">
+  const panel = (
         <div
-          className="pointer-events-auto w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          ref={panelRef}
+          style={panelStyle}
+          className={`${MODAL_FRAME} ${isExiting ? 'will-change-transform' : ''}`}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -442,8 +463,9 @@ export default function IdeaWallOnboardingModal({ open, onDismiss }: IdeaWallOnb
             </div>
             <button
               type="button"
-              onClick={onDismiss}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              onClick={handleClose}
+              disabled={isCompleting}
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
               aria-label="關閉引導"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -452,17 +474,25 @@ export default function IdeaWallOnboardingModal({ open, onDismiss }: IdeaWallOnb
             </button>
           </div>
 
-          <div className="px-6 pt-4 pb-2 overflow-y-auto flex-1">
-            <h2 id="idea-wall-onboarding-title" className="text-xl font-bold text-gray-900 text-center mb-3">
+          <div className="px-6 pt-4 pb-2 flex-1 min-h-0 overflow-hidden flex flex-col">
+            <h2 id="idea-wall-onboarding-title" className="text-xl font-bold text-gray-900 text-center mb-3 shrink-0">
               {current.title}
             </h2>
-            <p className="text-gray-600 text-sm leading-relaxed text-center mb-4">{current.description}</p>
+            <p className="text-gray-600 text-sm leading-relaxed text-center mb-3 shrink-0">{current.description}</p>
 
             <StepIllustration stepIndex={step} />
 
             {current.tip && (
-              <div className="mt-4 pl-3 border-l-4 border-amber-400 bg-amber-50 rounded-r-lg py-2 pr-2">
-                <p className="text-sm text-amber-900">{current.tip}</p>
+              <div className="mt-3 shrink-0 pl-3 border-l-4 border-amber-400 bg-amber-50 rounded-r-lg py-1.5 pr-2">
+                <p className="text-xs leading-snug text-amber-900">
+                  {step === 1 ? (
+                    <>
+                      提示：<strong>[ ]</strong>內是階段，沒有<strong>[ ]</strong>的是標題；想法內容請點擊卡片查看。—— 相同階段才可進行收斂。
+                    </>
+                  ) : (
+                    current.tip
+                  )}
+                </p>
               </div>
             )}
           </div>
@@ -484,14 +514,32 @@ export default function IdeaWallOnboardingModal({ open, onDismiss }: IdeaWallOnb
               <button
                 type="button"
                 onClick={handleNext}
-                className="px-6 py-2.5 rounded-xl bg-teal-500 text-white font-medium hover:bg-teal-600 transition-colors shadow-sm shrink-0"
+                disabled={isCompleting}
+                className="px-6 py-2.5 rounded-xl bg-teal-500 text-white font-medium hover:bg-teal-600 transition-colors shadow-sm shrink-0 disabled:opacity-70"
               >
                 {isLast ? '完成' : '下一步'}
               </button>
             </div>
           </div>
         </div>
-      </div>
+  )
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-[110] bg-black/50 ${
+          backdropFading ? 'opacity-0 transition-opacity duration-300' : ''
+        }`}
+        aria-hidden
+      />
+
+      {isExiting ? (
+        <div className="fixed inset-0 z-[111] pointer-events-none">{panel}</div>
+      ) : (
+        <div className="fixed inset-0 z-[111] flex items-center justify-center p-4 pointer-events-none">
+          {panel}
+        </div>
+      )}
     </>
   )
 }
