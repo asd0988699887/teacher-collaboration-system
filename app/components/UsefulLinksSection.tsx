@@ -4,7 +4,7 @@ const USEFUL_SITES = [
   {
     name: 'CIRN 教育資源網',
     desc: '提供課程綱要、教案與教學資源，協助備課規劃。',
-    url: 'https://cirn.moe.edu.tw/',
+    url: 'https://cirn.k12ea.gov.tw/',
   },
   {
     name: 'NotebookLM',
