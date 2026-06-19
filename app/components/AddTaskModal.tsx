@@ -258,7 +258,7 @@ export default function AddTaskModal({
     e.preventDefault()
 
     if (!category.trim() || !content.trim()) {
-      alert('請填寫任務類別和任務內容')
+      alert('請填寫任務主題和任務內容')
       return
     }
 
@@ -351,17 +351,17 @@ export default function AddTaskModal({
         {/* 表單內容 - 可滾動區域 */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* 任務類別 */}
+          {/* 任務主題 */}
           <div>
             <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
-              任務類別
-              <FieldHint text="任務類別是此任務的重點，用於讓成員快速了解此任務的重點是甚麼。" />
+              任務主題
+              <FieldHint text="任務主題是此任務的重點，用於讓成員快速了解此任務要處理的主題是什麼。" />
             </label>
             <input
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              placeholder="請輸入任務類別"
+              placeholder="請輸入任務主題"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6D28D9] focus:border-transparent text-gray-800"
             />
           </div>

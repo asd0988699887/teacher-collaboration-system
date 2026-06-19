@@ -1,6 +1,13 @@
-/** 解析任務截止日期（YYYY-MM-DD、datetime-local 或 MySQL DATETIME） */
-export function parseTaskEndDate(endDate: string): Date | null {
-  if (!endDate?.trim()) return null
+export type TaskEndDateInput = string | Date | null | undefined
+
+/** 解析任務截止日期（YYYY-MM-DD、datetime-local、MySQL DATETIME 或 Date 物件） */
+export function parseTaskEndDate(endDate: TaskEndDateInput): Date | null {
+  if (endDate == null) return null
+  if (endDate instanceof Date) {
+    return Number.isNaN(endDate.getTime()) ? null : endDate
+  }
+  if (typeof endDate !== 'string') return null
+  if (!endDate.trim()) return null
   const v = endDate.trim()
   const local = v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
   if (local) {
@@ -33,7 +40,7 @@ export function startOfDay(d: Date): Date {
 }
 
 /** 距截止日剩餘天數（截止當天為 0，已過期為負數） */
-export function daysUntilDeadline(endDate: string, today = startOfDay(new Date())): number | null {
+export function daysUntilDeadline(endDate: TaskEndDateInput, today = startOfDay(new Date())): number | null {
   const end = parseTaskEndDate(endDate)
   if (!end) return null
   const endDay = startOfDay(end)
@@ -44,14 +51,14 @@ export function isIncompleteKanbanTask(status?: string): boolean {
   return status !== 'completed'
 }
 
-export function isTaskOverdue(endDate: string, status?: string): boolean {
+export function isTaskOverdue(endDate: TaskEndDateInput, status?: string): boolean {
   if (!isIncompleteKanbanTask(status)) return false
   const days = daysUntilDeadline(endDate)
   return days !== null && days < 0
 }
 
 /** 未完成且 3 個日曆日內到期（含今天，未過期） */
-export function isTaskDueSoon(endDate: string, status?: string): boolean {
+export function isTaskDueSoon(endDate: TaskEndDateInput, status?: string): boolean {
   if (!isIncompleteKanbanTask(status)) return false
   const days = daysUntilDeadline(endDate)
   return days !== null && days >= 0 && days <= 3
@@ -59,7 +66,7 @@ export function isTaskDueSoon(endDate: string, status?: string): boolean {
 
 export interface KanbanTaskForStatus {
   status?: string
-  endDate?: string
+  endDate?: TaskEndDateInput
   assignees?: string[]
 }
 

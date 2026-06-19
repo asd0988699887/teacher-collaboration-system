@@ -82,6 +82,9 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
   const viewStateRef = useRef({ zoom: 1.0, panX: 0, panY: 0 })
   // 用於優化拖動性能的 requestAnimationFrame
   const dragRafRef = useRef<number | null>(null)
+  // 僅在首次力導向布局完成時自動 zoomToFit，避免拖動後反覆重置視圖
+  const initialZoomDoneRef = useRef(false)
+  const isDraggingRef = useRef(false)
   
   // 檢測是否為觸控設備
   const [isTouchDevice, setIsTouchDevice] = useState(false)
@@ -265,6 +268,9 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
 
   // 載入網絡圖資料和視圖狀態
   useEffect(() => {
+    initialZoomDoneRef.current = false
+    isDraggingRef.current = false
+
     const loadGraphData = async () => {
       if (!communityId) return
 
@@ -332,9 +338,11 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
     if (!graphData || isLoading) return
 
     const doCenter = () => {
+      if (initialZoomDoneRef.current || isDraggingRef.current) return
       if (fgRef.current) {
         try {
           fgRef.current.zoomToFit(0, 30)
+          initialZoomDoneRef.current = true
         } catch (e) {
           // ignore
         }
@@ -351,6 +359,25 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
       clearTimeout(t3)
     }
   }, [isTouchDevice, graphData, isLoading, containerSize.width, containerSize.height])
+
+  // 桌面/手機共用：資料與容器尺寸就緒後，僅首次自動置中（有保存座標時也須 zoomToFit 才看得到球體）
+  useEffect(() => {
+    if (!graphData || isLoading) return
+    if (initialZoomDoneRef.current || isDraggingRef.current) return
+    if (containerSize.width <= 0 || containerSize.height <= 0) return
+
+    const t = setTimeout(() => {
+      if (!fgRef.current || initialZoomDoneRef.current || isDraggingRef.current) return
+      try {
+        fgRef.current.zoomToFit(0, 30)
+        initialZoomDoneRef.current = true
+      } catch (e) {
+        console.warn('初始 zoomToFit 失敗:', e)
+      }
+    }, 200)
+
+    return () => clearTimeout(t)
+  }, [graphData, isLoading, containerSize.width, containerSize.height])
 
   // 設置 d3 力參數和自動縮放
   useEffect(() => {
@@ -711,17 +738,19 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
                         }
                       }
                     })
-                    // 模擬停止後執行一次 zoomToFit，確保所有節點都在畫面內
-                    setTimeout(() => {
-                      if (fgRef.current) {
-                        try {
-                          fgRef.current.zoomToFit(0, 30)
-                          console.log('✅ 引擎停止（有固定節點）：已執行 zoomToFit')
-                        } catch (e) {
-                          console.error('zoomToFit 失敗:', e)
+                    // 首次載入才置中；拖動後的 engineStop 不再 zoomToFit（避免球體像被拉回）
+                    if (!initialZoomDoneRef.current && !isDraggingRef.current) {
+                      initialZoomDoneRef.current = true
+                      setTimeout(() => {
+                        if (fgRef.current && !isDraggingRef.current) {
+                          try {
+                            fgRef.current.zoomToFit(0, 30)
+                          } catch (e) {
+                            console.error('zoomToFit 失敗:', e)
+                          }
                         }
-                      }
-                    }, 100)
+                      }, 100)
+                    }
                     return // 不執行後續的力參數設置
                   }
                   
@@ -760,12 +789,19 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
                     console.warn('固定節點位置失敗:', e)
                   }
                   
-                  // 自動縮放和居中，確保所有節點都在畫面內
-                  setTimeout(() => {
-                    if (fgRef.current) {
-                      fgRef.current.zoomToFit(0, 30)
-                    }
-                  }, 100)
+                  // 僅首次力導向布局完成時自動置中，避免每次 engineStop（含拖動後）重置視圖
+                  if (!initialZoomDoneRef.current && !isDraggingRef.current) {
+                    initialZoomDoneRef.current = true
+                    setTimeout(() => {
+                      if (fgRef.current && !isDraggingRef.current) {
+                        try {
+                          fgRef.current.zoomToFit(0, 30)
+                        } catch (e) {
+                          console.error('zoomToFit 失敗:', e)
+                        }
+                      }
+                    }, 100)
+                  }
                 } catch (e) {
                   console.error('引擎停止時設置力失敗:', e)
                 }
@@ -798,6 +834,7 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
               }
             }}
             onNodeDragStart={(node) => {
+              isDraggingRef.current = true
               // 拖動開始：鎖定所有其他節點位置，確保只有被拖節點移動
               // 不停止模擬（停止模擬會讓 node.x/y 無法更新，造成拖移時節點跳回舊位置）
               if (fgRef.current) {
@@ -848,9 +885,21 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
               }
               
               // 拖動結束時，保持固定位置，不讓力模擬移動它
-              // 確保使用最新的 x, y 值來固定節點
-              const finalX = typeof node.x === 'number' ? node.x : 0
-              const finalY = typeof node.y === 'number' ? node.y : 0
+              // 模擬停止時實際位置在 fx/fy，若只用 x/y 會跳回舊座標
+              const finalX =
+                typeof node.fx === 'number'
+                  ? node.fx
+                  : typeof node.x === 'number'
+                    ? node.x
+                    : 0
+              const finalY =
+                typeof node.fy === 'number'
+                  ? node.fy
+                  : typeof node.y === 'number'
+                    ? node.y
+                    : 0
+              node.x = finalX
+              node.y = finalY
               node.fx = finalX
               node.fy = finalY
               
@@ -949,6 +998,11 @@ export default function NetworkGraph({ communityId, readOnly = false }: NetworkG
                   saveNodePositions()
                 }, 500) // 500ms 節流，確保節點位置已更新
               }
+
+              // 略晚於 engineStop 回調，避免 onEngineStop 誤判為可 zoomToFit
+              setTimeout(() => {
+                isDraggingRef.current = false
+              }, 200)
             }}
           />
         )}
