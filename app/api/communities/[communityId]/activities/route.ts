@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
+import { formatTaipeiDateTime } from '@/lib/formatTaipeiDateTime'
 
 type ActivitySelectVariant = 'full' | 'no_school_level' | 'no_completed_at' | 'minimal'
 
@@ -118,17 +119,7 @@ export async function GET(
 
     const activities = await fetchActivitiesForCommunity(communityId)
 
-    const formatDateTime = (raw: Date | string | null | undefined) => {
-      if (!raw) return { date: '', time: '' }
-      const d = new Date(raw)
-      if (Number.isNaN(d.getTime())) return { date: '', time: '' }
-      const year = d.getFullYear()
-      const month = String(d.getMonth() + 1).padStart(2, '0')
-      const day = String(d.getDate()).padStart(2, '0')
-      const hh = String(d.getHours()).padStart(2, '0')
-      const mm = String(d.getMinutes()).padStart(2, '0')
-      return { date: `${year}/${month}/${day}`, time: `${hh}:${mm}` }
-    }
+    const formatDateTime = formatTaipeiDateTime
 
     const formattedActivities = activities.map((activity) => {
       const { date: lastModifiedDate, time: lastModifiedTime } = formatDateTime(
@@ -141,13 +132,7 @@ export async function GET(
         isPublic: activity.isPublic === 1 || activity.isPublic === true,
         password: activity.password || '',
         createdDate: activity.createdDate
-          ? (() => {
-              const date = new Date(activity.createdDate)
-              const year = date.getFullYear()
-              const month = String(date.getMonth() + 1).padStart(2, '0')
-              const day = String(date.getDate()).padStart(2, '0')
-              return `${year}/${month}/${day}`
-            })()
+          ? formatDateTime(activity.createdDate).date
           : '',
         createdTime: activity.createdTime || '',
         creatorId: activity.creatorId || '',
@@ -266,35 +251,17 @@ export async function POST(
     }
 
     const na = newActivities[0]
-    const lm = na.lastModifiedAt
-      ? (() => {
-          const d = new Date(na.lastModifiedAt)
-          if (Number.isNaN(d.getTime())) return { date: '', time: '' }
-          const year = d.getFullYear()
-          const month = String(d.getMonth() + 1).padStart(2, '0')
-          const day = String(d.getDate()).padStart(2, '0')
-          const hh = String(d.getHours()).padStart(2, '0')
-          const mm = String(d.getMinutes()).padStart(2, '0')
-          return { date: `${year}/${month}/${day}`, time: `${hh}:${mm}` }
-        })()
-      : { date: '', time: '' }
+    const lm = formatTaipeiDateTime(na.lastModifiedAt)
 
+    const created = formatTaipeiDateTime(na.createdDate)
     const formattedActivity = {
       id: na.id,
       name: na.name,
       introduction: na.introduction || '',
       isPublic: na.isPublic === 1 || na.isPublic === true,
       password: na.password || '',
-      createdDate: na.createdDate
-        ? (() => {
-            const date = new Date(na.createdDate)
-            const year = date.getFullYear()
-            const month = String(date.getMonth() + 1).padStart(2, '0')
-            const day = String(date.getDate()).padStart(2, '0')
-            return `${year}/${month}/${day}`
-          })()
-        : '',
-      createdTime: na.createdTime || '',
+      createdDate: created.date,
+      createdTime: na.createdTime || created.time,
       creatorId: na.creatorId || '',
       creatorName: na.creatorName || '',
       lessonPlanTitle: na.lessonPlanTitle || '',

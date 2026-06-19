@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { formatTaipeiDateTime } from '@/lib/formatTaipeiDateTime'
 
 // 生成 UUID（簡單實作）
 function generateUUID(): string {
@@ -49,18 +50,15 @@ export async function GET(
 
     // 格式化日期和時間
     const formattedVersions = (versions || []).map((version: any) => {
-      const date = new Date(version.created_at)
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const hours = String(date.getHours()).padStart(2, '0')
-      const minutes = String(date.getMinutes()).padStart(2, '0')
+      const { date: lastModifiedDate, time: lastModifiedTime } = formatTaipeiDateTime(
+        version.created_at
+      )
 
       return {
         id: version.id,
         versionNumber: version.version_number,
-        lastModifiedDate: `${year}/${month}/${day}`,
-        lastModifiedTime: `${hours}:${minutes}`,
+        lastModifiedDate,
+        lastModifiedTime,
         lastModifiedUser: version.nickname || version.account || '未知使用者',
         userId: version.modified_by,
       }

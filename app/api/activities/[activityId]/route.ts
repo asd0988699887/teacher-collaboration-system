@@ -4,17 +4,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { formatTaipeiDateTime } from '@/lib/formatTaipeiDateTime'
 
 function formatLastModified(raw: Date | string | null | undefined) {
-  if (!raw) return { date: '', time: '' }
-  const d = new Date(raw)
-  if (Number.isNaN(d.getTime())) return { date: '', time: '' }
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return { date: `${year}/${month}/${day}`, time: `${hh}:${mm}` }
+  return formatTaipeiDateTime(raw)
 }
 
 // GET: 讀取單一活動資訊
