@@ -159,7 +159,7 @@ export default function CommunityDetail({
   readOnly = false,
   historyLessonEditMode = false,
 }: CommunityDetailProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('teamwork')
+  const [activeTab, setActiveTab] = useState<TabType>('activities')
   // 自定義水平卷軸狀態
   const [scrollInfo, setScrollInfo] = useState<{
     scrollLeft: number
@@ -2192,6 +2192,13 @@ export default function CommunityDetail({
   // 共備活動：一進社群即顯示教案共編畫面（第三張圖樣式）
   const showCoPrepLessonEditor = activeTab === 'activities' && !!communityId
 
+  /** 進行中活動 ID（避免 viewingActivity 尚未設定時 activityId 為空導致無法儲存） */
+  const coPrepActivityId = useMemo(() => {
+    if (viewingActivity?.id) return viewingActivity.id
+    const inProgress = activities.find((a) => !a.coPrepCompleted)
+    return inProgress?.id ?? activities[0]?.id
+  }, [viewingActivity, activities])
+
   // 側邊欄任務狀態摘要（與「團隊分工」看板資料連動）
   const allKanbanTasks = kanbanLists.flatMap((list) => list.tasks)
   const completedTasks = allKanbanTasks.filter((t) => t.status === 'completed')
@@ -2773,11 +2780,12 @@ export default function CommunityDetail({
         {/* 共備活動：embedded 模式，沿用此 layout 的 header 與 fixed sidebar */}
         {showCoPrepLessonEditor && (
           <CourseObjectives
+            key={coPrepActivityId ?? 'pending-activity'}
             embedded={true}
             readOnly={readOnly && !historyLessonEditMode}
             historyLessonEditMode={readOnly && historyLessonEditMode}
             activityName={headerTitle}
-            activityId={viewingActivity?.id}
+            activityId={coPrepActivityId}
             currentUserId={userId}
             onSidebarClick={handleSidebarClickFromActivity}
             convergenceResults={convergenceResults}

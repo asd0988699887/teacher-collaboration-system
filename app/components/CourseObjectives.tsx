@@ -2300,10 +2300,21 @@ export default function CourseObjectives({
     }
   }, [activityId])
 
+  useEffect(() => {
+    console.error('[教案] 狀態', {
+      activityId: activityId ?? null,
+      readOnly,
+      currentUserId: currentUserId ?? null,
+      lessonPlanLoadState,
+      isLessonPlanLoaded,
+    })
+  }, [activityId, readOnly, currentUserId, lessonPlanLoadState, isLessonPlanLoaded])
+
   // 載入教案資料
   useEffect(() => {
     const loadLessonPlan = async () => {
       if (!activityId) {
+        console.error('[教案載入] 略過：activityId 為空')
         setIsLessonPlanLoaded(false)
         setLessonPlanLoadState('empty')
         return
@@ -3193,7 +3204,8 @@ export default function CourseObjectives({
   ])
 
   useEffect(() => {
-    if (readOnly || !activityId || !isLessonPlanLoaded) return
+    if (readOnly || !activityId) return
+    if (lessonPlanLoadState === 'loading') return
 
     if (saveLessonPlanTimeoutRef.current) {
       clearTimeout(saveLessonPlanTimeoutRef.current)
@@ -3211,7 +3223,6 @@ export default function CourseObjectives({
   }, [
     readOnly,
     activityId,
-    isLessonPlanLoaded,
     lessonPlanLoadState,
     lessonPlanTitle,
     courseDomain,
