@@ -2778,6 +2778,7 @@ export default function CommunityDetail({
             historyLessonEditMode={readOnly && historyLessonEditMode}
             activityName={headerTitle}
             activityId={viewingActivity?.id}
+            currentUserId={userId}
             onSidebarClick={handleSidebarClickFromActivity}
             convergenceResults={convergenceResults}
             onActivitiesRefresh={loadActivities}

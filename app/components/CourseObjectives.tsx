@@ -88,6 +88,8 @@ interface CourseObjectivesProps {
   readOnly?: boolean
   /** 歷史活動本次進入之教案編輯模式（隱藏結束共備等） */
   historyLessonEditMode?: boolean
+  /** 由父層傳入的登入使用者 ID（優先於 localStorage） */
+  currentUserId?: string | null
 }
 
 /** Word 匯出時可覆寫的欄位（歷史活動下載教案用） */
@@ -142,6 +144,7 @@ export default function CourseObjectives({
   embedded = false,
   readOnly = false,
   historyLessonEditMode = false,
+  currentUserId = null,
 }: CourseObjectivesProps) {
   const [lessonPlanTitle, setLessonPlanTitle] = useState('')
   const [courseDomain, setCourseDomain] = useState('')
@@ -2310,6 +2313,7 @@ export default function CourseObjectives({
       setLessonPlanLoadState('loading')
 
       try {
+        console.log('[教案載入] 開始', { activityId })
         const response = await fetch(`/api/lesson-plans/${activityId}`)
         const data = await response.json()
 
@@ -3094,8 +3098,18 @@ export default function CourseObjectives({
   ])
 
   const autoSaveLessonPlan = useCallback(async () => {
-    if (readOnly || !activityId) return
-    if (lessonPlanLoadState === 'loading') return
+    if (readOnly) {
+      console.warn('[教案自動儲存] 略過：唯讀模式')
+      return
+    }
+    if (!activityId) {
+      console.warn('[教案自動儲存] 略過：缺少 activityId')
+      return
+    }
+    if (lessonPlanLoadState === 'loading') {
+      console.warn('[教案自動儲存] 略過：教案尚在載入中')
+      return
+    }
 
     const isFormEmpty =
       !lessonPlanTitle.trim() &&
@@ -3114,18 +3128,23 @@ export default function CourseObjectives({
       addedLearningContents.length === 0 &&
       activityRows.length === 0 &&
       !assessmentTools.trim() &&
-      !references.trim()
+      !references.trim() &&
+      checkedPerformances.size === 0 &&
+      checkedContents.size === 0
 
-    if (lessonPlanLoadState === 'empty' && isFormEmpty) return
-    if (lessonPlanLoadState === 'error' && isFormEmpty) return
+    if (isFormEmpty) {
+      console.warn('[教案自動儲存] 略過：表單尚無任何內容')
+      return
+    }
 
-    const userId = resolveStoredUserId()
+    const userId = currentUserId || resolveStoredUserId()
     if (!userId) {
-      console.warn('自動儲存教案略過：未登入或 localStorage 無使用者 ID')
+      console.warn('[教案自動儲存] 略過：未登入（請重新登入）')
       return
     }
 
     try {
+      console.log('[教案自動儲存] 送出請求…', { activityId, userId: userId.slice(0, 8) + '…' })
       const response = await fetch(`/api/lesson-plans/${activityId}`, {
         method: 'POST',
         headers: {
@@ -3136,7 +3155,7 @@ export default function CourseObjectives({
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.error('自動儲存教案失敗:', errorData)
+        console.error('[教案自動儲存] 失敗:', errorData)
       } else {
         console.log('✅ 教案已自動儲存（不建立新版本）')
         if (lessonPlanLoadState === 'empty' || lessonPlanLoadState === 'error') {
@@ -3144,11 +3163,12 @@ export default function CourseObjectives({
         }
       }
     } catch (error) {
-      console.error('自動儲存教案錯誤:', error)
+      console.error('[教案自動儲存] 錯誤:', error)
     }
   }, [
     readOnly,
     activityId,
+    currentUserId,
     lessonPlanLoadState,
     lessonPlanTitle,
     courseDomain,
@@ -3167,6 +3187,8 @@ export default function CourseObjectives({
     activityRows,
     assessmentTools,
     references,
+    checkedPerformances,
+    checkedContents,
     buildLessonPlanFormData,
   ])
 
@@ -3179,7 +3201,7 @@ export default function CourseObjectives({
 
     saveLessonPlanTimeoutRef.current = setTimeout(() => {
       void autoSaveLessonPlan()
-    }, 1500)
+    }, 1200)
 
     return () => {
       if (saveLessonPlanTimeoutRef.current) {
@@ -3222,7 +3244,7 @@ export default function CourseObjectives({
     }
 
     // 獲取當前使用者資訊
-    const userId = resolveStoredUserId()
+    const userId = currentUserId || resolveStoredUserId()
     let userNickname = '使用者'
     const userData = localStorage.getItem('user')
     if (userData) {
@@ -3297,7 +3319,7 @@ export default function CourseObjectives({
   }
 
   const getEndCoPrepUser = () => {
-    const userId = resolveStoredUserId()
+    const userId = currentUserId || resolveStoredUserId()
     let userNickname = '使用者'
     const userData = localStorage.getItem('user')
     if (userData) {
