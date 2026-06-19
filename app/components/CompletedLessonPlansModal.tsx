@@ -1,11 +1,50 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Packer } from 'docx'
+import {
+  generateLessonPlanWordDocument,
+  type LessonPlanWordData,
+} from '@/lib/generateLessonPlanWord'
 import {
   type CompletedLessonPlanItem,
   type LessonPlanSnapshotData,
   parseLearningObjectivesArray,
 } from '@/lib/lessonPlanSnapshot'
+
+function mapSnapshotToWordData(data: LessonPlanSnapshotData): LessonPlanWordData {
+  return {
+    lessonPlanTitle: data.lessonPlanTitle || '',
+    designer: data.designer || '',
+    courseDomain: data.courseDomain || '',
+    teachingTimeLessons: data.teachingTimeLessons?.toString() || '',
+    teachingTimeMinutes: data.teachingTimeMinutes?.toString() || '',
+    unitName: data.unitName || '',
+    schoolLevel: data.schoolLevel || '',
+    implementationGrade: data.implementationGrade || '',
+    materialSource: data.materialSource || '',
+    teachingEquipment: data.teachingEquipment || '',
+    learningObjectives: parseLearningObjectivesArray(data.learningObjectives),
+    addedCoreCompetencies: data.addedCoreCompetencies || [],
+    addedLearningPerformances: (data.addedLearningPerformances || []).map((group) => ({
+      ...group,
+      content: group.content || [],
+    })),
+    addedLearningContents: (data.addedLearningContents || []).map((group) => ({
+      ...group,
+      content: group.content || [],
+    })),
+    activityRows: (data.activityRows || []).map((row) => ({
+      id: row.id,
+      sequenceNumber: row.sequenceNumber || '',
+      selectedLearningObjectives: row.selectedLearningObjectives || [],
+      activityFlow: row.activityFlow || '',
+      time: row.time || '',
+      assessmentMethod: row.assessmentMethod || '',
+      notes: row.notes || '',
+    })),
+  }
+}
 
 function sortActivityRows(rows: NonNullable<LessonPlanSnapshotData['activityRows']>) {
   return [...rows].sort((a, b) => {
@@ -182,6 +221,7 @@ export default function CompletedLessonPlansModal({
   isLoading = false,
 }: CompletedLessonPlansModalProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -192,6 +232,34 @@ export default function CompletedLessonPlansModal({
   if (!open) return null
 
   const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? null
+
+  const handleDownload = async () => {
+    if (!selected) return
+
+    setIsDownloading(true)
+    try {
+      const wordData = mapSnapshotToWordData(selected.lessonPlanData)
+      const safeBase =
+        (selected.title || wordData.lessonPlanTitle || '教案').replace(/[\\/:*?"<>|]/g, '_').trim() ||
+        '教案'
+      const fileName = `${safeBase}_${new Date().toISOString().split('T')[0]}.docx`
+      const doc = await generateLessonPlanWordDocument(wordData)
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('下載教案失敗:', error)
+      alert('下載教案失敗，請稍後再試')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   return (
     <>
@@ -208,16 +276,33 @@ export default function CompletedLessonPlansModal({
             <h2 id="completed-lesson-plans-title" className="text-lg font-bold text-gray-900">
               已完成教案
             </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              aria-label="關閉"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              {selected && (
+                <button
+                  type="button"
+                  onClick={() => void handleDownload()}
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 rounded-lg bg-[#6D28D9] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#5B21B6] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                    <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M5.33333 6.66667L8 9.33333L10.6667 6.66667" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M8 9.33333V2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  {isDownloading ? '下載中…' : '下載 Word'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="關閉"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="flex min-h-0 flex-1">
