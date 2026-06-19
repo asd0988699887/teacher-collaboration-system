@@ -1704,7 +1704,7 @@ export default function CommunityDetail({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          activityId: data.activityId || null,
+          activityId: data.activityId || coPrepActivityId || null,
           stage: data.stage,
           title: '收斂結果',
           content: data.convergenceContent || '(尚未填寫收斂內容)',
@@ -2402,7 +2402,11 @@ export default function CommunityDetail({
 
   const convergenceResults = showCoPrepLessonEditor && viewingActivity
     ? ideas
-        .filter((idea) => idea.isConvergence && idea.activityId === viewingActivity.id)
+        .filter(
+          (idea) =>
+            idea.isConvergence &&
+            (!idea.activityId || idea.activityId === viewingActivity.id)
+        )
         .map((idea) => ({
           id: idea.id,
           stage: idea.stage,
