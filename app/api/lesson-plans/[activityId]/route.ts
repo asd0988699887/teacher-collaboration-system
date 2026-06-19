@@ -18,6 +18,118 @@ function generateUUID(): string {
   })
 }
 
+function isSchoolLevelColumnError(error: unknown): boolean {
+  const e = error as { code?: string; sqlMessage?: string }
+  return e?.code === 'ER_BAD_FIELD_ERROR' && String(e?.sqlMessage || '').includes('school_level')
+}
+
+async function updateLessonPlanFields(
+  connection: { execute: (sql: string, params?: unknown[]) => Promise<unknown> },
+  updateFields: string[],
+  updateValues: unknown[],
+  lessonPlanId: string
+) {
+  if (updateFields.length === 0) return
+
+  const fields = [...updateFields, 'updated_at = NOW()']
+  const values = [...updateValues, lessonPlanId]
+
+  try {
+    await connection.execute(
+      `UPDATE lesson_plans SET ${fields.join(', ')} WHERE id = ?`,
+      values
+    )
+  } catch (error) {
+    if (!isSchoolLevelColumnError(error)) throw error
+
+    const filteredFields: string[] = []
+    const filteredValues: unknown[] = []
+    for (let i = 0; i < updateFields.length; i++) {
+      if (updateFields[i].includes('school_level')) continue
+      filteredFields.push(updateFields[i])
+      filteredValues.push(updateValues[i])
+    }
+    if (filteredFields.length === 0) return
+
+    filteredFields.push('updated_at = NOW()')
+    filteredValues.push(lessonPlanId)
+    await connection.execute(
+      `UPDATE lesson_plans SET ${filteredFields.join(', ')} WHERE id = ?`,
+      filteredValues
+    )
+    console.warn('lesson_plans 缺少 school_level 欄位，已略過該欄位更新（請執行 database/migrations/add_school_level.sql）')
+  }
+}
+
+async function insertLessonPlan(
+  connection: { execute: (sql: string, params?: unknown[]) => Promise<unknown> },
+  params: {
+    lessonPlanId: string
+    activityId: string
+    body: Record<string, unknown>
+  }
+) {
+  const { lessonPlanId, activityId, body } = params
+  const withSchoolLevel = [
+    lessonPlanId,
+    activityId,
+    body.lessonPlanTitle || null,
+    body.courseDomain || null,
+    body.designer || null,
+    body.unitName || null,
+    body.schoolLevel || null,
+    body.implementationGrade || null,
+    body.teachingTimeLessons ? parseInt(String(body.teachingTimeLessons)) : null,
+    body.teachingTimeMinutes ? parseInt(String(body.teachingTimeMinutes)) : null,
+    body.materialSource || null,
+    body.teachingEquipment || null,
+    body.learningObjectives || null,
+    body.assessmentTools || null,
+    body.references || null,
+  ]
+
+  try {
+    await connection.execute(
+      `INSERT INTO lesson_plans (
+        id, activity_id, lesson_plan_title, course_domain, designer,
+        unit_name, school_level, implementation_grade, teaching_time_lessons, teaching_time_minutes,
+        material_source, teaching_equipment, learning_objectives,
+        assessment_tools, \`references\`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      withSchoolLevel
+    )
+  } catch (error) {
+    if (!isSchoolLevelColumnError(error)) throw error
+
+    const withoutSchoolLevel = [
+      lessonPlanId,
+      activityId,
+      body.lessonPlanTitle || null,
+      body.courseDomain || null,
+      body.designer || null,
+      body.unitName || null,
+      body.implementationGrade || null,
+      body.teachingTimeLessons ? parseInt(String(body.teachingTimeLessons)) : null,
+      body.teachingTimeMinutes ? parseInt(String(body.teachingTimeMinutes)) : null,
+      body.materialSource || null,
+      body.teachingEquipment || null,
+      body.learningObjectives || null,
+      body.assessmentTools || null,
+      body.references || null,
+    ]
+    await connection.execute(
+      `INSERT INTO lesson_plans (
+        id, activity_id, lesson_plan_title, course_domain, designer,
+        unit_name, implementation_grade, teaching_time_lessons, teaching_time_minutes,
+        material_source, teaching_equipment, learning_objectives,
+        assessment_tools, \`references\`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      withoutSchoolLevel
+    )
+    console.warn('lesson_plans 缺少 school_level 欄位，已略過該欄位插入（請執行 database/migrations/add_school_level.sql）')
+  }
+}
+
 // GET: 讀取教案資料
 export async function GET(
   request: NextRequest,
@@ -342,14 +454,8 @@ export async function POST(
           
           // 如果有欄位需要更新，執行更新
           if (updateFields.length > 0) {
-            updateFields.push('updated_at = NOW()')
-            updateValues.push(lessonPlanId)
-            
-            await connection.execute(
-              `UPDATE lesson_plans SET ${updateFields.join(', ')} WHERE id = ?`,
-              updateValues
-            )
-            console.log('教案主表更新成功，更新欄位數:', updateFields.length - 1)
+            await updateLessonPlanFields(connection, updateFields, updateValues, lessonPlanId)
+            console.log('教案主表更新成功，更新欄位數:', updateFields.length)
           } else {
             console.log('跳過教案主表更新（沒有提供基本資料欄位）')
           }
@@ -373,36 +479,8 @@ export async function POST(
         lessonPlanId = generateUUID()
         console.log('建立新教案:', { lessonPlanId, activityId })
         
-        const insertParams = [
-          lessonPlanId,
-          activityId,
-          body.lessonPlanTitle || null,
-          body.courseDomain || null,
-          body.designer || null,
-          body.unitName || null,
-          body.schoolLevel || null,
-          body.implementationGrade || null,
-          body.teachingTimeLessons ? parseInt(body.teachingTimeLessons) : null,
-          body.teachingTimeMinutes ? parseInt(body.teachingTimeMinutes) : null,
-          body.materialSource || null,
-          body.teachingEquipment || null,
-          body.learningObjectives || null,
-          body.assessmentTools || null,
-          body.references || null,
-        ]
-        
-        console.log('插入教案主表參數:', insertParams)
-        
-        await connection.execute(
-          `INSERT INTO lesson_plans (
-            id, activity_id, lesson_plan_title, course_domain, designer,
-            unit_name, school_level, implementation_grade, teaching_time_lessons, teaching_time_minutes,
-            material_source, teaching_equipment, learning_objectives,
-            assessment_tools, \`references\`
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          insertParams
-        )
-        
+        console.log('插入教案主表:', { lessonPlanId, activityId })
+        await insertLessonPlan(connection, { lessonPlanId, activityId, body })
         console.log('教案主表插入成功')
       }
 

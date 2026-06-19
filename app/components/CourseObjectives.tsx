@@ -15,6 +15,20 @@ import CompletedLessonPlansModal from './CompletedLessonPlansModal'
 import { hasSeenCoPrepOnboarding, markCoPrepOnboardingSeen } from '@/lib/coPrepOnboardingStorage'
 import type { CompletedLessonPlanItem } from '@/lib/lessonPlanSnapshot'
 
+type LessonPlanLoadState = 'loading' | 'ok' | 'empty' | 'error'
+
+function resolveStoredUserId(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    const raw = localStorage.getItem('user')
+    if (!raw) return ''
+    const user = JSON.parse(raw) as Record<string, unknown>
+    return String(user.id || user.userId || user.accountNumber || user.account || '')
+  } catch {
+    return ''
+  }
+}
+
 interface ConvergenceResult {
   id: string
   stage: string
@@ -570,6 +584,7 @@ export default function CourseObjectives({
   // 教案全表單自動儲存節流計時器
   const saveLessonPlanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [isLessonPlanLoaded, setIsLessonPlanLoaded] = useState(false)
+  const [lessonPlanLoadState, setLessonPlanLoadState] = useState<LessonPlanLoadState>('loading')
   
   // 標籤頁狀態
   const [activeTab, setActiveTab] = useState('objectives')
@@ -2287,16 +2302,25 @@ export default function CourseObjectives({
     const loadLessonPlan = async () => {
       if (!activityId) {
         setIsLessonPlanLoaded(false)
+        setLessonPlanLoadState('empty')
         return
       }
 
       setIsLessonPlanLoaded(false)
+      setLessonPlanLoadState('loading')
 
       try {
         const response = await fetch(`/api/lesson-plans/${activityId}`)
         const data = await response.json()
 
-        if (response.ok && data.lessonPlan) {
+        if (!response.ok) {
+          console.error('載入教案資料失敗:', response.status, data)
+          setLessonPlanLoadState('error')
+          return
+        }
+
+        if (data.lessonPlan) {
+          setLessonPlanLoadState('ok')
           // 載入主表資料
           setLessonPlanTitle(data.lessonPlan.lessonPlanTitle || '')
           setCourseDomain(data.lessonPlan.courseDomain || '')
@@ -2478,9 +2502,12 @@ export default function CourseObjectives({
             })
             setCheckedContents(contSet)
           }
+        } else {
+          setLessonPlanLoadState('empty')
         }
       } catch (error) {
         console.error('載入教案資料錯誤:', error)
+        setLessonPlanLoadState('error')
       } finally {
         setIsLessonPlanLoaded(true)
       }
@@ -3068,19 +3095,35 @@ export default function CourseObjectives({
 
   const autoSaveLessonPlan = useCallback(async () => {
     if (readOnly || !activityId) return
+    if (lessonPlanLoadState === 'loading') return
 
-    const userData = localStorage.getItem('user')
-    let userId = ''
-    if (userData) {
-      try {
-        const user = JSON.parse(userData)
-        userId = user.id || user.account || ''
-      } catch {
-        // 忽略解析錯誤
-      }
+    const isFormEmpty =
+      !lessonPlanTitle.trim() &&
+      !courseDomain &&
+      !designer.trim() &&
+      !unitName.trim() &&
+      !schoolLevel &&
+      !implementationGrade &&
+      !teachingTimeLessons &&
+      !teachingTimeMinutes &&
+      !materialSource.trim() &&
+      !teachingEquipment.trim() &&
+      learningObjectives.length === 0 &&
+      addedCoreCompetencies.length === 0 &&
+      addedLearningPerformances.length === 0 &&
+      addedLearningContents.length === 0 &&
+      activityRows.length === 0 &&
+      !assessmentTools.trim() &&
+      !references.trim()
+
+    if (lessonPlanLoadState === 'empty' && isFormEmpty) return
+    if (lessonPlanLoadState === 'error' && isFormEmpty) return
+
+    const userId = resolveStoredUserId()
+    if (!userId) {
+      console.warn('自動儲存教案略過：未登入或 localStorage 無使用者 ID')
+      return
     }
-
-    if (!userId) return
 
     try {
       const response = await fetch(`/api/lesson-plans/${activityId}`, {
@@ -3096,11 +3139,36 @@ export default function CourseObjectives({
         console.error('自動儲存教案失敗:', errorData)
       } else {
         console.log('✅ 教案已自動儲存（不建立新版本）')
+        if (lessonPlanLoadState === 'empty' || lessonPlanLoadState === 'error') {
+          setLessonPlanLoadState('ok')
+        }
       }
     } catch (error) {
       console.error('自動儲存教案錯誤:', error)
     }
-  }, [readOnly, activityId, buildLessonPlanFormData])
+  }, [
+    readOnly,
+    activityId,
+    lessonPlanLoadState,
+    lessonPlanTitle,
+    courseDomain,
+    designer,
+    unitName,
+    schoolLevel,
+    implementationGrade,
+    teachingTimeLessons,
+    teachingTimeMinutes,
+    materialSource,
+    teachingEquipment,
+    learningObjectives,
+    addedCoreCompetencies,
+    addedLearningPerformances,
+    addedLearningContents,
+    activityRows,
+    assessmentTools,
+    references,
+    buildLessonPlanFormData,
+  ])
 
   useEffect(() => {
     if (readOnly || !activityId || !isLessonPlanLoaded) return
@@ -3122,6 +3190,7 @@ export default function CourseObjectives({
     readOnly,
     activityId,
     isLessonPlanLoaded,
+    lessonPlanLoadState,
     lessonPlanTitle,
     courseDomain,
     designer,
@@ -3153,13 +3222,12 @@ export default function CourseObjectives({
     }
 
     // 獲取當前使用者資訊
-    const userData = localStorage.getItem('user')
-    let userId = ''
+    const userId = resolveStoredUserId()
     let userNickname = '使用者'
+    const userData = localStorage.getItem('user')
     if (userData) {
       try {
         const user = JSON.parse(userData)
-        userId = user.id || user.account || ''
         userNickname = user.nickname || '使用者'
       } catch (e) {
         // 忽略解析錯誤
@@ -3229,13 +3297,12 @@ export default function CourseObjectives({
   }
 
   const getEndCoPrepUser = () => {
-    const userData = localStorage.getItem('user')
-    let userId = ''
+    const userId = resolveStoredUserId()
     let userNickname = '使用者'
+    const userData = localStorage.getItem('user')
     if (userData) {
       try {
         const user = JSON.parse(userData)
-        userId = user.id || user.account || ''
         userNickname = user.nickname || '使用者'
       } catch {
         // ignore
