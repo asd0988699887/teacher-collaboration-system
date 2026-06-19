@@ -159,7 +159,7 @@ export default function CommunityDetail({
   readOnly = false,
   historyLessonEditMode = false,
 }: CommunityDetailProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('activities')
+  const [activeTab, setActiveTab] = useState<TabType>('teamwork')
   // 自定義水平卷軸狀態
   const [scrollInfo, setScrollInfo] = useState<{
     scrollLeft: number
@@ -2259,7 +2259,7 @@ export default function CommunityDetail({
     return USER_COLORS[index]
   }
 
-  // 共備活動：一進社群即顯示教案共編畫面（第三張圖樣式）
+  // 共備活動教案編輯：使用者切換至「共備活動」分頁時顯示
   const showCoPrepLessonEditor = activeTab === 'activities' && !!communityId
 
   /** 進行中活動 ID（避免 viewingActivity 尚未設定時 activityId 為空導致無法儲存） */
