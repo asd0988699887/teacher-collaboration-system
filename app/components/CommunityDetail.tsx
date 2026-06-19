@@ -2972,7 +2972,8 @@ export default function CommunityDetail({
                   </div>
                 )}
 
-                {/* 左下角操作小幫手 */}
+                {/* 左下角操作小幫手（任務說明彈窗開啟時暫隱，避免重疊） */}
+                {!openTaskPanel && (
                 <div className="fixed bottom-6 left-[calc(80px+1rem)] z-40 flex flex-col items-start">
                   {isResourceHelperOpen && (
                     <div className="mb-3 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
@@ -3059,6 +3060,7 @@ export default function CommunityDetail({
                     </button>
                   </div>
                 </div>
+                )}
               </>
             )}
             {activeTab === 'teamwork' && (
@@ -3250,7 +3252,8 @@ export default function CommunityDetail({
               </div>
               </DndContext>
 
-                {/* 左下角操作小幫手 */}
+                {/* 左下角操作小幫手（任務說明彈窗開啟時暫隱，避免重疊） */}
+                {!openTaskPanel && (
                 <div className="fixed bottom-6 left-[calc(80px+1rem)] z-40 flex flex-col items-start">
                   {isTeamworkHelperOpen && (
                     <div className="mb-3 w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
@@ -3333,6 +3336,7 @@ export default function CommunityDetail({
                     </button>
                   </div>
                 </div>
+                )}
               </>
             )}
             {activeTab === 'history' && (
@@ -3506,7 +3510,8 @@ export default function CommunityDetail({
                 </div>
               </div>
 
-              {/* 左下角操作小幫手 */}
+              {/* 左下角操作小幫手（任務說明彈窗開啟時暫隱，避免重疊） */}
+              {!openTaskPanel && (
               <div className="fixed bottom-6 left-[calc(80px+1rem)] z-40 flex flex-col items-start">
                 {isManagementHelperOpen && (
                   <div className="mb-3 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
@@ -3572,6 +3577,7 @@ export default function CommunityDetail({
                   </button>
                 </div>
               </div>
+              )}
               </>
             )}
           </div>
