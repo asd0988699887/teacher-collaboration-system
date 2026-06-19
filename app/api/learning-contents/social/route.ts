@@ -1,33 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server'
-import mysql from 'mysql2/promise'
+import { query } from '@/lib/db'
 
-// 資料庫連線配置
-const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '3306'),
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'root',
-  database: process.env.DB_NAME || 'teacher_collaboration_system',
-}
+const MH_TABLE = 'social_middle_high_contents'
+const ELEMENTARY_TABLE = 'social_learning_contents'
 
-// GET: 取得社會科學習內容
+/**
+ * GET /api/learning-contents/social
+ *
+ * 國小：無 stage/subject（或 schoolLevel=國小）→ 回傳 topic_item 結構陣列
+ * 國中/高中：stage (IV|V) + subject (歷|地|公) + 可選 theme、category
+ */
 export async function GET(request: NextRequest) {
-  let connection
-
   try {
-    const { searchParams } = new URL(request.url)
-    const stage = searchParams.get('stage') // 'IV' 或 'V'
-    const subject = searchParams.get('subject') // '歷'、'地'、'公'
-    const theme = searchParams.get('theme') // 主題代碼（如：'B'）
-    const category = searchParams.get('category') // 項目代碼（如：'a'）
+    const searchParams = request.nextUrl.searchParams
+    const stage = searchParams.get('stage')
+    const subject = searchParams.get('subject')
+    const theme = searchParams.get('theme')
+    const category = searchParams.get('category')
+    const schoolLevel = searchParams.get('schoolLevel')
+    const topicItem = searchParams.get('topicItem')
 
-    connection = await mysql.createConnection(dbConfig)
+    const isMiddleHigh =
+      schoolLevel === '國中' ||
+      schoolLevel === '高中' ||
+      schoolLevel === '高中（高職）' ||
+      (stage === 'IV' || stage === 'V') && !!subject
 
-    // 情境 1：只有 stage + subject → 返回所有主題（去重）
-    if (stage && subject && !theme && !category) {
-      const [rows] = await connection.execute(
-        `SELECT theme, theme_name
-         FROM social_learning_contents
+    if (!isMiddleHigh) {
+      let sql = `
+        SELECT
+          id,
+          code,
+          topic_item AS topicItem,
+          topic_item_name AS topicItemName,
+          stage,
+          stage_name AS stageName,
+          serial,
+          description
+        FROM ${ELEMENTARY_TABLE}
+        WHERE 1=1
+      `
+      const params: string[] = []
+
+      if (topicItem) {
+        sql += ' AND topic_item = ?'
+        params.push(topicItem)
+      }
+      if (stage && (stage === 'II' || stage === 'III')) {
+        sql += ' AND stage = ?'
+        params.push(stage)
+      }
+
+      sql += ' ORDER BY topic_item, stage, serial'
+
+      const results = await query(sql, params)
+      return NextResponse.json(results)
+    }
+
+    if (!stage || !subject) {
+      return NextResponse.json(
+        { error: '缺少必要參數 (stage, subject)' },
+        { status: 400 }
+      )
+    }
+
+    // 情境 1：stage + subject → 主題列表
+    if (!theme && !category) {
+      const rows = await query(
+        `SELECT theme, theme_name AS themeName
+         FROM ${MH_TABLE}
          WHERE stage = ? AND subject = ?
          GROUP BY theme, theme_name
          ORDER BY theme`,
@@ -37,25 +78,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         type: 'themes',
-        data: rows
+        data: rows,
       })
     }
 
-    // 情境 2：stage + subject + theme → 返回該主題下的項目（去重）+ 條目
-    if (stage && subject && theme && !category) {
-      // 查詢該主題下是否有項目
-      const [categories] = await connection.execute(
-        `SELECT DISTINCT category, category_name
-         FROM social_learning_contents
+    // 情境 2：stage + subject + theme → 項目 + 條目
+    if (theme && !category) {
+      const categories = await query(
+        `SELECT DISTINCT category, category_name AS categoryName
+         FROM ${MH_TABLE}
          WHERE stage = ? AND subject = ? AND theme = ? AND category IS NOT NULL
          ORDER BY category`,
         [stage, subject, theme]
       )
 
-      // 查詢該主題下的所有條目
-      const [contents] = await connection.execute(
-        `SELECT id, code, theme, theme_name, category, category_name, description, sort_order
-         FROM social_learning_contents
+      const contents = await query(
+        `SELECT id, code, theme, theme_name AS themeName, category,
+                category_name AS categoryName, description, sort_order AS sortOrder
+         FROM ${MH_TABLE}
          WHERE stage = ? AND subject = ? AND theme = ?
          ORDER BY sort_order`,
         [stage, subject, theme]
@@ -65,17 +105,18 @@ export async function GET(request: NextRequest) {
         success: true,
         type: 'theme_details',
         data: {
-          categories: categories, // 可能為空陣列（表示無項目）
-          contents: contents
-        }
+          categories,
+          contents,
+        },
       })
     }
 
-    // 情境 3：stage + subject + theme + category → 返回該項目下的條目
-    if (stage && subject && theme && category) {
-      const [rows] = await connection.execute(
-        `SELECT id, code, theme, theme_name, category, category_name, description, sort_order
-         FROM social_learning_contents
+    // 情境 3：stage + subject + theme + category → 條目
+    if (theme && category) {
+      const rows = await query(
+        `SELECT id, code, theme, theme_name AS themeName, category,
+                category_name AS categoryName, description, sort_order AS sortOrder
+         FROM ${MH_TABLE}
          WHERE stage = ? AND subject = ? AND theme = ? AND category = ?
          ORDER BY sort_order`,
         [stage, subject, theme, category]
@@ -84,27 +125,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         type: 'contents',
-        data: rows
+        data: rows,
       })
     }
 
-    // 情境 4：只有 stage + subject + theme（無項目的主題） → 返回條目
-    // 這個情況已經在情境 2 中處理了
-
     return NextResponse.json(
-      { error: '缺少必要參數 (stage, subject)' },
+      { error: '參數組合無效' },
       { status: 400 }
     )
-
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
     console.error('取得社會科學習內容錯誤:', error)
+
+    if (/doesn't exist|unknown column|topic_item/i.test(message)) {
+      return NextResponse.json(
+        {
+          error: '社會科國小學習內容資料表尚未就緒',
+          details:
+            '請執行 database/create_social_learning_contents.sql 與 seed_social_learning_contents.sql；' +
+            '若曾安裝國中/高中版，請先執行 migrations/add_social_middle_high_contents.sql',
+        },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json(
-      { error: '取得社會科學習內容失敗', details: error.message },
+      { error: '取得社會科學習內容失敗', details: message },
       { status: 500 }
     )
-  } finally {
-    if (connection) {
-      await connection.end()
-    }
   }
 }
