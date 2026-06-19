@@ -811,9 +811,13 @@ export async function POST(
                                      body.teachingTimeMinutes !== undefined ||
                                      isFullUpdate
       
-      const isSpecificationOnlyUpdate = body.isAutoSave === true || 
-                                        ((body.checkedPerformances !== undefined || body.checkedContents !== undefined) &&
-                                         !hasBasicLessonPlanData)
+      // 明確 isAutoSave === false 代表「儲存為新版本」，一律建立版本
+      const isSpecificationOnlyUpdate =
+        body.isAutoSave === false
+          ? false
+          : body.isAutoSave === true ||
+            ((body.checkedPerformances !== undefined || body.checkedContents !== undefined) &&
+              !hasBasicLessonPlanData)
       
       let nextVersionNumber = 0
       
@@ -824,7 +828,8 @@ export async function POST(
           [activityId]
         ) as any[]
 
-        nextVersionNumber = versions[0]?.max_version ? versions[0].max_version + 1 : 1
+        const maxVersion = Number(versions[0]?.max_version ?? 0)
+        nextVersionNumber = maxVersion > 0 ? maxVersion + 1 : 1
         
         console.log('建立版本記錄:', { activityId, nextVersionNumber, lessonPlanId })
 
@@ -891,7 +896,7 @@ export async function POST(
           'SELECT MAX(version_number) as max_version FROM activity_versions WHERE activity_id = ?',
           [activityId]
         ) as any[]
-        nextVersionNumber = versions[0]?.max_version || 0
+        nextVersionNumber = Number(versions[0]?.max_version ?? 0)
       }
 
       // 驗證資料是否真的寫入

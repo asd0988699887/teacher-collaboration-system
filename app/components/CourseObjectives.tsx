@@ -2190,6 +2190,28 @@ export default function CourseObjectives({
     activityIdRef.current = activityId
   }, [activityId])
 
+  const applyCurrentVersionLabel = useCallback((versionNum: number) => {
+    if (!activityId || !Number.isFinite(versionNum) || versionNum <= 0) return null
+    const label = `v${versionNum}`
+    setCurrentVersion(label)
+    localStorage.setItem(`currentVersion_${activityId}`, label)
+    return label
+  }, [activityId])
+
+  const fetchAndApplyLatestVersion = useCallback(async () => {
+    if (!activityId) return null
+    try {
+      const response = await fetch(`/api/activity-versions/${activityId}`)
+      const data = await response.json()
+      if (response.ok && Array.isArray(data.versions) && data.versions.length > 0) {
+        return applyCurrentVersionLabel(Number(data.versions[0].versionNumber))
+      }
+    } catch (error) {
+      console.error('讀取最新版本號失敗:', error)
+    }
+    return null
+  }, [activityId, applyCurrentVersionLabel])
+
   // 載入當前版本號
   useEffect(() => {
     const loadCurrentVersion = async () => {
@@ -3242,20 +3264,16 @@ export default function CourseObjectives({
 
       const result = await response.json()
       
-      // 更新當前版本號
-      if (result.data && result.data.versionNumber) {
-        const versionNumber = `v${result.data.versionNumber}`
-        setCurrentVersion(versionNumber)
-        // 同時更新到 localStorage
-        const storageKey = `currentVersion_${activityId}`
-        localStorage.setItem(storageKey, versionNumber)
-      }
+      const versionFromResponse = Number(result.data?.versionNumber)
+      let versionLabel =
+        applyCurrentVersionLabel(versionFromResponse) ??
+        (await fetchAndApplyLatestVersion())
       
       // 顯示成功訊息
-      alert('已儲存為新版本！')
+      alert(versionLabel ? `已儲存為新版本（${versionLabel}）！` : '已儲存為新版本！')
       
       // 通知父組件版本已建立（如果需要的話）
-      if (onVersionCreated) {
+      if (onVersionCreated && versionLabel) {
         const now = new Date()
         const year = now.getFullYear()
         const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -3264,7 +3282,7 @@ export default function CourseObjectives({
         const minutes = String(now.getMinutes()).padStart(2, '0')
         
         onVersionCreated(activityId, {
-          versionNumber: `v${result.data.versionNumber}`,
+          versionNumber: versionLabel,
           lastModifiedDate: `${year}/${month}/${day}`,
           lastModifiedTime: `${hours}:${minutes}`,
           lastModifiedUser: userNickname,
@@ -3721,7 +3739,7 @@ export default function CourseObjectives({
                     className="text-lg font-semibold text-[#6D28D9] hover:underline decoration-2 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-purple-400 rounded px-0.5"
                     title="開啟版本管理"
                   >
-                    {currentVersion || 'v1'}
+                    {currentVersion || '尚無版本'}
                   </button>
                 ) : (
                   currentVersion && (
