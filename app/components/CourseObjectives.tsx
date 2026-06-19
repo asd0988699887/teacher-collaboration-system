@@ -2196,8 +2196,6 @@ export default function CourseObjectives({
       const currentActivityId = activityIdRef.current
       if (!currentActivityId) return
 
-      console.log('🔄 CourseObjectives: 開始載入版本號，activityId:', currentActivityId)
-
       // 中止上一個進行中的 API 請求
       versionLoadControllerRef.current?.abort()
       const controller = new AbortController()
@@ -2208,13 +2206,11 @@ export default function CourseObjectives({
       // 優先使用 localStorage（回復版本後已寫入）
       const storedVersion = localStorage.getItem(storageKey)
       if (storedVersion) {
-        console.log('✅ CourseObjectives: 從 localStorage 讀取到版本號:', storedVersion)
         setCurrentVersion(storedVersion)
         return // localStorage 有值就不再打 API，避免 race condition
       }
 
       // localStorage 無值才去打 API
-      console.log('⚠️ CourseObjectives: localStorage 沒有版本號，從 API 讀取')
       try {
         const response = await fetch(`/api/activity-versions/${currentActivityId}`, {
           signal: controller.signal,
@@ -2223,35 +2219,27 @@ export default function CourseObjectives({
 
         // 若請求已被中止（versionRestored 發生），直接放棄此次 API 結果
         if (controller.signal.aborted) {
-          console.log('⚠️ CourseObjectives: API 請求已被中止，忽略回應')
           return
         }
-
-        console.log('📡 CourseObjectives: API 回應:', data)
 
         if (response.ok && data.versions && data.versions.length > 0) {
           // 再次確認 localStorage 沒有被 versionRestored 寫入（雙重保護）
           const freshStored = localStorage.getItem(storageKey)
           if (freshStored) {
-            console.log('✅ CourseObjectives: API 回應前 versionRestored 已寫入 localStorage，使用 localStorage:', freshStored)
             setCurrentVersion(freshStored)
             return
           }
           const versionNumber = `v${data.versions[0].versionNumber}`
-          console.log('✅ CourseObjectives: 從 API 讀取到版本號:', versionNumber)
           setCurrentVersion(versionNumber)
           localStorage.setItem(storageKey, versionNumber)
-          console.log('✅ CourseObjectives: 已更新版本號到 state 和 localStorage:', versionNumber)
         } else {
-          console.log('⚠️ CourseObjectives: API 沒有版本號')
           setCurrentVersion('')
         }
       } catch (error: unknown) {
         if (error instanceof Error && error.name === 'AbortError') {
-          console.log('⚠️ CourseObjectives: API 請求被中止（AbortError），忽略')
           return
         }
-        console.error('❌ CourseObjectives: 載入版本號錯誤:', error)
+        console.error('CourseObjectives: 載入版本號錯誤:', error)
         setCurrentVersion('')
       }
     }
@@ -2264,57 +2252,38 @@ export default function CourseObjectives({
       const customEvent = event as CustomEvent<{ activityId: string; versionNumber: string } | undefined>
       const eventData = customEvent.detail
 
-      console.log('✅ CourseObjectives: 收到版本回復事件，activityId:', currentActivityId, '事件資料:', eventData)
-
       if (eventData && eventData.versionNumber && eventData.activityId === currentActivityId) {
         // 中止任何進行中的 API 請求，避免舊請求回來後覆蓋回復的版本號
         versionLoadControllerRef.current?.abort()
         versionLoadControllerRef.current = null
 
-        console.log('✅ CourseObjectives: 使用事件中的版本號:', eventData.versionNumber)
         const storageKey = `currentVersion_${currentActivityId}`
         localStorage.setItem(storageKey, eventData.versionNumber)
         setCurrentVersion(eventData.versionNumber)
-        console.log('✅ CourseObjectives: 已更新版本號到 state 和 localStorage:', eventData.versionNumber)
         // 觸發教案內容重新載入，確保畫面資料與回復的版本一致
         setLessonPlanReloadKey((k) => k + 1)
       } else {
         // 事件無版本號：中止舊請求後重新載入（localStorage 此時應已由 CommunityDetail 寫入）
-        console.log('⚠️ CourseObjectives: 事件中沒有版本號，將從 localStorage 重新讀取')
         versionLoadControllerRef.current?.abort()
         versionLoadControllerRef.current = null
         setTimeout(() => {
-          console.log('✅ CourseObjectives: 開始重新載入版本號（延遲後）')
           loadCurrentVersion()
         }, 300)
       }
     }
 
     window.addEventListener('versionRestored', handleVersionRestored)
-    console.log('✅ CourseObjectives: 已註冊 versionRestored 事件監聽器')
 
     return () => {
       window.removeEventListener('versionRestored', handleVersionRestored)
       versionLoadControllerRef.current?.abort()
-      console.log('✅ CourseObjectives: 已移除 versionRestored 事件監聽器')
     }
   }, [activityId])
-
-  useEffect(() => {
-    console.error('[教案] 狀態', {
-      activityId: activityId ?? null,
-      readOnly,
-      currentUserId: currentUserId ?? null,
-      lessonPlanLoadState,
-      isLessonPlanLoaded,
-    })
-  }, [activityId, readOnly, currentUserId, lessonPlanLoadState, isLessonPlanLoaded])
 
   // 載入教案資料
   useEffect(() => {
     const loadLessonPlan = async () => {
       if (!activityId) {
-        console.error('[教案載入] 略過：activityId 為空')
         setIsLessonPlanLoaded(false)
         setLessonPlanLoadState('empty')
         return
@@ -2324,7 +2293,6 @@ export default function CourseObjectives({
       setLessonPlanLoadState('loading')
 
       try {
-        console.log('[教案載入] 開始', { activityId })
         const response = await fetch(`/api/lesson-plans/${activityId}`)
         const data = await response.json()
 
@@ -3109,18 +3077,7 @@ export default function CourseObjectives({
   ])
 
   const autoSaveLessonPlan = useCallback(async () => {
-    if (readOnly) {
-      console.warn('[教案自動儲存] 略過：唯讀模式')
-      return
-    }
-    if (!activityId) {
-      console.warn('[教案自動儲存] 略過：缺少 activityId')
-      return
-    }
-    if (lessonPlanLoadState === 'loading') {
-      console.warn('[教案自動儲存] 略過：教案尚在載入中')
-      return
-    }
+    if (readOnly || !activityId || lessonPlanLoadState === 'loading') return
 
     const isFormEmpty =
       !lessonPlanTitle.trim() &&
@@ -3143,19 +3100,12 @@ export default function CourseObjectives({
       checkedPerformances.size === 0 &&
       checkedContents.size === 0
 
-    if (isFormEmpty) {
-      console.warn('[教案自動儲存] 略過：表單尚無任何內容')
-      return
-    }
+    if (isFormEmpty) return
 
     const userId = currentUserId || resolveStoredUserId()
-    if (!userId) {
-      console.warn('[教案自動儲存] 略過：未登入（請重新登入）')
-      return
-    }
+    if (!userId) return
 
     try {
-      console.log('[教案自動儲存] 送出請求…', { activityId, userId: userId.slice(0, 8) + '…' })
       const response = await fetch(`/api/lesson-plans/${activityId}`, {
         method: 'POST',
         headers: {
@@ -3166,15 +3116,12 @@ export default function CourseObjectives({
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.error('[教案自動儲存] 失敗:', errorData)
-      } else {
-        console.log('✅ 教案已自動儲存（不建立新版本）')
-        if (lessonPlanLoadState === 'empty' || lessonPlanLoadState === 'error') {
-          setLessonPlanLoadState('ok')
-        }
+        console.error('自動儲存教案失敗:', errorData)
+      } else if (lessonPlanLoadState === 'empty' || lessonPlanLoadState === 'error') {
+        setLessonPlanLoadState('ok')
       }
     } catch (error) {
-      console.error('[教案自動儲存] 錯誤:', error)
+      console.error('自動儲存教案錯誤:', error)
     }
   }, [
     readOnly,
