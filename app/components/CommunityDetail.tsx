@@ -192,6 +192,10 @@ export default function CommunityDetail({
   const [isVersionControlModalOpen, setIsVersionControlModalOpen] = useState(false)
   const [versionControlActivityId, setVersionControlActivityId] = useState<string | null>(null)
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null)
+  const [activitiesLoading, setActivitiesLoading] = useState(false)
+  const [isEnsuringActivity, setIsEnsuringActivity] = useState(false)
+  const [activityEnsureError, setActivityEnsureError] = useState<string | null>(null)
+  const ensureActivityInFlightRef = useRef(false)
   const [isChatRoomOpen, setIsChatRoomOpen] = useState(false)
   // 側邊欄下方「任務狀態」展開的分類（與團隊分工連動）
   const [openTaskPanel, setOpenTaskPanel] = useState<'deadline' | 'mine' | 'incomplete' | 'completed' | null>(null)
@@ -359,6 +363,60 @@ export default function CommunityDetail({
       return inProgress ?? activities[0] ?? null
     })
   }, [activeTab, communityId, activities, readOnly])
+
+  // 共備活動：若社群尚無活動，自動建立一筆預設活動（否則教案無 activityId 可儲存）
+  useEffect(() => {
+    const ensureDefaultActivity = async () => {
+      if (readOnly || !communityId || !userId) return
+      if (activeTab !== 'activities') return
+      if (activitiesLoading || activities.length > 0) return
+      if (ensureActivityInFlightRef.current) return
+
+      ensureActivityInFlightRef.current = true
+      setIsEnsuringActivity(true)
+      setActivityEnsureError(null)
+
+      try {
+        const defaultName = communityName ? `${communityName}共備` : '共備活動'
+        const response = await fetch(`/api/communities/${communityId}/activities`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: defaultName,
+            introduction: '',
+            isPublic: true,
+            password: '',
+            creatorId: userId,
+          }),
+        })
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || data.details || '建立共備活動失敗')
+        }
+        const created = data as Activity
+        setActivities([created])
+        setViewingActivity(created)
+        console.log('[共備活動] 已自動建立預設活動:', created.id)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '建立共備活動失敗'
+        console.error('[共備活動] 自動建立失敗:', message)
+        setActivityEnsureError(message)
+        ensureActivityInFlightRef.current = false
+      } finally {
+        setIsEnsuringActivity(false)
+      }
+    }
+
+    void ensureDefaultActivity()
+  }, [
+    activeTab,
+    communityId,
+    userId,
+    communityName,
+    activities.length,
+    activitiesLoading,
+    readOnly,
+  ])
 
   // 追蹤 activeTab 變化，更新 prevActiveTabRef
   useEffect(() => {
@@ -572,17 +630,26 @@ export default function CommunityDetail({
   const loadActivities = async () => {
     if (!communityId) return
 
+    setActivitiesLoading(true)
     try {
       const response = await fetch(`/api/communities/${communityId}/activities`)
       const data = await response.json()
 
       if (response.ok) {
-        setActivities(data)
+        setActivities(Array.isArray(data) ? data : [])
+        setActivityEnsureError(null)
       } else {
-        console.error('載入活動列表失敗:', data.error)
+        const message = data?.error || data?.details || '載入活動列表失敗'
+        console.error('載入活動列表失敗:', message)
+        setActivityEnsureError(message)
+        setActivities([])
       }
     } catch (error) {
       console.error('載入活動列表錯誤:', error)
+      setActivityEnsureError('無法連線至活動列表 API')
+      setActivities([])
+    } finally {
+      setActivitiesLoading(false)
     }
   }
 
@@ -900,6 +967,9 @@ export default function CommunityDetail({
 
         // 重新載入活動列表
         await loadActivities()
+        if (!editingActivity && data?.id) {
+          setViewingActivity(data as Activity)
+        }
         alert('建立活動成功！')
       }
 
@@ -2778,7 +2848,36 @@ export default function CommunityDetail({
         )}
 
         {/* 共備活動：embedded 模式，沿用此 layout 的 header 與 fixed sidebar */}
-        {showCoPrepLessonEditor && (
+        {showCoPrepLessonEditor && !coPrepActivityId && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+            {isEnsuringActivity || activitiesLoading ? (
+              <>
+                <p className="text-gray-600">正在準備共備活動…</p>
+                <p className="text-sm text-gray-400">首次進入會自動建立活動，之後即可儲存教案</p>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-700 font-medium">此社群尚無共備活動，無法儲存教案</p>
+                {activityEnsureError && (
+                  <p className="text-sm text-red-600 max-w-md">{activityEnsureError}</p>
+                )}
+                {!readOnly && userId && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddActivityModalOpen(true)}
+                    className="px-6 py-2 bg-[rgba(138,99,210,0.9)] text-white rounded-lg font-medium hover:bg-[rgba(138,99,210,1)]"
+                  >
+                    建立共備活動
+                  </button>
+                )}
+                {!userId && (
+                  <p className="text-sm text-amber-700">請先登入後再建立共備活動</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        {showCoPrepLessonEditor && coPrepActivityId && (
           <CourseObjectives
             key={coPrepActivityId ?? 'pending-activity'}
             embedded={true}
