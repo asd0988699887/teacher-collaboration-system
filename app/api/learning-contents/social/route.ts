@@ -138,12 +138,15 @@ export async function GET(request: NextRequest) {
     console.error('取得社會科學習內容錯誤:', error)
 
     if (/doesn't exist|unknown column|topic_item/i.test(message)) {
+      const isMissingMhTable = /social_middle_high_contents/i.test(message)
       return NextResponse.json(
         {
-          error: '社會科國小學習內容資料表尚未就緒',
-          details:
-            '請執行 database/create_social_learning_contents.sql 與 seed_social_learning_contents.sql；' +
-            '若曾安裝國中/高中版，請先執行 migrations/add_social_middle_high_contents.sql',
+          error: isMissingMhTable
+            ? '社會科國中/高中學習內容資料表尚未就緒'
+            : '社會科國小學習內容資料表尚未就緒',
+          details: isMissingMhTable
+            ? '請執行 database/migrations/add_social_middle_high_contents.sql 與 database/seeds/social_middle_high_contents.sql'
+            : '請執行 database/create_social_learning_contents.sql 與 seed_social_learning_contents.sql',
         },
         { status: 500 }
       )

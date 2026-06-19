@@ -48,10 +48,20 @@ export async function GET(request: NextRequest) {
     const results = await query(sql, params)
 
     return NextResponse.json(results)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
     console.error('取得社會學習表現錯誤:', error)
+    if (/doesn't exist|unknown column/i.test(message)) {
+      return NextResponse.json(
+        {
+          error: '社會科國小學習表現資料表尚未就緒',
+          details: '請執行 database/create_social_learning_performances.sql 與 seed_social_learning_performances.sql',
+        },
+        { status: 500 }
+      )
+    }
     return NextResponse.json(
-      { error: '取得社會學習表現失敗', details: error.message },
+      { error: '取得社會學習表現失敗', details: message },
       { status: 500 }
     )
   }

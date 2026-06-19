@@ -533,11 +533,13 @@ export default function CourseObjectives({
   // 社會學習內容相關狀態（國中/高中 - 新版三層結構）
   const [socialContentMHThemes, setSocialContentMHThemes] = useState<Array<{
     theme: string
-    theme_name: string
+    themeName?: string
+    theme_name?: string
   }>>([]) // 主題列表
   const [socialContentMHCategories, setSocialContentMHCategories] = useState<Array<{
     category: string
-    category_name: string
+    categoryName?: string
+    category_name?: string
   }>>([]) // 項目列表（可能為空）
   const [socialContentMHContents, setSocialContentMHContents] = useState<Array<{
     id: string
@@ -1501,13 +1503,30 @@ export default function CourseObjectives({
           const response = await fetch('/api/learning-performances/social')
           if (response.ok) {
             const data = await response.json()
-            setSocialPerformances(data)
+            const rows = Array.isArray(data) ? data : []
+            setSocialPerformances(
+              rows.map((row: Record<string, unknown>) => ({
+                id: String(row.id ?? ''),
+                code: String(row.code ?? ''),
+                dimensionItem: String(row.dimensionItem ?? row.dimension_item ?? ''),
+                dimensionItemName: String(row.dimensionItemName ?? row.dimension_item_name ?? ''),
+                stage: String(row.stage ?? ''),
+                stageName: String(row.stageName ?? row.stage_name ?? ''),
+                serial: Number(row.serial ?? 0),
+                description: String(row.description ?? ''),
+              }))
+            )
           } else {
-            console.error('載入社會學習表現失敗')
+            const err = await response.json().catch(() => ({}))
+            console.error('載入社會學習表現失敗', response.status, err)
+            setSocialPerformances([])
           }
         } catch (error) {
           console.error('載入社會學習表現錯誤:', error)
+          setSocialPerformances([])
         }
+      } else if (courseDomain === '社會') {
+        setSocialPerformances([])
       }
     }
     loadSocialPerformances()
@@ -1589,7 +1608,26 @@ export default function CourseObjectives({
           
           if (response.ok) {
             const data = await response.json()
-            setNaturalMiddleHighContents(data)
+            const rows = Array.isArray(data) ? data : []
+            // 高中 API 回傳 { subjectCode, subjectName, themes[] }，UI 需要扁平化為每主題一筆
+            const normalized =
+              apiSchoolLevel === '高中'
+                ? rows.flatMap((subject: Record<string, unknown>) => {
+                    const themes = Array.isArray(subject.themes) ? subject.themes : []
+                    return themes.map((theme: Record<string, unknown>) => ({
+                      subjectCode: String(subject.subjectCode ?? subject.subject_code ?? ''),
+                      subjectName: String(subject.subjectName ?? subject.subject_name ?? ''),
+                      themeCode: String(theme.themeCode ?? theme.theme_code ?? ''),
+                      themeName: String(theme.themeName ?? theme.theme_name ?? ''),
+                      subThemes: Array.isArray(theme.subThemes) ? theme.subThemes : [],
+                    }))
+                  })
+                : rows.map((theme: Record<string, unknown>) => ({
+                    themeCode: String(theme.themeCode ?? theme.theme_code ?? ''),
+                    themeName: String(theme.themeName ?? theme.theme_name ?? ''),
+                    subThemes: Array.isArray(theme.subThemes) ? theme.subThemes : [],
+                  }))
+            setNaturalMiddleHighContents(normalized)
             // 重置選擇
             setNaturalMHContentSubject('')
             setNaturalMHContentTheme('')
@@ -1941,13 +1979,28 @@ export default function CourseObjectives({
           const response = await fetch('/api/learning-contents/social')
           if (response.ok) {
             const data = await response.json()
-            setSocialContents(data)
+            const rows = Array.isArray(data) ? data : []
+            setSocialContents(
+              rows.map((row: Record<string, unknown>) => ({
+                id: String(row.id ?? ''),
+                code: String(row.code ?? ''),
+                topicItem: String(row.topicItem ?? row.topic_item ?? ''),
+                topicItemName: String(row.topicItemName ?? row.topic_item_name ?? ''),
+                stage: String(row.stage ?? ''),
+                stageName: String(row.stageName ?? row.stage_name ?? ''),
+                serial: Number(row.serial ?? 0),
+                description: String(row.description ?? ''),
+              }))
+            )
           } else {
             console.error('載入社會學習內容失敗')
+            setSocialContents([])
           }
         } catch (error) {
           console.error('載入社會學習內容錯誤:', error)
         }
+      } else if (courseDomain === '社會') {
+        setSocialContents([])
       }
     }
     loadSocialContents()
@@ -6141,7 +6194,7 @@ export default function CourseObjectives({
                       <option value="">請選擇主題</option>
                       {socialContentMHThemes.map((theme) => (
                         <option key={theme.theme} value={theme.theme}>
-                          {theme.theme}. {theme.theme_name}
+                          {theme.theme}. {theme.themeName ?? theme.theme_name}
                         </option>
                       ))}
                     </select>
@@ -6158,7 +6211,7 @@ export default function CourseObjectives({
                         <option value="">請選擇項目</option>
                         {socialContentMHCategories.map((cat) => (
                           <option key={cat.category} value={cat.category}>
-                            {cat.category}. {cat.category_name}
+                            {cat.category}. {cat.categoryName ?? cat.category_name}
                           </option>
                         ))}
                       </select>
@@ -6429,7 +6482,10 @@ export default function CourseObjectives({
                             >
                               <option value="">請選擇主題</option>
                               {uniqueThemes.map((theme) => (
-                                <option key={theme.themeCode} value={theme.themeCode}>
+                                <option
+                                  key={`${naturalMHContentSubject}-${theme.themeCode}`}
+                                  value={theme.themeCode}
+                                >
                                   {theme.themeName}
                                 </option>
                               ))}
@@ -6455,7 +6511,10 @@ export default function CourseObjectives({
                             >
                               <option value="">請選擇次主題</option>
                               {selectedTheme.subThemes.map((subTheme) => (
-                                <option key={subTheme.subThemeCode} value={subTheme.subThemeCode}>
+                                <option
+                                  key={`${naturalMHContentSubject}-${naturalMHContentTheme}-${subTheme.subThemeCode}`}
+                                  value={subTheme.subThemeCode}
+                                >
                                   {subTheme.subThemeCode}. {subTheme.subThemeName}
                                 </option>
                               ))}
@@ -6490,7 +6549,7 @@ export default function CourseObjectives({
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
                             >
                               {contents.map((item) => (
-                                <option key={item.id} value={item.code}>
+                                <option key={item.id ?? item.code} value={item.code}>
                                   {item.code}: {item.description}
                                 </option>
                               ))}
@@ -6556,7 +6615,10 @@ export default function CourseObjectives({
                         >
                           <option value="">請選擇主題</option>
                           {naturalMiddleHighContents.map((theme) => (
-                            <option key={theme.themeCode} value={theme.themeCode}>
+                            <option
+                              key={`${theme.themeCode}-${theme.themeName}`}
+                              value={theme.themeCode}
+                            >
                               {theme.themeCode}. {theme.themeName}
                             </option>
                           ))}
@@ -6580,7 +6642,10 @@ export default function CourseObjectives({
                             >
                               <option value="">請選擇次主題</option>
                               {selectedTheme.subThemes.map((subTheme) => (
-                                <option key={subTheme.subThemeCode} value={subTheme.subThemeCode}>
+                                <option
+                                  key={`${naturalMHContentTheme}-${subTheme.subThemeCode}`}
+                                  value={subTheme.subThemeCode}
+                                >
                                   {subTheme.subThemeCode}. {subTheme.subThemeName}
                                 </option>
                               ))}
@@ -6615,7 +6680,7 @@ export default function CourseObjectives({
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-800"
                             >
                               {contents.map((item) => (
-                                <option key={item.id} value={item.code}>
+                                <option key={item.id ?? item.code} value={item.code}>
                                   {item.code}: {item.description}
                                 </option>
                               ))}
