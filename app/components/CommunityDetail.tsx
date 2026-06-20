@@ -2139,6 +2139,9 @@ export default function CommunityDetail({
     try {
       const formData = new FormData()
       formData.append('completionDescription', payload.completionDescription)
+      if (userId) {
+        formData.append('userId', userId)
+      }
       if (payload.file) {
         formData.append('file', payload.file)
       }

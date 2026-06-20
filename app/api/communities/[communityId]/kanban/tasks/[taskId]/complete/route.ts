@@ -5,6 +5,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { storageConfig, isFileTypeAllowed, formatFileSize } from '@/lib/storage-config'
+import { createNotificationsForCommunity } from '@/lib/notifications'
 
 function isTaskAttachmentAllowed(file: File): boolean {
   if (file.type && isFileTypeAllowed(file.type, file.name)) {
@@ -22,19 +23,23 @@ export async function POST(
     const { communityId, taskId } = await params
 
     const tasks = (await query(
-      `SELECT kt.id
+      `SELECT kt.id, kt.title, kt.status
        FROM kanban_tasks kt
        INNER JOIN kanban_lists kl ON kt.list_id = kl.id
        WHERE kt.id = ? AND kl.community_id = ?`,
       [taskId, communityId]
-    )) as { id: string }[]
+    )) as { id: string; title: string; status?: string }[]
 
     if (tasks.length === 0) {
       return NextResponse.json({ error: '任務不存在' }, { status: 404 })
     }
 
+    const taskRow = tasks[0]
+    const wasAlreadyCompleted = taskRow.status === 'completed'
+
     const formData = await request.formData()
     const completionDescription = String(formData.get('completionDescription') || '').trim()
+    const userId = String(formData.get('userId') || '').trim()
     const file = formData.get('file') as File | null
 
     if (!completionDescription) {
@@ -92,6 +97,27 @@ export async function POST(
         )
       }
       throw dbError
+    }
+
+    if (userId && !wasAlreadyCompleted) {
+      try {
+        const users = (await query('SELECT nickname FROM users WHERE id = ?', [userId])) as {
+          nickname: string
+        }[]
+        const userName = users.length > 0 ? users[0].nickname : '使用者'
+        const taskTitle = taskRow.title?.trim() || '任務'
+
+        await createNotificationsForCommunity({
+          communityId,
+          actorId: userId,
+          type: 'task',
+          action: 'update',
+          content: `${userName} 完成了分工任務「${taskTitle}」`,
+          relatedId: taskId,
+        })
+      } catch (notificationError) {
+        console.error('創建任務完成通知失敗:', notificationError)
+      }
     }
 
     return NextResponse.json({ message: '任務已完成' })
