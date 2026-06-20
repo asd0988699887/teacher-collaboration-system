@@ -6,6 +6,56 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
 
+/** 依邀請碼查詢活動名稱與介紹（加入前確認用，不會加入成員） */
+export async function GET(request: NextRequest) {
+  try {
+    const inviteCode = request.nextUrl.searchParams.get('inviteCode')?.trim()
+
+    if (!inviteCode) {
+      return NextResponse.json({ error: '請提供邀請碼' }, { status: 400 })
+    }
+
+    const communities = (await query(
+      `SELECT 
+        c.name,
+        c.description,
+        c.created_at AS createdDate,
+        COUNT(DISTINCT cm.user_id) AS memberCount
+      FROM communities c
+      LEFT JOIN community_members cm ON c.id = cm.community_id
+      WHERE c.invite_code = ?
+      GROUP BY c.id, c.name, c.description, c.created_at`,
+      [inviteCode]
+    )) as { name: string; description: string | null; createdDate: string | Date | null; memberCount: number | string }[]
+
+    if (communities.length === 0) {
+      return NextResponse.json({ error: '邀請碼無效' }, { status: 404 })
+    }
+
+    const row = communities[0]
+    const createdDate = row.createdDate
+      ? (() => {
+          const date = new Date(row.createdDate as string | Date)
+          const year = date.getFullYear()
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const day = String(date.getDate()).padStart(2, '0')
+          return `${year}/${month}/${day}`
+        })()
+      : ''
+
+    return NextResponse.json({
+      name: row.name,
+      description: row.description || '',
+      createdDate,
+      memberCount: parseInt(String(row.memberCount), 10) || 0,
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '查詢失敗'
+    console.error('查詢邀請碼活動錯誤:', error)
+    return NextResponse.json({ error: '查詢活動失敗', details: message }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
