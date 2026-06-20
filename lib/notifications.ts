@@ -95,10 +95,9 @@ export async function createLessonPlanCommunityNotification(
         lockName,
       ])) as [{ acquired: number | null }[], unknown]
 
-      const acquired = Array.isArray(lockRows) && lockRows[0]?.acquired === 1
+      const acquired = Number(Array.isArray(lockRows) ? lockRows[0]?.acquired : 0) === 1
       if (!acquired) {
-        console.log('🔔 教案通知鎖取得失敗，略過建立')
-        return
+        console.log('🔔 教案通知鎖取得失敗，改為無鎖模式建立')
       }
 
       try {
@@ -108,9 +107,10 @@ export async function createLessonPlanCommunityNotification(
             `SELECT id FROM notifications
              WHERE community_id = ? AND actor_id = ? AND type = 'lesson_plan'
                AND action = ? AND related_id = ?
+               AND content LIKE ?
                AND created_at >= DATE_SUB(NOW(), INTERVAL ${hours} HOUR)
              LIMIT 1`,
-            [communityId, actorId, action, activityId]
+            [communityId, actorId, action, activityId, '%修改了教案%']
           )) as [{ id: string }[], unknown]
 
           if (Array.isArray(existing) && existing.length > 0) {
@@ -142,7 +142,9 @@ export async function createLessonPlanCommunityNotification(
 
         console.log(`✅ 已成功創建 ${members.length} 個教案通知`)
       } finally {
-        await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
+        if (acquired) {
+          await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
+        }
       }
     })
   } catch (error) {
@@ -173,10 +175,9 @@ export async function upsertMergedChatNotifications(params: {
         lockName,
       ])) as [{ acquired: number | null }[], unknown]
 
-      const acquired = Array.isArray(lockRows) && lockRows[0]?.acquired === 1
+      const acquired = Number(Array.isArray(lockRows) ? lockRows[0]?.acquired : 0) === 1
       if (!acquired) {
-        console.log('🔔 聊天通知鎖取得失敗，略過建立')
-        return
+        console.log('🔔 聊天通知鎖取得失敗，改為無鎖模式建立')
       }
 
       try {
@@ -225,7 +226,9 @@ export async function upsertMergedChatNotifications(params: {
 
         console.log(`✅ 已更新 ${members.length} 位成員的聊天通知`)
       } finally {
-        await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
+        if (acquired) {
+          await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
+        }
       }
     })
   } catch (error) {

@@ -224,29 +224,23 @@ export default function CommunityDetail({
 
   const refreshChatUnreadCount = useCallback(async () => {
     if (!communityId || !userId || isChatRoomOpen) return
-    const key = getChatLastReadStorageKey()
-    if (!key) return
 
     try {
-      const response = await fetch(`/api/communities/${communityId}/chat-messages`)
+      const response = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`)
       const data = await response.json()
       if (!response.ok) return
 
-      const messages = (data.messages || []) as { senderId: string; createdAt: string }[]
-      const lastReadAt = localStorage.getItem(key)
-      const lastReadMs = lastReadAt
-        ? new Date(lastReadAt).getTime()
-        : new Date(chatSessionStartRef.current).getTime()
-
-      const count = messages.filter(
-        (message) =>
-          message.senderId !== userId && new Date(message.createdAt).getTime() > lastReadMs
+      const count = (data.notifications || []).filter(
+        (notification: { type: string; communityId: string; isRead: boolean }) =>
+          notification.type === 'chat' &&
+          notification.communityId === communityId &&
+          !notification.isRead
       ).length
       setChatUnreadCount(count)
     } catch (error) {
       console.error('載入聊天未讀數失敗:', error)
     }
-  }, [communityId, userId, isChatRoomOpen, getChatLastReadStorageKey])
+  }, [communityId, userId, isChatRoomOpen])
 
   useEffect(() => {
     refreshChatUnreadCount()
