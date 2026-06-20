@@ -236,7 +236,7 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
       if (window.confirm('請先登入')) {
         onNavigateToLogin?.()
       }
-      return
+      throw new Error('請先登入')
     }
 
     setIsLoading(true)
@@ -267,6 +267,7 @@ export default function CommunityOverview({ onNavigateToLogin }: CommunityOvervi
     } catch (err: any) {
       setError(err.message || '加入活動失敗')
       alert(err.message || '加入活動失敗')
+      throw err
     } finally {
       setIsLoading(false)
     }

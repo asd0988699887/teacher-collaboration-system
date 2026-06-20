@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -197,6 +197,79 @@ export default function CommunityDetail({
   const [activityEnsureError, setActivityEnsureError] = useState<string | null>(null)
   const ensureActivityInFlightRef = useRef(false)
   const [isChatRoomOpen, setIsChatRoomOpen] = useState(false)
+  const [announcementOpenToken, setAnnouncementOpenToken] = useState(0)
+  const [chatUnreadCount, setChatUnreadCount] = useState(0)
+  const chatSessionStartRef = useRef<string>(new Date().toISOString())
+
+  const getChatLastReadStorageKey = useCallback(() => {
+    if (!communityId || !userId) return null
+    return `chat_last_read_${communityId}_${userId}`
+  }, [communityId, userId])
+
+  useEffect(() => {
+    if (communityId && userId) {
+      chatSessionStartRef.current = new Date().toISOString()
+    }
+  }, [communityId, userId])
+
+  const handleChatMessagesViewed = useCallback(
+    (latestCreatedAt: string) => {
+      const key = getChatLastReadStorageKey()
+      if (!key) return
+      localStorage.setItem(key, latestCreatedAt)
+      setChatUnreadCount(0)
+    },
+    [getChatLastReadStorageKey]
+  )
+
+  const refreshChatUnreadCount = useCallback(async () => {
+    if (!communityId || !userId || isChatRoomOpen) return
+    const key = getChatLastReadStorageKey()
+    if (!key) return
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/chat-messages`)
+      const data = await response.json()
+      if (!response.ok) return
+
+      const messages = (data.messages || []) as { senderId: string; createdAt: string }[]
+      const lastReadAt = localStorage.getItem(key)
+      const lastReadMs = lastReadAt
+        ? new Date(lastReadAt).getTime()
+        : new Date(chatSessionStartRef.current).getTime()
+
+      const count = messages.filter(
+        (message) =>
+          message.senderId !== userId && new Date(message.createdAt).getTime() > lastReadMs
+      ).length
+      setChatUnreadCount(count)
+    } catch (error) {
+      console.error('載入聊天未讀數失敗:', error)
+    }
+  }, [communityId, userId, isChatRoomOpen, getChatLastReadStorageKey])
+
+  useEffect(() => {
+    refreshChatUnreadCount()
+    const interval = setInterval(refreshChatUnreadCount, 5000)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshChatUnreadCount()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshChatUnreadCount])
+
+  useEffect(() => {
+    if (isChatRoomOpen) {
+      setChatUnreadCount(0)
+    } else {
+      refreshChatUnreadCount()
+    }
+  }, [isChatRoomOpen, refreshChatUnreadCount])
   // 側邊欄下方「任務狀態」展開的分類（與團隊分工連動）
   const [openTaskPanel, setOpenTaskPanel] = useState<'deadline' | 'mine' | 'incomplete' | 'completed' | null>(null)
   const taskPanelRef = useRef<HTMLDivElement>(null)
@@ -1501,11 +1574,13 @@ export default function CommunityDetail({
       // 計算初始位置
       let initialPosition = { x: 50, y: 50 }
       let initialRotation = 0
+      const parentIdea = extendingFromIdeaId
+        ? ideas.find((i) => i.id === extendingFromIdeaId)
+        : null
 
-      if (extendingFromIdeaId) {
+      if (parentIdea) {
         // 如果是延伸想法，放在父節點的右側
-        const parentIdea = ideas.find((i) => i.id === extendingFromIdeaId)
-        if (parentIdea && parentIdea.position) {
+        if (parentIdea.position) {
           initialPosition = {
             x: parentIdea.position.x + 150, // 父節點右側 150px
             y: parentIdea.position.y,
@@ -1530,7 +1605,7 @@ export default function CommunityDetail({
         },
         body: JSON.stringify({
           activityId: ideaData.activityId || null,
-          stage: ideaData.stage,
+          stage: parentIdea?.stage ?? ideaData.stage,
           title: ideaData.title,
           content: ideaData.content,
           parentId: extendingFromIdeaId || null,
@@ -2359,11 +2434,14 @@ export default function CommunityDetail({
           isAdmin={fullCommunityMembers.find((m) => m.userId === userId)?.role === 'admin'}
           getAvatarColor={(uid) => getUserColor(uid)}
           readOnly={readOnly}
+          openToken={announcementOpenToken}
         />
         {userId && (
           <NotificationBell
             userId={userId}
             communityId={communityId || undefined}
+            onOpenChatRoom={() => setIsChatRoomOpen(true)}
+            onOpenAnnouncementBoard={() => setAnnouncementOpenToken((prev) => prev + 1)}
           />
         )}
         <div className="relative">
@@ -2665,10 +2743,11 @@ export default function CommunityDetail({
           </button>
         ))}
 
+        <div className="relative shrink-0 overflow-visible py-1">
         {/* 聊天室入口 */}
         <button
           onClick={() => setIsChatRoomOpen((prev) => !prev)}
-          className={`w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
+          className={`relative overflow-visible w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
             isChatRoomOpen
               ? 'bg-purple-100 text-purple-600'
               : 'text-gray-600 hover:bg-gray-200'
@@ -2678,7 +2757,13 @@ export default function CommunityDetail({
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
           </svg>
+          {chatUnreadCount > 0 && (
+            <span className="pointer-events-none absolute top-0 right-0 z-20 flex h-5 min-w-[20px] translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#FAFAFA]">
+              {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+            </span>
+          )}
         </button>
+        </div>
         </div>
 
         {/* 下方：任務狀態資訊區（與「團隊分工」看板連動） */}
@@ -3812,6 +3897,11 @@ export default function CommunityDetail({
         onSubmit={handleAddIdea}
         communityId={communityId || undefined}
         existingStages={[...new Set(ideas.map((i) => i.stage).filter(Boolean))]}
+        lockedStage={
+          extendingFromIdeaId
+            ? ideas.find((i) => i.id === extendingFromIdeaId)?.stage
+            : undefined
+        }
       />
 
       {/* 編輯想法模態框 */}
@@ -4109,13 +4199,20 @@ export default function CommunityDetail({
         {/* 聊天室入口 */}
         <button
           onClick={() => setIsChatRoomOpen((prev) => !prev)}
-          className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-colors ${
+          className={`relative flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-colors ${
             isChatRoomOpen ? 'bg-purple-100 text-purple-600' : 'text-gray-600'
           }`}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg" className="text-gray-600">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-          </svg>
+          <span className="relative inline-flex">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg" className="text-gray-600">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+            </svg>
+            {chatUnreadCount > 0 && (
+              <span className="pointer-events-none absolute top-0 right-0 z-20 flex h-4 min-w-[16px] translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white">
+                {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+              </span>
+            )}
+          </span>
           <span className="text-xs mt-1">聊天室</span>
         </button>
       </div>
@@ -4129,6 +4226,7 @@ export default function CommunityDetail({
         userNickname={userNickname}
         getAvatarColor={(uid) => getUserColor(uid)}
         readOnly={readOnly}
+        onMessagesViewed={handleChatMessagesViewed}
       />
 
       {!readOnly && activeTab === 'teamwork' && (

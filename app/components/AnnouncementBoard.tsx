@@ -19,6 +19,8 @@ interface AnnouncementBoardProps {
   /** 與 Header 頭像同色（由父層傳入 getUserColor） */
   getAvatarColor?: (userId: string) => string
   readOnly?: boolean
+  /** 父層遞增此值可從通知欄開啟公告欄 */
+  openToken?: number
 }
 
 const USER_COLORS = [
@@ -70,15 +72,89 @@ export default function AnnouncementBoard({
   isAdmin = false,
   getAvatarColor,
   readOnly = false,
+  openToken = 0,
 }: AnnouncementBoardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [announcementUnreadCount, setAnnouncementUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [draft, setDraft] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const canManageAnnouncements = isAdmin && !readOnly
+
+  const getAnnouncementLastReadStorageKey = useCallback(() => {
+    if (!communityId || !userId) return null
+    return `announcement_last_read_${communityId}_${userId}`
+  }, [communityId, userId])
+
+  useEffect(() => {
+    if (openToken > 0) {
+      setIsOpen(true)
+    }
+  }, [openToken])
+
+  const markAnnouncementsViewed = useCallback(
+    (items: Announcement[]) => {
+      const key = getAnnouncementLastReadStorageKey()
+      if (!key || items.length === 0) return
+      const sorted = [...items].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
+      localStorage.setItem(key, sorted[sorted.length - 1].createdAt)
+      setAnnouncementUnreadCount(0)
+    },
+    [getAnnouncementLastReadStorageKey]
+  )
+
+  const refreshAnnouncementUnreadCount = useCallback(async () => {
+    if (!communityId || !userId || isOpen) return
+
+    try {
+      const response = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`)
+      const data = await response.json()
+      if (!response.ok) return
+
+      const count = (data.notifications || []).filter(
+        (notification: { type: string; communityId: string; isRead: boolean }) =>
+          notification.type === 'announcement' &&
+          notification.communityId === communityId &&
+          !notification.isRead
+      ).length
+      setAnnouncementUnreadCount(count)
+    } catch (error) {
+      console.error('載入公告未讀數失敗:', error)
+    }
+  }, [communityId, userId, isOpen])
+
+  useEffect(() => {
+    refreshAnnouncementUnreadCount()
+    const interval = setInterval(refreshAnnouncementUnreadCount, 5000)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshAnnouncementUnreadCount()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshAnnouncementUnreadCount])
+
+  useEffect(() => {
+    if (!isOpen || !communityId || !userId) return
+
+    fetch('/api/notifications/mark-announcement-read', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, communityId }),
+    }).catch((error) => {
+      console.error('標記公告通知已讀失敗:', error)
+    })
+    setAnnouncementUnreadCount(0)
+  }, [isOpen, communityId, userId])
 
   const loadAnnouncements = useCallback(async () => {
     if (!communityId) return
@@ -87,7 +163,11 @@ export default function AnnouncementBoard({
       const response = await fetch(`/api/communities/${communityId}/announcements`)
       const data = await response.json()
       if (response.ok) {
-        setAnnouncements(data.announcements || [])
+        const items = data.announcements || []
+        setAnnouncements(items)
+        if (isOpen) {
+          markAnnouncementsViewed(items)
+        }
       } else {
         console.error('載入公告失敗:', data.error)
       }
@@ -96,7 +176,7 @@ export default function AnnouncementBoard({
     } finally {
       setIsLoading(false)
     }
-  }, [communityId])
+  }, [communityId, isOpen, markAnnouncementsViewed])
 
   useEffect(() => {
     if (isOpen) {
@@ -144,7 +224,11 @@ export default function AnnouncementBoard({
       }
       setDraft('')
       if (data.announcement) {
-        setAnnouncements((prev) => [data.announcement, ...prev])
+        setAnnouncements((prev) => {
+          const next = [data.announcement, ...prev]
+          markAnnouncementsViewed(next)
+          return next
+        })
       } else {
         await loadAnnouncements()
       }
@@ -180,11 +264,11 @@ export default function AnnouncementBoard({
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative overflow-visible">
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+        className={`relative overflow-visible flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
           isOpen ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'
         }`}
         aria-label="公告欄"
@@ -204,6 +288,11 @@ export default function AnnouncementBoard({
           <path d="M3 11l18-5v12L3 14v-3z" />
           <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
         </svg>
+        {announcementUnreadCount > 0 && (
+          <span className="pointer-events-none absolute -top-0.5 -right-0.5 z-[60] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#F5F3FA]">
+            {announcementUnreadCount > 99 ? '99+' : announcementUnreadCount}
+          </span>
+        )}
       </button>
 
       {isOpen && (

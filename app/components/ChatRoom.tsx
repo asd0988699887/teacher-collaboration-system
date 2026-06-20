@@ -18,6 +18,8 @@ interface ChatRoomProps {
   userNickname?: string
   /** 與 Header 頭像同色 */
   getAvatarColor?: (userId: string) => string
+  /** 使用者已查看聊天室訊息（更新最後已讀時間） */
+  onMessagesViewed?: (latestCreatedAt: string) => void
   readOnly?: boolean
 }
 
@@ -86,6 +88,7 @@ export default function ChatRoom({
   userId,
   getAvatarColor,
   readOnly = false,
+  onMessagesViewed,
 }: ChatRoomProps) {
   const selfId = userId || 'self'
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -116,6 +119,26 @@ export default function ChatRoom({
       loadMessages()
     }
   }, [isOpen, loadMessages])
+
+  useEffect(() => {
+    if (!isOpen || !communityId || !userId) return
+
+    fetch('/api/notifications/mark-chat-read', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, communityId }),
+    }).catch((error) => {
+      console.error('標記聊天通知已讀失敗:', error)
+    })
+  }, [isOpen, communityId, userId])
+
+  useEffect(() => {
+    if (!isOpen || !onMessagesViewed || messages.length === 0) return
+    const sorted = [...messages].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+    onMessagesViewed(sorted[sorted.length - 1].createdAt)
+  }, [isOpen, messages, onMessagesViewed])
 
   useEffect(() => {
     if (isOpen && scrollRef.current) {

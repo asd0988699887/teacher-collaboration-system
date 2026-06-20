@@ -3340,7 +3340,10 @@ export default function CourseObjectives({
     const saveRes = await fetch(`/api/lesson-plans/${activityId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildLessonPlanFormData(false, userId)),
+      body: JSON.stringify({
+        ...buildLessonPlanFormData(false, userId),
+        suppressNotification: true,
+      }),
     })
     if (!saveRes.ok) {
       const errorData = await saveRes.json().catch(() => ({}))

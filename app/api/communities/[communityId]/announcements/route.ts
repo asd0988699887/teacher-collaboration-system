@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
+import { upsertMergedAnnouncementNotifications } from '@/lib/notifications'
 
 interface AnnouncementRow {
   id: string
@@ -159,6 +160,17 @@ export async function POST(
 
     if (rows.length === 0) {
       return NextResponse.json({ error: '建立公告失敗' }, { status: 500 })
+    }
+
+    const publisherName = rows[0].createdByName || '管理員'
+    try {
+      await upsertMergedAnnouncementNotifications({
+        communityId,
+        actorId: createdBy,
+        publisherName,
+      })
+    } catch (notificationError) {
+      console.error('創建公告通知失敗:', notificationError)
     }
 
     return NextResponse.json(

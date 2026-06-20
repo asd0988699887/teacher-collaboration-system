@@ -6,7 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import pool, { query, transaction } from '@/lib/db'
-import { createNotificationsForCommunity } from '@/lib/notifications'
+import {
+  createLessonPlanCommunityNotification,
+  createNotificationsForCommunity,
+} from '@/lib/notifications'
 import { activityDisplayLabel } from '@/lib/activityDisplay'
 
 // 生成 UUID
@@ -946,14 +949,27 @@ export async function POST(
 
         const userName = users.length > 0 ? users[0].nickname : '使用者'
 
-        await createNotificationsForCommunity({
-          communityId,
-          actorId: userId,
-          type: 'lesson_plan',
-          action: 'update',
-          content: `${userName} 修改了教案「${activityName}」`,
-          relatedId: activityId,
-        })
+        if (body.suppressNotification === true) {
+          // 結束共備前的儲存由 complete API 另行通知
+        } else if (body.isAutoSave === false) {
+          await createNotificationsForCommunity({
+            communityId,
+            actorId: userId,
+            type: 'lesson_plan',
+            action: 'create',
+            content: `${userName} 儲存了新版本教案「${activityName}」`,
+            relatedId: activityId,
+          })
+        } else {
+          await createLessonPlanCommunityNotification({
+            communityId,
+            actorId: userId,
+            activityId,
+            action: 'update',
+            content: `${userName} 修改了教案「${activityName}」`,
+            dedupeWithinHours: 1,
+          })
+        }
       }
     } catch (notificationError) {
       // 通知失敗不影響主要功能

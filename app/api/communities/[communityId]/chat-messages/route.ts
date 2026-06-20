@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
+import { upsertMergedChatNotifications } from '@/lib/notifications'
 
 interface ChatMessageRow {
   id: string
@@ -138,6 +139,17 @@ export async function POST(
 
     if (rows.length === 0) {
       return NextResponse.json({ error: '發送訊息失敗' }, { status: 500 })
+    }
+
+    const senderName = rows[0].senderName || '使用者'
+    try {
+      await upsertMergedChatNotifications({
+        communityId,
+        actorId: senderId,
+        senderName,
+      })
+    } catch (notificationError) {
+      console.error('創建聊天通知失敗:', notificationError)
     }
 
     return NextResponse.json(

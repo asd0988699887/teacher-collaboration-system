@@ -15,6 +15,8 @@ interface AddIdeaModalProps {
   communityId?: string
   /** 目前已有的階段名稱，用於自動建議（可選） */
   existingStages?: string[]
+  /** 延伸想法時由系統帶入，使用者不可修改 */
+  lockedStage?: string
 }
 
 /**
@@ -61,6 +63,7 @@ export default function AddIdeaModal({
   onSubmit,
   communityId,
   existingStages = [],
+  lockedStage,
 }: AddIdeaModalProps) {
   const [selectedActivityId, setSelectedActivityId] = useState<string>('')
   const [stage, setStage] = useState('')
@@ -122,14 +125,14 @@ export default function AddIdeaModal({
   useEffect(() => {
     if (isOpen) {
       setSelectedActivityId('')
-      setStage('')
+      setStage(lockedStage ?? '')
       setTitle('')
       setContent('')
       setShowStageDropdown(false)
       // 重置位置到中心（但允許用戶拖移）
       setPosition({ x: 0, y: 0 })
     }
-  }, [isOpen])
+  }, [isOpen, lockedStage])
 
   // 點擊外部關閉階段下拉
   useEffect(() => {
@@ -212,7 +215,7 @@ export default function AddIdeaModal({
   const handleSubmit = () => {
     onSubmit({
       activityId: selectedActivityId || undefined,
-      stage,
+      stage: lockedStage ?? stage,
       title,
       content,
     })
@@ -266,16 +269,23 @@ export default function AddIdeaModal({
                 <div className="relative">
                   <input
                     type="text"
-                    value={stage}
+                    value={lockedStage ?? stage}
                     onChange={(e) => {
+                      if (lockedStage) return
                       setStage(e.target.value)
                       setShowStageDropdown(true)
                     }}
-                    onFocus={() => setShowStageDropdown(true)}
-                    placeholder="請輸入階段或選擇既有階段"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-400"
+                    onFocus={() => {
+                      if (!lockedStage) setShowStageDropdown(true)
+                    }}
+                    readOnly={Boolean(lockedStage)}
+                    disabled={Boolean(lockedStage)}
+                    placeholder={lockedStage ? undefined : '請輸入階段或選擇既有階段'}
+                    className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-400 ${
+                      lockedStage ? 'bg-gray-100 text-gray-700 cursor-not-allowed' : ''
+                    }`}
                   />
-                  {showStageDropdown && filteredStages.length > 0 && (
+                  {!lockedStage && showStageDropdown && filteredStages.length > 0 && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                       {filteredStages.map((s) => (
                         <button

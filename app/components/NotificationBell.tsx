@@ -7,7 +7,7 @@ interface Notification {
   communityId: string
   communityName: string
   actorName: string
-  type: 'file' | 'task' | 'idea' | 'lesson_plan' | 'convergence'
+  type: 'file' | 'task' | 'idea' | 'lesson_plan' | 'convergence' | 'chat' | 'announcement'
   action: 'create' | 'update' | 'reply'
   content: string
   relatedId?: string
@@ -18,11 +18,15 @@ interface Notification {
 interface NotificationBellProps {
   userId: string
   communityId?: string
+  /** 點擊聊天通知時開啟聊天室 */
+  onOpenChatRoom?: () => void
+  /** 點擊公告通知時開啟公告欄 */
+  onOpenAnnouncementBoard?: () => void
 }
 
 type NotificationScope = 'current' | 'all'
 
-export default function NotificationBell({ userId, communityId }: NotificationBellProps) {
+export default function NotificationBell({ userId, communityId, onOpenChatRoom, onOpenAnnouncementBoard }: NotificationBellProps) {
   const [allNotifications, setAllNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
@@ -59,6 +63,52 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
     }
   }
 
+  const markChatNotificationsAsRead = async (targetCommunityId: string) => {
+    try {
+      await fetch('/api/notifications/mark-chat-read', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, communityId: targetCommunityId }),
+      })
+
+      setAllNotifications((prev) => {
+        const marked = prev.filter(
+          (n) => n.type === 'chat' && n.communityId === targetCommunityId && !n.isRead
+        ).length
+        setUnreadCount((count) => Math.max(0, count - marked))
+        return prev.map((n) =>
+          n.type === 'chat' && n.communityId === targetCommunityId ? { ...n, isRead: true } : n
+        )
+      })
+    } catch (error) {
+      console.error('標記聊天通知已讀失敗:', error)
+    }
+  }
+
+  const markAnnouncementNotificationsAsRead = async (targetCommunityId: string) => {
+    try {
+      await fetch('/api/notifications/mark-announcement-read', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, communityId: targetCommunityId }),
+      })
+
+      setAllNotifications((prev) => {
+        const marked = prev.filter(
+          (n) => n.type === 'announcement' && n.communityId === targetCommunityId && !n.isRead
+        ).length
+        setUnreadCount((count) => Math.max(0, count - marked))
+        return prev.map((n) =>
+          n.type === 'announcement' && n.communityId === targetCommunityId
+            ? { ...n, isRead: true }
+            : n
+        )
+      })
+    } catch (error) {
+      console.error('標記公告通知已讀失敗:', error)
+    }
+  }
+
   // 標記單個通知為已讀
   const markAsRead = async (notificationId: string) => {
     try {
@@ -72,6 +122,26 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
       setUnreadCount((prev) => Math.max(0, prev - 1))
     } catch (error) {
       console.error('標記已讀失敗:', error)
+    }
+  }
+
+  const handleNotificationClick = async (notification: Notification) => {
+    if (notification.type === 'announcement' && notification.communityId) {
+      await markAnnouncementNotificationsAsRead(notification.communityId)
+      onOpenAnnouncementBoard?.()
+      setIsOpen(false)
+      return
+    }
+
+    if (notification.type === 'chat' && notification.communityId) {
+      await markChatNotificationsAsRead(notification.communityId)
+      onOpenChatRoom?.()
+      setIsOpen(false)
+      return
+    }
+
+    if (!notification.isRead) {
+      markAsRead(notification.id)
     }
   }
 
@@ -241,9 +311,7 @@ export default function NotificationBell({ userId, communityId }: NotificationBe
                 <div
                   key={notification.id}
                   onClick={() => {
-                    if (!notification.isRead) {
-                      markAsRead(notification.id)
-                    }
+                    void handleNotificationClick(notification)
                   }}
                   className={`p-3 sm:p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
                     !notification.isRead ? 'bg-purple-50' : ''

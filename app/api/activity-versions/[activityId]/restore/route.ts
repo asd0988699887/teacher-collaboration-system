@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query, transaction } from '@/lib/db'
 import { v4 as uuidv4 } from 'uuid'
+import { createNotificationsForCommunity } from '@/lib/notifications'
+import { activityDisplayLabel } from '@/lib/activityDisplay'
 
 export async function POST(
   request: NextRequest,
@@ -353,6 +355,41 @@ export async function POST(
       )
     } catch (error) {
       console.error('更新教案時間戳失敗:', error)
+    }
+
+    try {
+      const activityRows = (await query(
+        `SELECT a.community_id, a.name, lp.lesson_plan_title AS lessonPlanTitle
+         FROM activities a
+         LEFT JOIN lesson_plans lp ON lp.activity_id = a.id
+         WHERE a.id = ?`,
+        [activityId]
+      )) as { community_id: string; name: string; lessonPlanTitle?: string | null }[]
+
+      if (activityRows.length > 0) {
+        const communityId = activityRows[0].community_id
+        const activityName =
+          activityDisplayLabel({
+            name: activityRows[0].name || '',
+            lessonPlanTitle: activityRows[0].lessonPlanTitle,
+          }) || '教案'
+
+        const users = (await query('SELECT nickname FROM users WHERE id = ?', [userId])) as {
+          nickname: string
+        }[]
+        const userName = users.length > 0 ? users[0].nickname : '使用者'
+
+        await createNotificationsForCommunity({
+          communityId,
+          actorId: userId,
+          type: 'lesson_plan',
+          action: 'update',
+          content: `${userName} 回溯了教案「${activityName}」至 v${version.version_number}`,
+          relatedId: activityId,
+        })
+      }
+    } catch (notificationError) {
+      console.error('創建版本回溯通知失敗:', notificationError)
     }
 
     return NextResponse.json({
