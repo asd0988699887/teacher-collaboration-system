@@ -278,6 +278,9 @@ export default function CommunityDetail({
   // 側邊欄下方「任務狀態」展開的分類（與團隊分工連動）
   const [openTaskPanel, setOpenTaskPanel] = useState<'deadline' | 'mine' | 'incomplete' | 'completed' | null>(null)
   const taskPanelRef = useRef<HTMLDivElement>(null)
+  const sidebarNavScrollRef = useRef<HTMLDivElement>(null)
+  const ideasTabButtonRef = useRef<HTMLButtonElement>(null)
+  const resourcesTabButtonRef = useRef<HTMLButtonElement>(null)
   // 社群資源頁右下角操作小幫手
   const [isResourceHelperOpen, setIsResourceHelperOpen] = useState(true)
   // 任務看板頁右下角操作小幫手
@@ -2412,6 +2415,19 @@ export default function CommunityDetail({
       : 'text-gray-600 hover:bg-gray-200'
   }
 
+  useEffect(() => {
+    if (!isTourSidebarHighlightStep) return
+    const target =
+      activityTourStep === 3
+        ? ideasTabButtonRef.current
+        : activityTourStep === 4
+          ? resourcesTabButtonRef.current
+          : null
+    if (target) {
+      target.scrollIntoView({ block: 'center' })
+    }
+  }, [isTourSidebarHighlightStep, activityTourStep])
+
   // 側邊欄任務狀態摘要（與「團隊分工」看板資料連動）
   const allKanbanTasks = kanbanLists.flatMap((list) => list.tasks)
   const completedTasks = allKanbanTasks.filter((t) => t.status === 'completed')
@@ -2566,6 +2582,25 @@ export default function CommunityDetail({
 
   const headerTitle = viewingActivity ? activityDisplayLabel(viewingActivity) : '共備教案'
 
+  const desktopSidebarChat = (
+    <div className="relative shrink-0 overflow-visible py-1">
+      <button
+        onClick={() => setIsChatRoomOpen((prev) => !prev)}
+        className={`overflow-visible w-12 h-12 flex items-center justify-center rounded-lg transition-all ${getChatIconTourClass(isChatRoomOpen)}`}
+        title="聊天室"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+        {chatUnreadCount > 0 && (
+          <span className="pointer-events-none absolute top-0 right-0 z-20 flex h-5 min-w-[20px] translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#FAFAFA]">
+            {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+          </span>
+        )}
+      </button>
+    </div>
+  )
+
   return (
     <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
       {/* 左側導航欄 - 固定，捲動時不跟著動；手機版隱藏，桌面版顯示 */}
@@ -2578,10 +2613,21 @@ export default function CommunityDetail({
           <div className="absolute inset-0 z-[1] bg-black/50 pointer-events-none" aria-hidden />
         )}
         {/* 上方：原有功能 icon（可上下捲動，下方騰出空間給任務狀態） */}
-        <div className="relative z-[2] flex-1 min-h-0 w-full overflow-y-auto flex flex-col items-center gap-6 py-8">
+        <div className="relative z-[2] flex min-h-0 flex-1 flex-col w-full">
+        <div
+          ref={sidebarNavScrollRef}
+          className="min-h-0 flex-1 w-full overflow-y-auto flex flex-col items-center gap-6 py-8"
+        >
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            ref={
+              tab.id === 'ideas'
+                ? ideasTabButtonRef
+                : tab.id === 'resources'
+                  ? resourcesTabButtonRef
+                  : undefined
+            }
             onClick={() => handleTabChange(tab.id as TabType)}
             className={`w-12 h-12 flex items-center justify-center rounded-lg transition-all ${getSidebarIconTourClass(tab.id as TabType, activeTab === tab.id)}`}
             title={tab.label}
@@ -2815,23 +2861,11 @@ export default function CommunityDetail({
           </button>
         ))}
 
-        <div className="relative shrink-0 overflow-visible py-1">
-        {/* 聊天室入口 */}
-        <button
-          onClick={() => setIsChatRoomOpen((prev) => !prev)}
-          className={`overflow-visible w-12 h-12 flex items-center justify-center rounded-lg transition-all ${getChatIconTourClass(isChatRoomOpen)}`}
-          title="聊天室"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-          </svg>
-          {chatUnreadCount > 0 && (
-            <span className="pointer-events-none absolute top-0 right-0 z-20 flex h-5 min-w-[20px] translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#FAFAFA]">
-              {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
-            </span>
-          )}
-        </button>
+        {!isTourSidebarHighlightStep && desktopSidebarChat}
         </div>
+        {isTourSidebarHighlightStep && (
+          <div className="relative z-[2] shrink-0 flex justify-center">{desktopSidebarChat}</div>
+        )}
         </div>
 
         {/* 下方：任務狀態資訊區（與「團隊分工」看板連動） */}
