@@ -55,6 +55,11 @@ import {
   clearKanbanOnboardingOnLogout,
 } from '@/lib/kanbanOnboardingStorage'
 import { clearCoPrepOnboardingOnLogout } from '@/lib/coPrepOnboardingStorage'
+import {
+  hasSeenActivityEntryTour,
+  markActivityEntryTourSeen,
+  clearActivityEntryTourOnLogout,
+} from '@/lib/activityEntryTourStorage'
 import IdeaWallOnboardingModal from './IdeaWallOnboardingModal'
 import KanbanOnboardingModal from './KanbanOnboardingModal'
 import CoPrepFeatureIntroCard from './CoPrepFeatureIntroCard'
@@ -72,6 +77,11 @@ interface CommunityDetailProps {
 }
 
 type TabType = 'resources' | 'activities' | 'ideas' | 'teamwork' | 'history' | 'management'
+
+const ACTIVITY_TOUR_FOCUS_CLASS =
+  'bg-purple-100 text-purple-600 rounded-lg ring-2 ring-purple-300 scale-[1.08] pointer-events-none'
+
+const ACTIVITY_TOUR_DIM_CLASS = 'opacity-40 text-gray-600 pointer-events-none'
 
 interface Resource {
   id: string
@@ -187,6 +197,7 @@ export default function CommunityDetail({
   const [showIdeaWallOnboardingReopenHint, setShowIdeaWallOnboardingReopenHint] = useState(false)
   const [showNetworkGraphOnboardingModal, setShowNetworkGraphOnboardingModal] = useState(false)
   const [showKanbanOnboarding, setShowKanbanOnboarding] = useState(false)
+  const [activityTourStep, setActivityTourStep] = useState(0)
   const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
   const [isVersionControlModalOpen, setIsVersionControlModalOpen] = useState(false)
@@ -754,6 +765,7 @@ export default function CommunityDetail({
       clearNetworkGraphOnboardingOnLogout()
       clearKanbanOnboardingOnLogout()
       clearCoPrepOnboardingOnLogout()
+      clearActivityEntryTourOnLogout()
       localStorage.removeItem('user')
       // 重新載入頁面以回到登入畫面
       window.location.href = '/'
@@ -2341,6 +2353,65 @@ export default function CommunityDetail({
     return inProgress?.id ?? activities[0]?.id
   }, [viewingActivity, activities])
 
+  const finishActivityEntryTour = useCallback(() => {
+    if (userId && coPrepActivityId) {
+      markActivityEntryTourSeen(userId, coPrepActivityId)
+    }
+    setActivityTourStep(0)
+  }, [userId, coPrepActivityId])
+
+  const advanceActivityEntryTour = useCallback(() => {
+    setActivityTourStep((step) => {
+      if (step >= 4) {
+        if (userId && coPrepActivityId) {
+          markActivityEntryTourSeen(userId, coPrepActivityId)
+        }
+        return 0
+      }
+      return step + 1
+    })
+  }, [userId, coPrepActivityId])
+
+  useEffect(() => {
+    if (readOnly || !userId || !coPrepActivityId || activeTab !== 'teamwork') return
+    if (activityTourStep > 0) return
+    if (activitiesLoading) return
+    if (!hasSeenActivityEntryTour(userId, coPrepActivityId)) {
+      setActivityTourStep(1)
+    }
+  }, [readOnly, userId, coPrepActivityId, activeTab, activitiesLoading, activityTourStep])
+
+  const isActivityEntryTourActive = activityTourStep > 0
+  const isTourSidebarHighlightStep = isActivityEntryTourActive && activityTourStep >= 2
+
+  const isTourSidebarTabFocused = (tabId: TabType) =>
+    isActivityEntryTourActive &&
+    ((activityTourStep === 3 && tabId === 'ideas') || (activityTourStep === 4 && tabId === 'resources'))
+
+  const getSidebarIconTourClass = (tabId: TabType, isNormallyActive: boolean) => {
+    if (isTourSidebarHighlightStep) {
+      if (isTourSidebarTabFocused(tabId)) {
+        return `relative z-[5] ${ACTIVITY_TOUR_FOCUS_CLASS}`
+      }
+      return `relative z-[2] ${ACTIVITY_TOUR_DIM_CLASS}`
+    }
+    return isNormallyActive
+      ? 'bg-purple-100 text-purple-600'
+      : 'text-gray-600 hover:bg-gray-200'
+  }
+
+  const getChatIconTourClass = (isNormallyActive: boolean) => {
+    if (isTourSidebarHighlightStep) {
+      if (activityTourStep === 2) {
+        return `relative z-[5] ${ACTIVITY_TOUR_FOCUS_CLASS}`
+      }
+      return `relative z-[2] ${ACTIVITY_TOUR_DIM_CLASS}`
+    }
+    return isNormallyActive
+      ? 'bg-purple-100 text-purple-600'
+      : 'text-gray-600 hover:bg-gray-200'
+  }
+
   // 側邊欄任務狀態摘要（與「團隊分工」看板資料連動）
   const allKanbanTasks = kanbanLists.flatMap((list) => list.tasks)
   const completedTasks = allKanbanTasks.filter((t) => t.status === 'completed')
@@ -2432,6 +2503,7 @@ export default function CommunityDetail({
           getAvatarColor={(uid) => getUserColor(uid)}
           readOnly={readOnly}
           openToken={announcementOpenToken}
+          tourHighlight={isActivityEntryTourActive && activityTourStep === 1}
         />
         {userId && (
           <NotificationBell
@@ -2497,18 +2569,21 @@ export default function CommunityDetail({
   return (
     <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
       {/* 左側導航欄 - 固定，捲動時不跟著動；手機版隱藏，桌面版顯示 */}
-      <div className="hidden md:flex fixed left-0 top-0 h-screen w-[80px] bg-[#FAFAFA] flex-col z-10">
+      <div
+        className={`hidden md:flex fixed left-0 top-0 h-screen w-[80px] bg-[#FAFAFA] flex-col relative ${
+          isTourSidebarHighlightStep ? 'z-[50] pointer-events-none' : 'z-10'
+        }`}
+      >
+        {isTourSidebarHighlightStep && (
+          <div className="absolute inset-0 z-[1] bg-black/50 pointer-events-none" aria-hidden />
+        )}
         {/* 上方：原有功能 icon（可上下捲動，下方騰出空間給任務狀態） */}
-        <div className="flex-1 min-h-0 w-full overflow-y-auto flex flex-col items-center gap-6 py-8">
+        <div className="relative z-[2] flex-1 min-h-0 w-full overflow-y-auto flex flex-col items-center gap-6 py-8">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id as TabType)}
-            className={`w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
-              activeTab === tab.id
-                ? 'bg-purple-100 text-purple-600'
-                : 'text-gray-600 hover:bg-gray-200'
-            }`}
+            className={`w-12 h-12 flex items-center justify-center rounded-lg transition-all ${getSidebarIconTourClass(tab.id as TabType, activeTab === tab.id)}`}
             title={tab.label}
           >
             <svg
@@ -2744,11 +2819,7 @@ export default function CommunityDetail({
         {/* 聊天室入口 */}
         <button
           onClick={() => setIsChatRoomOpen((prev) => !prev)}
-          className={`relative overflow-visible w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
-            isChatRoomOpen
-              ? 'bg-purple-100 text-purple-600'
-              : 'text-gray-600 hover:bg-gray-200'
-          }`}
+          className={`overflow-visible w-12 h-12 flex items-center justify-center rounded-lg transition-all ${getChatIconTourClass(isChatRoomOpen)}`}
           title="聊天室"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
@@ -2764,7 +2835,7 @@ export default function CommunityDetail({
         </div>
 
         {/* 下方：任務狀態資訊區（與「團隊分工」看板連動） */}
-        <div ref={taskPanelRef} className="relative shrink-0 w-full border-t border-gray-200 bg-[#FAFAFA] px-1.5 py-3">
+        <div ref={taskPanelRef} className={`relative shrink-0 w-full border-t border-gray-200 bg-[#FAFAFA] px-1.5 py-3 ${isTourSidebarHighlightStep ? 'z-0 pointer-events-none' : ''}`}>
           <div className="mb-3.5 text-center text-xs font-bold text-gray-800">任務狀態</div>
           <div className="flex flex-col gap-1.5">
             {([
@@ -3339,7 +3410,7 @@ export default function CommunityDetail({
               </DndContext>
 
                 {/* 左下角操作小幫手（任務說明彈窗開啟時暫隱，避免重疊） */}
-                {!openTaskPanel && (
+                {!openTaskPanel && !isActivityEntryTourActive && (
                 <div className="fixed bottom-6 left-[calc(80px+1rem)] z-40 flex flex-col items-start">
                   {isTeamworkHelperOpen && (
                     <div className="mb-3 w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
@@ -4029,16 +4100,19 @@ export default function CommunityDetail({
       )}
 
       {/* 手機版底部導航欄 */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex items-center justify-around py-2 z-50">
+      <div
+        className={`md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex items-center justify-around py-2 relative ${
+          isTourSidebarHighlightStep ? 'z-[50] pointer-events-none' : 'z-10'
+        }`}
+      >
+        {isTourSidebarHighlightStep && (
+          <div className="absolute inset-0 z-[1] bg-black/50 pointer-events-none" aria-hidden />
+        )}
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id as TabType)}
-            className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-colors ${
-              activeTab === tab.id
-                ? 'text-purple-600'
-                : 'text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-all ${getSidebarIconTourClass(tab.id as TabType, activeTab === tab.id)}`}
           >
             <svg
               width="20"
@@ -4046,7 +4120,11 @@ export default function CommunityDetail({
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
-              className={activeTab === tab.id ? 'text-purple-600' : 'text-gray-600'}
+              className={
+                isTourSidebarTabFocused(tab.id as TabType) || activeTab === tab.id
+                  ? 'text-purple-600'
+                  : 'text-gray-600'
+              }
             >
               {tab.id === 'resources' && (
                 <path
@@ -4196,12 +4274,10 @@ export default function CommunityDetail({
         {/* 聊天室入口 */}
         <button
           onClick={() => setIsChatRoomOpen((prev) => !prev)}
-          className={`relative flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-colors ${
-            isChatRoomOpen ? 'bg-purple-100 text-purple-600' : 'text-gray-600'
-          }`}
+          className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg transition-all ${getChatIconTourClass(isChatRoomOpen)}`}
         >
           <span className="relative inline-flex">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg" className="text-gray-600">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg" className={isActivityEntryTourActive && activityTourStep === 2 ? 'text-purple-600' : isChatRoomOpen ? 'text-purple-600' : 'text-gray-600'}>
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
             </svg>
             {chatUnreadCount > 0 && (
@@ -4227,7 +4303,14 @@ export default function CommunityDetail({
       />
 
       {!readOnly && activeTab === 'teamwork' && (
-        <CoPrepFeatureIntroCard userId={userId} communityId={communityId || undefined} />
+        <CoPrepFeatureIntroCard
+          userId={userId}
+          communityId={communityId || undefined}
+          tourActive={isActivityEntryTourActive}
+          tourStep={activityTourStep}
+          onTourAdvance={advanceActivityEntryTour}
+          onTourSkip={finishActivityEntryTour}
+        />
       )}
     </div>
   )

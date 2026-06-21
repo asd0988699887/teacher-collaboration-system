@@ -8,6 +8,7 @@ import { clearIdeaWallOnboardingOnLogout } from '@/lib/ideaWallOnboardingStorage
 import { clearNetworkGraphOnboardingOnLogout } from '@/lib/networkGraphOnboardingStorage'
 import { clearKanbanOnboardingOnLogout } from '@/lib/kanbanOnboardingStorage'
 import { clearCoPrepOnboardingOnLogout } from '@/lib/coPrepOnboardingStorage'
+import { clearActivityEntryTourOnLogout } from '@/lib/activityEntryTourStorage'
 
 // 用戶顏色陣列（與其他組件保持一致）
 const USER_COLORS = [
@@ -165,6 +166,7 @@ export default function Header({
       clearNetworkGraphOnboardingOnLogout()
       clearKanbanOnboardingOnLogout()
       clearCoPrepOnboardingOnLogout()
+      clearActivityEntryTourOnLogout()
       localStorage.removeItem('user')
       // 重新載入頁面以回到登入畫面
       window.location.href = '/'

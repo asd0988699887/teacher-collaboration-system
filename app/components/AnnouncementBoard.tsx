@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, type CSSProperties } from 'react'
 
 interface Announcement {
   id: string
@@ -21,6 +21,8 @@ interface AnnouncementBoardProps {
   readOnly?: boolean
   /** 父層遞增此值可從通知欄開啟公告欄 */
   openToken?: number
+  /** 活動首次導覽：高亮 header 公告 icon */
+  tourHighlight?: boolean
 }
 
 const USER_COLORS = [
@@ -73,6 +75,7 @@ export default function AnnouncementBoard({
   getAvatarColor,
   readOnly = false,
   openToken = 0,
+  tourHighlight = false,
 }: AnnouncementBoardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
@@ -82,7 +85,40 @@ export default function AnnouncementBoard({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [liftStyle, setLiftStyle] = useState<CSSProperties>({})
   const canManageAnnouncements = isAdmin && !readOnly
+
+  useLayoutEffect(() => {
+    if (!tourHighlight || !triggerRef.current) {
+      setLiftStyle({})
+      return
+    }
+
+    const updatePosition = () => {
+      const node = triggerRef.current
+      if (!node) return
+      const rect = node.getBoundingClientRect()
+      setLiftStyle({
+        position: 'fixed',
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        zIndex: 50,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [tourHighlight])
+
+  const isLifted = tourHighlight && liftStyle.position === 'fixed'
 
   const getAnnouncementLastReadStorageKey = useCallback(() => {
     if (!communityId || !userId) return null
@@ -265,11 +301,18 @@ export default function AnnouncementBoard({
 
   return (
     <div ref={containerRef} className="relative overflow-visible">
+      {isLifted && <div className="h-9 w-9" aria-hidden />}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`relative overflow-visible flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
-          isOpen ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'
+        style={isLifted ? liftStyle : undefined}
+        className={`relative overflow-visible flex h-9 w-9 items-center justify-center rounded-full transition-all pointer-events-none ${
+          tourHighlight
+            ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-300 scale-[1.08]'
+            : isOpen
+              ? 'bg-purple-100 text-purple-600'
+              : 'text-gray-600 hover:bg-gray-100'
         }`}
         aria-label="公告欄"
         title="公告欄"

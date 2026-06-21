@@ -5,6 +5,7 @@ import RegisterInlineForm from './RegisterInlineForm'
 import ForgotPasswordInlineForm from './ForgotPasswordInlineForm'
 import { resetCommunityOnboardingSeen } from '@/lib/communityOnboardingStorage'
 import { resetCoPrepOnboardingSeen } from '@/lib/coPrepOnboardingStorage'
+import { resetActivityEntryTourSeen } from '@/lib/activityEntryTourStorage'
 
 type Mode = 'login' | 'register' | 'reset'
 
@@ -92,6 +93,7 @@ export default function LoginModal({
       if (typeof window !== 'undefined') {
         resetCommunityOnboardingSeen(data.user.id)
         resetCoPrepOnboardingSeen(data.user.id)
+        resetActivityEntryTourSeen(data.user.id)
         localStorage.setItem(
           'user',
           JSON.stringify({
