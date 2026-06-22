@@ -278,9 +278,6 @@ export default function CommunityDetail({
   // 側邊欄下方「任務狀態」展開的分類（與團隊分工連動）
   const [openTaskPanel, setOpenTaskPanel] = useState<'deadline' | 'mine' | 'incomplete' | 'completed' | null>(null)
   const taskPanelRef = useRef<HTMLDivElement>(null)
-  const sidebarNavScrollRef = useRef<HTMLDivElement>(null)
-  const ideasTabButtonRef = useRef<HTMLButtonElement>(null)
-  const resourcesTabButtonRef = useRef<HTMLButtonElement>(null)
   // 社群資源頁右下角操作小幫手
   const [isResourceHelperOpen, setIsResourceHelperOpen] = useState(true)
   // 任務看板頁右下角操作小幫手
@@ -2415,18 +2412,7 @@ export default function CommunityDetail({
       : 'text-gray-600 hover:bg-gray-200'
   }
 
-  useEffect(() => {
-    if (!isTourSidebarHighlightStep) return
-    const target =
-      activityTourStep === 3
-        ? ideasTabButtonRef.current
-        : activityTourStep === 4
-          ? resourcesTabButtonRef.current
-          : null
-    if (target) {
-      target.scrollIntoView({ block: 'center' })
-    }
-  }, [isTourSidebarHighlightStep, activityTourStep])
+  const isTourChatPinnedOutsideScroll = isActivityEntryTourActive && activityTourStep === 2
 
   // 側邊欄任務狀態摘要（與「團隊分工」看板資料連動）
   const allKanbanTasks = kanbanLists.flatMap((list) => list.tasks)
@@ -2601,6 +2587,59 @@ export default function CommunityDetail({
     </div>
   )
 
+  const desktopSidebarTabButtons = tabs.map((tab) => (
+    <button
+      key={tab.id}
+      onClick={() => handleTabChange(tab.id as TabType)}
+      className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-lg transition-all ${getSidebarIconTourClass(tab.id as TabType, activeTab === tab.id)}`}
+      title={tab.label}
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {tab.id === 'resources' && (
+          <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {tab.id === 'activities' && (
+          <>
+            <path d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M6.5 2H20V22H6.5C5.83696 22 5.20107 21.7366 4.73223 21.2678C4.26339 20.7989 4 20.163 4 19.5V4.5C4 3.83696 4.26339 3.20107 4.73223 2.73223C5.20107 2.26339 5.83696 2 6.5 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        )}
+        {tab.id === 'ideas' && (
+          <>
+            <circle cx="12" cy="9" r="5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9 14.5C9 14.5 9 16 9 17C9 17.5 9.5 18 10 18H14C14.5 18 15 17.5 15 17C15 16 15 14.5 15 14.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M10 21H14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M12 2V3M19 9H20M4 9H5M17.5 4.5L16.8 5.2M6.5 4.5L7.2 5.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </>
+        )}
+        {tab.id === 'teamwork' && (
+          <>
+            <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        )}
+        {tab.id === 'history' && (
+          <>
+            <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M14 2V8H20M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        )}
+        {tab.id === 'management' && (
+          <>
+            <circle cx="6.5" cy="8.5" r="2.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2.5 21v-1.25a3.75 3.75 0 0 1 3.75-3.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="12" cy="7" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M5.5 21v-1.5a6.5 6.5 0 0 1 13 0V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="17.5" cy="8.5" r="2.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M21.5 21v-1.25a3.75 3.75 0 0 0-3.75-3.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        )}
+      </svg>
+    </button>
+  ))
+
   return (
     <div className="w-full min-h-screen bg-[#F5F3FA] flex flex-col md:flex-row">
       {/* 左側導航欄 - 固定，捲動時不跟著動；手機版隱藏，桌面版顯示 */}
@@ -2613,260 +2652,19 @@ export default function CommunityDetail({
           <div className="absolute inset-0 z-[1] bg-black/50 pointer-events-none" aria-hidden />
         )}
         {/* 上方：原有功能 icon（可上下捲動，下方騰出空間給任務狀態） */}
-        <div className="relative z-[2] flex min-h-0 flex-1 flex-col w-full">
-        <div
-          ref={sidebarNavScrollRef}
-          className="min-h-0 flex-1 w-full overflow-y-auto flex flex-col items-center gap-6 py-8"
-        >
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            ref={
-              tab.id === 'ideas'
-                ? ideasTabButtonRef
-                : tab.id === 'resources'
-                  ? resourcesTabButtonRef
-                  : undefined
-            }
-            onClick={() => handleTabChange(tab.id as TabType)}
-            className={`w-12 h-12 flex items-center justify-center rounded-lg transition-all ${getSidebarIconTourClass(tab.id as TabType, activeTab === tab.id)}`}
-            title={tab.label}
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {tab.id === 'resources' && (
-                // 資源圖標
-                <>
-                  <path
-                    d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
-              {tab.id === 'activities' && (
-                // 共備活動圖標 - 書本
-                <>
-                  <path
-                    d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M6.5 2H20V22H6.5C5.83696 22 5.20107 21.7366 4.73223 21.2678C4.26339 20.7989 4 20.163 4 19.5V4.5C4 3.83696 4.26339 3.20107 4.73223 2.73223C5.20107 2.26339 5.83696 2 6.5 2Z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
-              {tab.id === 'ideas' && (
-                // 想法牆圖標 - 發光的燈泡
-                <>
-                  <circle
-                    cx="12"
-                    cy="9"
-                    r="5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M9 14.5C9 14.5 9 16 9 17C9 17.5 9.5 18 10 18H14C14.5 18 15 17.5 15 17C15 16 15 14.5 15 14.5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M10 21H14"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  {/* 發光效果 */}
-                  <path
-                    d="M12 2V3"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M19 9H20"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M4 9H5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M17.5 4.5L16.8 5.2"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M6.5 4.5L7.2 5.2"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </>
-              )}
-              {tab.id === 'teamwork' && (
-                // 團隊分工圖標 — 與原「社群管理」相同（雙人）
-                <>
-                  <path
-                    d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle
-                    cx="9"
-                    cy="7"
-                    r="4"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
-              {tab.id === 'history' && (
-                // 活動歷程圖標
-                <>
-                  <path
-                    d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M14 2V8H20"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M16 13H8"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M16 17H8"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M10 9H9H8"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
-              {tab.id === 'management' && (
-                // 社群管理圖標 — 三人（左、中、右）
-                <>
-                  <circle
-                    cx="6.5"
-                    cy="8.5"
-                    r="2.25"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M2.5 21v-1.25a3.75 3.75 0 0 1 3.75-3.75"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle
-                    cx="12"
-                    cy="7"
-                    r="3"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M5.5 21v-1.5a6.5 6.5 0 0 1 13 0V21"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle
-                    cx="17.5"
-                    cy="8.5"
-                    r="2.25"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M21.5 21v-1.25a3.75 3.75 0 0 0-3.75-3.75"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
-            </svg>
-          </button>
-        ))}
-
-        {!isTourSidebarHighlightStep && desktopSidebarChat}
-        </div>
-        {isTourSidebarHighlightStep && (
-          <div className="relative z-[2] shrink-0 flex justify-center">{desktopSidebarChat}</div>
+        {isTourChatPinnedOutsideScroll ? (
+          <div className="relative z-[2] flex min-h-0 flex-1 flex-col w-full overflow-x-hidden">
+            <div className="min-h-0 flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-6 py-8">
+              {desktopSidebarTabButtons}
+            </div>
+            <div className="relative z-[2] shrink-0 flex justify-center">{desktopSidebarChat}</div>
+          </div>
+        ) : (
+          <div className="relative z-[2] flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-6 py-8">
+            {desktopSidebarTabButtons}
+            {desktopSidebarChat}
+          </div>
         )}
-        </div>
 
         {/* 下方：任務狀態資訊區（與「團隊分工」看板連動） */}
         <div ref={taskPanelRef} className={`relative shrink-0 w-full border-t border-gray-200 bg-[#FAFAFA] px-1.5 py-3 ${isTourSidebarHighlightStep ? 'z-0 pointer-events-none' : ''}`}>
