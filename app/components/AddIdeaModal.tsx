@@ -251,7 +251,7 @@ export default function AddIdeaModal({
             className="px-6 py-4 border-b border-gray-200 cursor-move select-none"
             onMouseDown={handleMouseDown}
           >
-            <h2 className="text-xl font-semibold text-gray-800">新增想法</h2>
+            <h2 className="text-xl font-semibold text-gray-800">{lockedStage ? '回覆想法' : '新增想法'}</h2>
           </div>
 
           {/* 表單內容 - 可滾動區域 */}

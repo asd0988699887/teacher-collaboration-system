@@ -177,7 +177,7 @@ export default function CommunityCard({
             {taskStatusItems.map((item) => (
               <div key={item.label} className="flex flex-col items-center py-0.5">
                 <span className={`text-base font-bold leading-none ${item.color}`}>{item.count}</span>
-                <span className="mt-1 px-0.5 text-center text-[9px] leading-tight text-gray-500">
+                <span className="mt-1 px-0.5 text-center text-[11px] leading-tight text-gray-500">
                   {item.label}
                 </span>
               </div>

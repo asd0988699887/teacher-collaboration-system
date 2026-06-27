@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  /* 此系統為淺色主題，鎖定 light 配色，避免裝置開啟深色模式時
+     原生表單控制項文字（如輸入框）變成淺灰、在白底上難以閱讀 */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -10,13 +13,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
@@ -548,32 +544,29 @@ body > * {
   animation: idea-wall-ripple-extend 2.8s ease-in-out infinite;
 }
 
-/* 游標移向底部「+ 延伸想法」（藍色按鈕）上方 */
+/* 游標移向「+ 延伸想法」按鈕（座標相對於按鈕容器，確保尖端落在按鈕上） */
 @keyframes idea-wall-cursor-extend {
   0%,
   10% {
-    left: 42%;
-    top: 8%;
+    left: 150%;
+    top: -260%;
     opacity: 1;
     transform: translate(0, 0);
   }
   44% {
-    left: clamp(6.3rem, 30%, 9.2rem);
-    top: auto;
-    bottom: 2.35rem;
+    left: 38%;
+    top: 30%;
     transform: translate(0, 0);
   }
   48% {
-    left: clamp(6.3rem, 30%, 9.2rem);
-    top: auto;
-    bottom: 2.35rem;
+    left: 38%;
+    top: 30%;
     transform: scale(0.88);
   }
   54%,
   100% {
-    left: clamp(6.3rem, 30%, 9.2rem);
-    top: auto;
-    bottom: 2.35rem;
+    left: 38%;
+    top: 30%;
     transform: scale(1);
   }
 }

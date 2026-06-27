@@ -151,7 +151,7 @@ export default function CoPrepFeatureIntroCard({
           )}
           {isOpen ? (
             <div
-              className="pointer-events-none relative"
+              className={`relative ${tourActive ? 'pointer-events-none' : 'pointer-events-auto'}`}
               role="dialog"
               aria-labelledby="coprep-feature-intro-title"
             >
@@ -230,9 +230,9 @@ export default function CoPrepFeatureIntroCard({
                               setSelectedId(feature.id)
                             }
                           }}
-                          className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold transition-all pointer-events-none ${buttonClass}`}
+                          className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold transition-all ${tourActive ? 'pointer-events-none' : ''} ${buttonClass}`}
                           aria-pressed={isSelected}
-                          tabIndex={-1}
+                          tabIndex={tourActive ? -1 : 0}
                         >
                           <FeatureIcon id={feature.id} className="shrink-0" />
                           <span>{feature.label}</span>
